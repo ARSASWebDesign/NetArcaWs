@@ -164,6 +164,24 @@ public sealed class CertificateToolBehaviorTests
         error.ToString().Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task Certificate_info_accepts_pem_certificate_files()
+    {
+        using var temp = new TemporaryDirectory();
+        using var rsa = RSA.Create(2048);
+        using var cert = ToolTestSupport.CreateCertificate(rsa, "CN=Local PEM test, O=Example", DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+        var certificatePath = System.IO.Path.Combine(temp.Path, "local.crt");
+        await File.WriteAllTextAsync(certificatePath, "\n" + cert.ExportCertificatePem(), TestContext.Current.CancellationToken);
+        var (tool, output, error) = ToolTestSupport.CreateTool();
+
+        var code = await tool.RunAsync(["cert-info", "--certificate", certificatePath], TestContext.Current.CancellationToken);
+
+        code.Should().Be(0);
+        output.ToString().Should().Contain("Sujeto: CN=Local PEM test, O=Example");
+        output.ToString().Should().Contain("Vigencia local: vigente");
+        error.ToString().Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData(-2, -1, "Vigencia local: vencido")]
     [InlineData(1, 2, "Vigencia local: aún no válido")]
