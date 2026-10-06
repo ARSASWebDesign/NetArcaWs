@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;

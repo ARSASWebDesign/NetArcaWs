@@ -1,7 +1,7 @@
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using System.Xml.Linq;
-using FluentAssertions;
+using AwesomeAssertions;
 using NetArcaWs.Tests.TestSupport;
 using NetArcaWs.Wsaa;
 using Xunit;

@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using FluentAssertions;
+using AwesomeAssertions;
 using Xunit;
 
 namespace NetArcaWs.Tool.Tests;

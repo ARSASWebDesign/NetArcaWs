@@ -51,6 +51,25 @@ library.
 | Microsoft.NET.Test.Sdk | 18.10.1 | MIT |
 | xunit.v3 | 4.0.1 | Apache-2.0 |
 | xunit.runner.visualstudio | 4.0.0 | Apache-2.0 |
-| FluentAssertions | 7.2.1 | Apache-2.0 |
+| AwesomeAssertions | 9.6.0 | Apache-2.0 |
 
-FluentAssertions 7.2.1 is licensed under Apache-2.0, not MIT. The v7 package is used in this scaffold; no claim of MIT licensing is made. See each package's NuGet Gallery page for its license and upstream details.
+AwesomeAssertions is a community-maintained fork with an Apache-2.0 license,
+which permits commercial use subject to its license conditions. See the
+[package license](https://www.nuget.org/packages/AwesomeAssertions/9.6.0)
+and [project background](https://awesomeassertions.org/about/).
+It is referenced only by non-packable test projects with `PrivateAssets="all"`;
+it is not a runtime dependency of NetArcaWs or NetArcaWs.Tool.
+
+Earlier NetArcaWs revisions used FluentAssertions 7.2.1, also Apache-2.0.
+That version did not impose a commercial license fee, and the published 0.5.0
+packages do not include FluentAssertions. FluentAssertions 8 and later use
+[different licensing terms](https://fluentassertions.com/introduction#licensing),
+with free use for open-source projects and non-commercial use, but a paid license
+for commercial use. We replaced it to avoid introducing those restrictions into
+contributors' workflows through an upgrade. Dependency review rejects new
+FluentAssertions dependencies, and Dependabot ignores that package.
+
+NetArcaWs remains LGPL-3.0-or-later. This permits commercial use subject to the
+LGPL obligations; it does not replace third-party licenses or exempt a user from
+their conditions. Review the license of every new dependency and version,
+including development tools, before merging an update.

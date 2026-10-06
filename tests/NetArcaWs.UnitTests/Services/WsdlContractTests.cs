@@ -2,7 +2,7 @@ using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
 using System.Xml.Linq;
 using System.Xml.Serialization;
-using FluentAssertions;
+using AwesomeAssertions;
 using NetArcaWs.Cryptography;
 using NetArcaWs.HealthChecks;
 using NetArcaWs.Multitenancy;

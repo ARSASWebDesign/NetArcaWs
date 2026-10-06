@@ -1,6 +1,6 @@
 using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
-using FluentAssertions;
+using AwesomeAssertions;
 using NetArcaWs.HealthChecks;
 using NetArcaWs.Multitenancy;
 using NetArcaWs.Services;

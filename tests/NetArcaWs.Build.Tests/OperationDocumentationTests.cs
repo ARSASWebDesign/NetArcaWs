@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
-using FluentAssertions;
+using AwesomeAssertions;
 using Xunit;
 
 namespace NetArcaWs.Build.Tests;

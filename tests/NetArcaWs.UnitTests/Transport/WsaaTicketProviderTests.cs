@@ -1,6 +1,6 @@
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NetArcaWs.Cryptography;
 using NetArcaWs.HealthChecks;
