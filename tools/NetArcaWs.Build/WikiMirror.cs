@@ -173,6 +173,11 @@ public static class WikiMirror
         "src/NetArcaWs.EntityFrameworkCore.MySql/README.md" => "MySQL-MariaDB-EF-Core",
         "src/NetArcaWs.EntityFrameworkCore.PostgreSql/README.md" => "PostgreSQL-EF-Core",
         "src/NetArcaWs.EntityFrameworkCore.SqlServer/README.md" => "SQL-Server-EF-Core",
+        "src/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite/README.md" => "Migraciones-Sqlite-EF-Core",
+        "src/NetArcaWs.EntityFrameworkCore.Migrations.MySql/README.md" => "Migraciones-MySql-EF-Core",
+        "src/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb/README.md" => "Migraciones-MariaDb-EF-Core",
+        "src/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql/README.md" => "Migraciones-PostgreSql-EF-Core",
+        "src/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer/README.md" => "Migraciones-SqlServer-EF-Core",
         _ => LegacyPageName(root, source)
     };
 

@@ -10,9 +10,12 @@ Los contratos y las fachadas de Hitos 2–5, su suite, mapeos QName/action y
 roundtrips de serialización fueron verificados. Esto no afirma paridad funcional
 completa con el repositorio Python ni homologación de operaciones autenticadas.
 
-Verificación registrada el 2026-10-06: build Release con 0 warnings y 0 errores;
-454 casos, 447 aprobados, 7 omitidos (4 dependientes de ARCA y 3 opt-in
-de engine) y 0 fallos. Se verificaron las 183
+La verificación de migraciones en CI 37547645296 corrió sobre el base exacto:
+510 pruebas (491 aprobadas, 19 skips opt-in, 0 fallos), build Release con 0
+warnings, y los motores reales MySQL 8.4.11 (20/20), MariaDB 11.4.13 (20/20),
+PostgreSQL 17.6 (19/19) y SQL Server Developer 16.0.4295.3 (19/19), todos sin
+skips de motor. Además pasó 10 scripts de migración, 15 DDL, 11 packs y un
+consumer/CLI nuevo. Se verificaron las 183
 operaciones contra sus WSDL y 369 tipos raíz XML en round-trip; los 56 tipos
 con campos `DateTime` (`xs:date` y `xs:dateTime`) conservaron sus valores. Los
 snapshots QA/producción de WSCDC, WSFECred y WSCPE coinciden en sus schemas. En QA real,
@@ -21,14 +24,13 @@ por falta de certificados. Esa corrida precede a WSCPE; su nuevo Dummy solo
 se probó con SOAP simulado en este bloque. Los Dummies prueban disponibilidad, no autorización
 fiscal.
 
-Los tests de persistencia contra engines reales se ejecutaron con MySQL 8.4.11
-(5/5), MariaDB 11.4.13 (5/5), PostgreSQL 17.6 (13/13) y SQL Server Developer
-16.0.4295.3 (13/13), incluidos casos entre procesos. Son versiones y escenarios
-concretos; no demuestran compatibilidad universal ni homologación con ARCA. La
-[corrida gratuita de CI en runner x64](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37525573878)
-ejecutó los suites PostgreSQL y SQL Server sin omisiones. El consumer smoke de
-los cuatro paquetes optativos se compila y ejecuta con SQLite, sin acceder a
-otros servidores ni a ARCA.
+Los escenarios de motores se ejecutaron en MySQL 8.4.11 (20/20), MariaDB
+11.4.13 (20/20), PostgreSQL 17.6 (19/19) y SQL Server Developer 16.0.4295.3
+(19/19), incluidos casos entre procesos y migraciones; son versiones y
+escenarios concretos, sin garantía universal ni homologación ARCA. La corrida
+CI de referencia es [37547645296](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37547645296).
+Los 11 paquetes se empaquetaron y el consumer/CLI local fue probado en esa
+corrida, sin llamadas a ARCA ni publicación de los extras.
 
 ## Extras y adaptaciones propias respecto de PyAfipWs
 
@@ -46,8 +48,8 @@ contrastan con el [upstream](https://github.com/reingart/pyafipws) y la
 | Certificados como contenido | `WsaaCertificateContent`: PEM, PFX/P12 en bytes o Base64, configuración o parámetro por operación; apto para secretos obtenidos de vault/BD por la aplicación |
 | Contexto multitenant explícito | `ArcaTenantContext`: tenant, CUIT representada, entorno y certificado; usado por WSAA y las operaciones autenticadas de las fachadas SOAP actuales; autorización del tenant sigue a cargo de la aplicación |
 | Caché compartida dentro del proceso | `IMemoryCache`, vencimiento real del TA y coordinación de logins concurrentes; rotación separada por huella; no es caché distribuida |
-| Persistencia EF Core opt-in | `NetArcaWs.EntityFrameworkCore` agrega el diario fiscal y, si se selecciona, tickets WSAA cifrados compartidos; el core no depende de EF. La aplicación elige servicios y administra migraciones/esquema |
-| Proveedores relacionales EF opt-in | SQLite usa el provider del consumidor; paquetes separados para MySQL/MariaDB, PostgreSQL y SQL Server. El core sigue sin EF; la selección de modelo y las migraciones pertenecen a la aplicación. Paquetes opcionales 0.5.0 sin publicar; ver [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19) |
+| Persistencia EF Core opt-in | `NetArcaWs.EntityFrameworkCore` agrega el diario fiscal y, si se selecciona, tickets WSAA cifrados compartidos; el core no depende de EF. Cinco paquetes opcionales de migraciones oficiales versionadas permiten a una tarea de despliegue consultar estado, generar SQL y aplicar los módulos seleccionados |
+| Proveedores relacionales EF opt-in | SQLite usa el provider del consumidor; paquetes separados para MySQL/MariaDB, PostgreSQL y SQL Server. El core sigue sin EF. Paquetes opcionales 0.5.0 sin publicar; ver [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19) |
 | Health checks integrables en ASP.NET Core | `IHealthCheck`, registro opt-in por WS/entorno, timeout, tags y estado de componentes; sin certificados ni login |
 | Herramienta instalable con `dotnet tool` | `cert-dev`, `cert-prod`, `cert-info`; manifiesto local o instalación global, contraseña por variable de entorno y protección contra sobrescrituras |
 | Manejo de recursos y errores | Certificados importados liberados por operación, claves PFX efímeras donde se soportan, XML sin DTD, límites configurables de 4 MiB para request/response y timeout de lectura; secretos ocultos en `ToString` |
@@ -72,8 +74,7 @@ cifrados con un contexto EF del consumidor. El paquete principal no depende de
 EF. Los providers se distribuyen por separado como
 `NetArcaWs.EntityFrameworkCore.MySql`,
 `NetArcaWs.EntityFrameworkCore.PostgreSql` y
-`NetArcaWs.EntityFrameworkCore.SqlServer`; los cuatro paquetes opcionales
-usan versión 0.5.0 y todavía no están publicados en NuGet.
+`NetArcaWs.EntityFrameworkCore.SqlServer`; esos cuatro paquetes optativos y los cinco paquetes `NetArcaWs.EntityFrameworkCore.Migrations.{Sqlite,MySql,MariaDb,PostgreSql,SqlServer}` usan versión 0.5.0 y todavía no están publicados en NuGet.
 
 La aplicación selecciona de forma inmutable sus módulos y servicios al iniciar:
 
@@ -103,11 +104,22 @@ MariaDB, el paquete opcional acepta `MySqlServerVersion` o
 `MariaDbServerVersion` explícitos en `AddNetArcaWsMySqlStores`; no detecta la
 versión del servidor. PostgreSQL usa `AddNetArcaWsPostgreSqlStores(connectionString, modelOptions)` y SQL Server usa
 `AddNetArcaWsSqlServerStores(connectionString, modelOptions)`. Esos helpers tampoco
-conectan ni detectan la versión. En todos los casos la aplicación genera,
-revisa y aplica sus migraciones: el registro de servicios no crea tablas ni
-modifica el esquema. La guía [Modelo relacional](docs/wiki/Modelo-relacional.md)
-describe columnas, claves, índices y los DDL generados; esos scripts describen
-el modelo EF opcional, no una conversión del diario SQLite del core.
+conectan ni detectan la versión. Las migraciones oficiales se configuran en una tarea de despliegue explícita, nunca en el registro de la API ni en su inicio normal. Seleccioná los módulos con las mismas opciones y registrá exactamente un extra de migraciones. Por ejemplo, para SQLite:
+
+```csharp
+services.AddNetArcaWsSqliteMigrations(connectionString, modelOptions);
+await using ServiceProvider deploymentProvider = services.BuildServiceProvider();
+INetArcaWsMigrator migrator = deploymentProvider.GetRequiredService<INetArcaWsMigrator>();
+NetArcaWsMigrationStatus before = await migrator.GetStatusAsync(cancellationToken);
+string sql = migrator.GenerateScript(NetArcaWsPersistenceModule.Invoicing);
+NetArcaWsMigrationStatus after = await migrator.ApplyAsync(cancellationToken);
+```
+
+En producción, usá el provider del host/job de despliegue dedicado; no registres este paso en el startup de cada API. `GetStatusAsync` y `ApplyAsync` abren conexiones cuando se ejecutan; `GenerateScript` trabaja offline. Ejecutá un solo actor de despliegue por base y serializá jobs: el preflight ocurre fuera del lock interno de EF y no coordina despliegues externos. Usá permisos de cambio de esquema para el actor y permisos runtime mínimos para la API. Aplicá facturación y tickets en cualquier orden; deshabilitar un módulo conserva sus tablas, historial y filas.
+
+Para actualizar, instalá la nueva versión y aplicá sus pendientes oficiales en el despliegue. No generes migraciones del consumidor para las tablas dedicadas. Si cambia el modelo upstream, NetArcaWs agrega una nueva migración por motor/módulo, conserva las publicadas y verifica el camino desde la anterior. Los 15 DDL de `persistence-schema` describen los tres esquemas seleccionados por proveedor; los 10 scripts de `persistence-migrations` son las migraciones iniciales oficiales `0` a `latest`, no idempotentes ni baselines reutilizables. Los historiales guardan lo aplicado en cada módulo; el modelo operativo contiene cuatro tablas funcionales. EF también puede crear `__EFMigrationsLock` en SQLite al migrar.
+
+Las tablas preexistentes sin historia oficial se rechazan. Revisá manualmente propiedad y esquema antes de planificar una adopción futura; no insertes history rows automáticamente ni borres datos o tablas. No se adopta automáticamente el diario SQLite del core, el DDL manual, `EnsureCreated` o un esquema administrado por el consumidor. Consultá la guía [Modelo relacional](docs/wiki/Modelo-relacional.md) para los diccionarios y los comandos locales.
 Cuando solo se seleccionan tickets, registrar el servicio base con
 `services.AddNetArcaWs()`; cuando se usa el diario, registrar el orquestador con
 `AddNetArcaWsInvoicing()`. El registro de tickets requiere

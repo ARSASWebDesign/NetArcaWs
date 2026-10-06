@@ -18,7 +18,7 @@
 - [x] Health checks independientes y opt-in por WS, sin credenciales.
 - [x] Diseño documentado de reintentos y reconciliación para evitar duplicados.
 - [x] `SafeInvoiceService`, diario durable y reconciliación conservadora para emisión unitaria WSFE/WSFEX/WSMTXCA; SQLite local multi-proceso en un host, no NFS ni multi-host.
-- [x] Incremento EF del issue #19: persistencia opt-in para diario y tickets; providers MySQL/MariaDB, PostgreSQL y SQL Server; consumer package smoke y modelo relacional con DDL generado para cinco engines. Paquetes opcionales 0.5.0 sin publicar. Pruebas reales aprobadas: MySQL 8.4.11 (5/5), MariaDB 11.4.13 (5/5), PostgreSQL 17.6 (13/13) y SQL Server Developer 16.0.4295.3 (13/13), incluidos procesos independientes. Los resultados son por versión/escenario, no homologación ARCA ni compatibilidad universal. Certificados/worker y otras funciones diferidas siguen en el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19).
+- [x] Incremento EF del issue #19: persistencia opt-in y migraciones oficiales por módulo/proveedor; migración inicial independiente para SQLite, MySQL, MariaDB, PostgreSQL y SQL Server. Una tarea de despliegue debe consultar, revisar y aplicar; API startup no migra. Paquetes extras 0.5.0 sin publicar. CI 37547645296: 510 tests (491 aprobados, 19 skips opt-in, 0 fallos), build Release 0 warnings; MySQL 8.4.11 20/20, MariaDB 11.4.13 20/20, PostgreSQL 17.6 19/19 y SQL Server Developer 16.0.4295.3 19/19, sin skips; 10 migration SQL, 15 DDL, 11 packs y consumer/CLI nuevo. Evidencia por versión/escenario, sin homologación ARCA ni compatibilidad universal. Certificados/worker siguen en el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19).
 - [ ] WSAA: ejecutar homologación real con certificados autorizados.
 - [x] Hito 2: WSFEv1 — 22 operaciones, contrato SOAP y suite verificados.
 - [x] Hito 3: WSFEXv1 — 19 operaciones, contrato SOAP y suite verificados.
@@ -29,11 +29,17 @@
 - [x] Publicar en la wiki toda la documentación Markdown local, con navegación y revisión de origen identificada.
 - [x] Hito 7: catálogo por servicios, extras y ejemplos compilables; el inventario vigente es de 183 operaciones en diez contratos y el seguimiento del alcance original sigue en [issue #10](https://github.com/ARSASWebDesign/NetArcaWs/issues/10).
 
-La verificación actual terminó con build Release de 0 warnings y 0 errors; la
-suite tuvo 454 casos: 447 aprobados, 7 omitidos (4 dependientes de ARCA y 3
-tests opt-in de engine) y 0 fallos. Se verificaron las 183 operaciones contra sus WSDL y
-369 tipos raíz XML en round-trip. Los 56 tipos de
-contrato con campos `DateTime` (`xs:date`/`xs:dateTime`) conservaron sus valores.
+La suite CI del incremento EF (37547645296) corrió sobre el base exacto con 510
+casos: 491 aprobados, 19 omitidos opt-in y 0 fallos; build Release con 0
+warnings. Los engines reales ejecutaron sin omisiones: MySQL 8.4.11 20/20,
+MariaDB 11.4.13 20/20, PostgreSQL 17.6 19/19 y SQL Server Developer
+16.0.4295.3 19/19. También se verificaron 10 scripts de migración, 15 DDL,
+11 packs y un consumer/CLI nuevo. La evidencia no incluye llamadas ARCA ni
+publicación de extras.
+
+El inventario SOAP verificado por la suite previa es 183 operaciones contra sus
+WSDL y 369 tipos raíz XML en round-trip. Los 56 tipos con campos `DateTime`
+(`xs:date`/`xs:dateTime`) conservaron sus valores.
 
 En homologación real de QA con `ARCA_RUN_HOMOLOGY=1` el 2026-10-06, la corrida
 de integración tuvo 11 casos: 9 probes `Dummy` aprobados y 2 pruebas autenticadas
@@ -43,11 +49,11 @@ acredita una autorización de negocio con certificado real.
 
 La autenticación WSAA de homologación y las llamadas autenticadas fiscales siguen
 pendientes de certificados autorizados. Tests opt-in de persistencia ejecutados
-con MySQL 8.4.11 (5/5), MariaDB 11.4.13 (5/5), PostgreSQL 17.6 (13/13) y SQL
-Server Developer 16.0.4295.3 (13/13) cubren
+con MySQL 8.4.11 (20/20), MariaDB 11.4.13 (20/20), PostgreSQL 17.6 (19/19) y SQL
+Server Developer 16.0.4295.3 (19/19) cubren
 esas versiones y casos entre procesos; no prueban otras versiones ni
 homologación fiscal. Los casos PostgreSQL y SQL Server se ejecutaron en el
-[job público de CI](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37525573878)
+[job público de CI](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37547645296)
 en runner x64. El consumer smoke de los paquetes EF locales corrió con SQLite.
 
 El seguimiento vigente de autenticación y escenarios ejecutados se registra en

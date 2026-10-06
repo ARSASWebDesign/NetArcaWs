@@ -1,4 +1,6 @@
-# NetArcaWs migrations for Sqlite
+<!-- Source: src/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb/README.md. Generated wiki mirror; edit the repository source. -->
+
+# NetArcaWs migrations for MariaDb
 
 This optional LGPL-3.0-or-later package contains the official, versioned EF Core migrations for the NetArcaWs invoice and WSAA ticket modules. It is separate from operational stores. Register it and run it only from an explicit deployment actor; normal API registration and startup do not connect or change the schema.
 
@@ -9,7 +11,7 @@ NetArcaWsModelOptions modelOptions = NetArcaWsModelOptions.Configure(options =>
     options.AddInvoicing(ArcaService.Wsfev1)
         .AddWsaaTickets(ArcaService.PadronA5));
 var deploymentServices = new ServiceCollection();
-deploymentServices.AddNetArcaWsSqliteMigrations(connectionString, modelOptions);
+deploymentServices.AddNetArcaWsMariaDbMigrations(connectionString, new MariaDbServerVersion(new Version(11, 4, 13)), modelOptions);
 ```
 
 For MySQL, pass a `MySqlServerVersion`; for MariaDB, pass a `MariaDbServerVersion`. Then resolve `INetArcaWsMigrator` from the deployment host's provider:
@@ -29,6 +31,6 @@ The module-owned tables are `NetArcaInvoices`, `NetArcaInvoiceRevisions`, and `N
 
 Updating means installing the new package and applying its pending official migrations. Consumers do not run `migrations add` for these dedicated tables. Future NetArcaWs model changes require a new published migration for each provider and module, preserving previous migrations and testing upgrades from the previous version. The initial migration scripts are versioned from `0` to `latest`; they are not idempotent adoption scripts. Existing DDL, `EnsureCreated` schemas, consumer-owned histories, and the core SQLite journal are not adopted or transferred automatically. Before any future adoption, manually compare ownership and schema and design a reviewed procedure; do not insert history rows automatically or drop data.
 
-No hay scripts idempotentes de SQLite; usá un rango explícito. El motor puede crear `__EFMigrationsLock` durante la migración. SQLite está pensado para un archivo local en un host.
+Pasá `MariaDbServerVersion` exacta; la biblioteca no autodetecta el servidor. MySQL/MariaDB puede confirmar parcialmente DDL, así que revisá el estado y seguí el diagnóstico del motor ante fallos.
 
 This package adds no ARCA calls, certificate storage, startup migrations, retry worker, or exactly-once guarantee. Local and engine verification is reported separately from ARCA homologation. The package version is currently 0.5.0 and is not published on NuGet.

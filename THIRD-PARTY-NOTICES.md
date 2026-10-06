@@ -88,9 +88,17 @@ and [Microsoft.Data.SqlClient](https://www.nuget.org/packages/Microsoft.Data.Sql
 plus SqlClient's [NOTICE](https://github.com/dotnet/SqlClient/blob/main/NOTICE.txt)
 and [copyright/license notes](https://github.com/dotnet/SqlClient/blob/main/COPYRIGHT.md).
 
-The native Build tool uses provider packages as development-only dependencies
-to emit DDL from the actual EF models. The scripts do not bundle provider
-assemblies into any NetArcaWs library package.
+The five migration extras reference `Microsoft.EntityFrameworkCore.Design`
+10.0.12 (MIT) with `PrivateAssets="all"`; EF Design is build-time tooling and
+does not flow as a consumer dependency. The migration extras use the EF provider
+packages documented above: Microsoft EF SQLite (MIT), Microting for MySQL and
+MariaDB (MIT), Npgsql for PostgreSQL (PostgreSQL license), and Microsoft EF SQL
+Server (MIT). `NetArcaWs.Build` is a local .NET maintenance executable and is
+not packable. It uses provider packages to generate/check DDL and migration SQL
+from the actual models and versioned migrations; they do not become dependencies
+of the core or base EF package. No Python runtime or build system is introduced.
+The SQL Server SNI native component remains under Microsoft Software License
+Terms as stated above, not MIT.
 
 ## Test dependencies
 

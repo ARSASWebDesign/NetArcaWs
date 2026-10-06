@@ -5,8 +5,12 @@
 Esta referencia describe el modelo **opcional** agregado por
 `NetArcaWs.EntityFrameworkCore` y los scripts SQL generados desde ese modelo.
 No representa una conversión automática del diario SQLite integrado en el
-paquete principal. Los scripts son DDL inicial, no migraciones; la aplicación
-consumidora es dueña de las migraciones, su revisión, aplicación y evolución.
+paquete principal. Hay dos artefactos distintos: 15 scripts DDL actuales (tres
+selecciones por cada uno de cinco proveedores) y 10 scripts SQL de las
+migraciones versionadas `0`→`latest` (un módulo por proveedor). El primer grupo
+describe el modelo presente; el segundo contiene las operaciones de migración
+realmente versionadas. Ninguno se usa para adoptar automáticamente tablas
+existentes.
 
 ## Selección de módulos
 
@@ -193,22 +197,39 @@ FK o cascadas. Las columnas payload/XML y autorización no tienen `HasMaxLength`
 `RemoteHash` es nullable; el DDL de SQL Server usa índice filtrado y los otros
 motores permiten múltiples NULL distintos en el índice único simple.
 
-Todos los esquemas son aditivos desde la perspectiva del consumidor: aplicar
-una selección distinta o actualizar el paquete no migra ni elimina tablas. La
-aplicación debe escribir y revisar una migración propia antes de desplegar el
-cambio de modelo; no use `EnsureCreated` en producción. El almacenamiento de
-certificados y una cola/worker no forman parte de este modelo.
+Las migraciones oficiales usan contextos dedicados con modelos fijos por motor y módulo; el `ArcaWsDbContext` operativo y los contextos del consumidor mantienen sus propias historias. Los historiales son `__NetArcaWsInvoiceMigrations` y `__NetArcaWsTicketMigrations`. En PostgreSQL están en `public`; en SQL Server, en `dbo`; MySQL, MariaDB y SQLite usan el schema por defecto del motor. EF Core SQLite puede crear además `__EFMigrationsLock` para coordinar la ejecución local.
+
+La tarea de despliegue configura un extra de migraciones. `GetStatusAsync` informa `Empty`, `UpgradeAvailable`, `Current`, `UntrackedSchema`, `UnknownAppliedMigration`, `InconsistentHistory` o `TrackedSchemaIncomplete`, con IDs conocidos/aplicados/pendientes y tablas propias presentes. `GenerateScript(module, fromMigration: "0", toMigration: null, idempotent: false)` exige módulo seleccionado y extremos conocidos ascendentes; `null` significa latest. El flag idempotente depende del proveedor; SQLite lanza `NotSupportedException` si se solicita. Generar el script no abre conexión. `ApplyAsync` preflighta y aplica en orden determinista. Revisá `GenerateScript` cuando corresponda y ejecutá `ApplyAsync`. La API solo avanza y conserva tablas, historias y datos cuando se deshabilita un módulo. El actor de despliegue necesita permisos de cambio de esquema; la API de runtime debe recibir solo los permisos de datos que usa. Serializá los trabajos de despliegue por base: el preflight ocurre fuera del lock de EF y no existe coordinación con otro proceso.
+
+Para actualizar, el consumidor actualiza el paquete y aplica las migraciones oficiales pendientes; no genera `migrations add` para estas tablas dedicadas. Los cambios futuros del modelo requieren una nueva migración por módulo y proveedor, sin editar las publicadas, y pruebas desde la anterior. SQLite no ofrece SQL idempotente y los scripts iniciales `0`→`latest` no son scripts de adopción.
+
+Tablas preexistentes sin historia, IDs desconocidos, huecos de historia o tablas incompletas se rechazan antes de aplicar. Revisá manualmente propietario y esquema al planificar una adopción futura. No se inserta history automáticamente, no se eliminan datos y no hay una conversión automática del diario SQLite del core, de `EnsureCreated`, DDL manual ni historias del consumidor. El almacenamiento de certificados y una cola/worker no forman parte de este modelo.
 
 ## Scripts generados
 
-`dotnet run --project tools/NetArcaWs.Build -- persistence-schema` genera los
-scripts desde los modelos EF; `--check` detecta archivos ausentes, distintos o
-sobrantes sin reescribirlos. CI ejecuta el modo de comprobación.
+`dotnet run --project tools/NetArcaWs.Build -- persistence-schema` genera 15 DDL actuales desde los modelos EF; `--check` detecta archivos ausentes, distintos o sobrantes sin reescribirlos.
 
-| Proveedor | Facturación | Tickets WSAA | Ambos |
+`dotnet run --project tools/NetArcaWs.Build -- persistence-migrations` genera 10 scripts desde migraciones versionadas reales, uno por módulo y proveedor; `--check` valida esos artefactos. Son upgrades iniciales `0`→`latest`, no idempotentes ni una alternativa de baseline.
+
+| Proveedor | Facturación | Tickets WSAA | Ambos (solo DDL) |
 | --- | --- | --- | --- |
 | SQLite | [invoicing](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence/sqlite/invoicing.sql) | [wsaa-tickets](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence/sqlite/wsaa-tickets.sql) | [all](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence/sqlite/all.sql) |
 | MySQL | [invoicing](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence/mysql/invoicing.sql) | [wsaa-tickets](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence/mysql/wsaa-tickets.sql) | [all](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence/mysql/all.sql) |
 | MariaDB | [invoicing](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence/mariadb/invoicing.sql) | [wsaa-tickets](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence/mariadb/wsaa-tickets.sql) | [all](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence/mariadb/all.sql) |
 | PostgreSQL | [invoicing](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence/postgresql/invoicing.sql) | [wsaa-tickets](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence/postgresql/wsaa-tickets.sql) | [all](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence/postgresql/all.sql) |
 | SQL Server | [invoicing](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence/sqlserver/invoicing.sql) | [wsaa-tickets](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence/sqlserver/wsaa-tickets.sql) | [all](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence/sqlserver/all.sql) |
+
+Los 10 scripts de migración versionados son independientes de los DDL anteriores:
+
+| Motor | Facturación | Tickets WSAA |
+| --- | --- | --- |
+| SQLite | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/sqlite/invoicing/0-latest.sql) | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/sqlite/wsaa-tickets/0-latest.sql) |
+| MySQL | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/mysql/invoicing/0-latest.sql) | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/mysql/wsaa-tickets/0-latest.sql) |
+| MariaDB | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/mariadb/invoicing/0-latest.sql) | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/mariadb/wsaa-tickets/0-latest.sql) |
+| PostgreSQL | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/postgresql/invoicing/0-latest.sql) | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/postgresql/wsaa-tickets/0-latest.sql) |
+| SQL Server | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/sqlserver/invoicing/0-latest.sql) | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/sqlserver/wsaa-tickets/0-latest.sql) |
+
+Estos archivos son operaciones de upgrade inicial reales de las cadenas versionadas;
+no son idempotentes ni un mecanismo de adopción/baseline. Se generan y revisan
+con `dotnet run --project tools/NetArcaWs.Build -- persistence-migrations` y se
+verifican con `--check`.

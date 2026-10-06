@@ -230,31 +230,54 @@ la garantía del ciclo fiscal completo.
 ### Persistencia opcional con Entity Framework Core
 
 El paquete `NetArcaWs.EntityFrameworkCore` implementa `IInvoiceJournal` sobre
-el `DbContext` con `IDbContextFactory<TContext>`. No agrega EF como dependencia
-del paquete base. `NetArcaWsModelOptions` selecciona de forma inmutable el
-módulo de diario (solo WSFEv1, WSFEXv1 y/o WSMTXCA), el de tickets WSAA, o ambos.
-`ModelBuilder.AddNetArcaWs` agrega solo las tablas solicitadas y conserva las
-entidades del consumidor; sus migraciones son responsabilidad de la aplicación.
+un `DbContext` mediante `IDbContextFactory<TContext>`. El paquete base no
+depende de EF. `NetArcaWsModelOptions` habilita, de forma inmutable, facturación
+(WSFEv1, WSFEXv1 y/o WSMTXCA), tickets WSAA para servicios seleccionados o
+ambos. El modelo operativo conserva solo las tablas elegidas.
 
-Los providers opcionales `NetArcaWs.EntityFrameworkCore.MySql`,
-`NetArcaWs.EntityFrameworkCore.PostgreSql` y
-`NetArcaWs.EntityFrameworkCore.SqlServer` se instalan por separado. MySQL/MariaDB
-requiere `ServerVersion` explícita; los helpers PostgreSQL y SQL Server toman la
-connection string sin autodetección. Ninguno conecta durante el registro, crea
-tablas ni agrega una estrategia automática de reintentos EF o SOAP. Para
-contextos propios, la aplicación registra su proveedor/factoría y añade los
-stores con la misma selección del modelo. Las migraciones se generan, revisan y
-aplican desde la aplicación. Consultar [ADR 0005](ADR-0005-ef-core-invoice-journal),
-la [guía del diario](Diario-fiscal) y el [modelo relacional](Modelo-relacional).
-La implementación de providers no equivale a homologación fiscal; el issue #19
-mantiene las capacidades restantes del backlog.
+Los providers de stores MySQL, PostgreSQL y SQL Server son extras separados;
+MySQL/MariaDB requiere una versión explícita. Cinco extras de migraciones
+(`NetArcaWs.EntityFrameworkCore.Migrations.{Sqlite,MySql,MariaDb,PostgreSql,SqlServer}`)
+contienen contextos fijos e historias separadas por motor y módulo. La tarea de
+despliegue registra el paquete elegido, consulta `INetArcaWsMigrator.GetStatusAsync`,
+puede revisar SQL con `GenerateScript(module, fromMigration, toMigration,
+idempotent)` y llama `ApplyAsync` para avanzar. El modelo operativo del consumidor
+mantiene su propia historia; la ruta soportada de migrations oficiales usa sus
+contextos dedicados.
 
-Los suites reales aprobaron MySQL 8.4.11 (5/5), MariaDB 11.4.13 (5/5),
-PostgreSQL 17.6 (13/13) y SQL Server Developer 16.0.4295.3 (13/13), con casos
-de concurrencia entre procesos. Son resultados por versión y escenario, no una
-garantía universal de compatibilidad ni validación ante ARCA. El
-[job x64 de CI](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37525573878)
-ejecutó PostgreSQL y SQL Server.
+El registro DI y el inicio normal de la API no conectan ni aplican migraciones.
+El actor de despliegue usa permisos de esquema; runtime usa permisos de datos
+mínimos. Serializá jobs externamente por base: el preflight ocurre antes del lock
+EF y no coordina otros actores. Ambos módulos se pueden aplicar en cualquier
+orden. Deshabilitarlos preserva tablas, historial y filas. Updates usan paquetes
+actualizados más migraciones oficiales pendientes; el consumidor no crea
+migraciones para esas tablas. Un cambio futuro añade una migración por módulo y
+motor, preserva las publicadas y prueba desde la anterior.
+
+No se adopta automáticamente el diario SQLite core, `EnsureCreated`, DDL manual
+o esquema con historia del consumidor. Tablas existentes sin historia oficial,
+IDs desconocidos, gaps y esquema incompleto se rechazan; no hay baseline
+automático ni instrucciones para insertar historia o borrar datos. SQLite no
+admite scripts idempotentes. Sus migraciones pueden crear además
+`__EFMigrationsLock`. PostgreSQL usa `public` y SQL Server usa `dbo`; los otros
+motores usan su schema por defecto. La API de conveniencia avanza solamente y no
+promete rollback uniforme de DDL entre motores.
+
+El modelo relacional documenta cuatro tablas funcionales, 15 DDL actuales (tres
+selecciones × cinco motores) y 10 scripts de migración inicial versionados (dos
+módulos × cinco motores). El DDL representa el modelo actual y los scripts el
+upgrade real `0`→`latest`; no son intercambiables ni baselines automáticos.
+
+CI 37547645296 pasó 510 pruebas (491 aprobadas, 19 opt-in skips, 0 fallos),
+build Release con 0 warnings; MySQL 8.4.11 20/20, MariaDB 11.4.13 20/20,
+PostgreSQL 17.6 19/19 y SQL Server Developer 16.0.4295.3 19/19, sin skips de
+motor. La corrida validó también los 10 SQL de migración, 15 DDL, 11 paquetes y
+un consumer/CLI nuevo. Es evidencia limitada a estas versiones/escenarios; no
+hubo llamadas ARCA ni publicación de extras. Certificados y worker siguen en
+[issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19). Consultar
+[ADR 0005](ADR-0005-ef-core-invoice-journal), la
+[guía del diario](Diario-fiscal) y el
+[modelo relacional](Modelo-relacional).
 
 ## Herramienta de certificados
 

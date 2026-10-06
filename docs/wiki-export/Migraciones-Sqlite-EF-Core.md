@@ -1,3 +1,5 @@
+<!-- Source: src/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite/README.md. Generated wiki mirror; edit the repository source. -->
+
 # NetArcaWs migrations for Sqlite
 
 This optional LGPL-3.0-or-later package contains the official, versioned EF Core migrations for the NetArcaWs invoice and WSAA ticket modules. It is separate from operational stores. Register it and run it only from an explicit deployment actor; normal API registration and startup do not connect or change the schema.

@@ -50,6 +50,27 @@ public sealed class WikiMirrorTests
     }
 
     [Fact]
+    public void Run_assigns_distinct_pages_to_all_official_migration_readmes()
+    {
+        using var workspace = new BuildTestWorkspace();
+        workspace.Write("README.md", "# Project\n");
+        workspace.Write("docs/wiki/Home.md", "# Home\n");
+        string[] packages = ["Sqlite", "MySql", "MariaDb", "PostgreSql", "SqlServer"];
+        foreach (string package in packages)
+            workspace.Write($"src/NetArcaWs.EntityFrameworkCore.Migrations.{package}/README.md", $"# {package}\n");
+
+        WikiMirror.Run(workspace.Root);
+
+        foreach (string package in packages)
+        {
+            string manifest = workspace.Read("docs/wiki-export/Fuentes-documentales.md");
+            manifest.Should().Contain($"NetArcaWs.EntityFrameworkCore.Migrations.{package}/README.md");
+            manifest.Should().Contain($" → `Migraciones-{package}-EF-Core");
+            workspace.Read($"docs/wiki-export/Migraciones-{package}-EF-Core.md").Should().Contain($"# {package}");
+        }
+    }
+
+    [Fact]
     public void Run_uses_curated_home_navigation_and_ignores_legacy_sidebar_template()
     {
         using var workspace = new BuildTestWorkspace();

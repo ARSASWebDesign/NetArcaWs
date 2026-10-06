@@ -1,6 +1,6 @@
 # Fuentes de la documentación
 
-Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 58 páginas de contenido y este manifiesto. GitHub muestra un único menú nativo; Home contiene la navegación por temas. Cada página incluye su fuente y reescribe enlaces relativos para navegación de wiki. Los contratos ARCA archivados en el repositorio tienen fecha de snapshot 2026-10-06. La salida refleja el árbol de trabajo. Al publicar, SOURCE_COMMIT en el repositorio wiki registra el SHA de origen. Revisar el mirror antes de publicar.
+Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 63 páginas de contenido y este manifiesto. GitHub muestra un único menú nativo; Home contiene la navegación por temas. Cada página incluye su fuente y reescribe enlaces relativos para navegación de wiki. Los contratos ARCA archivados en el repositorio tienen fecha de snapshot 2026-10-06. La salida refleja el árbol de trabajo. Al publicar, SOURCE_COMMIT en el repositorio wiki registra el SHA de origen. Revisar el mirror antes de publicar.
 
 - `.github/pull_request_template.md` → `Plantilla-de-pull-request`
 - `AGENTS.md` → `Documento-AGENTS`
@@ -57,6 +57,11 @@ Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 58 páginas d
 - `docs/wiki/WSCDC.md` → `WSCDC`
 - `docs/wiki/WSCPE.md` → `WSCPE`
 - `docs/wiki/WSFECred.md` → `WSFECred`
+- `src/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb/README.md` → `Migraciones-MariaDb-EF-Core`
+- `src/NetArcaWs.EntityFrameworkCore.Migrations.MySql/README.md` → `Migraciones-MySql-EF-Core`
+- `src/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql/README.md` → `Migraciones-PostgreSql-EF-Core`
+- `src/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer/README.md` → `Migraciones-SqlServer-EF-Core`
+- `src/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite/README.md` → `Migraciones-Sqlite-EF-Core`
 - `src/NetArcaWs.EntityFrameworkCore.MySql/README.md` → `MySQL-MariaDB-EF-Core`
 - `src/NetArcaWs.EntityFrameworkCore.PostgreSql/README.md` → `PostgreSQL-EF-Core`
 - `src/NetArcaWs.EntityFrameworkCore.SqlServer/README.md` → `SQL-Server-EF-Core`

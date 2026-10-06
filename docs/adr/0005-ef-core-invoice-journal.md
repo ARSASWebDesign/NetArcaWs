@@ -23,7 +23,10 @@ Microting compatible con EF Core 10. La aplicación pasa la versión exacta del
 servidor MySQL/MariaDB, sin autodetección. Los paquetes opcionales
 `NetArcaWs.EntityFrameworkCore.PostgreSql` (Npgsql EF provider) y
 `NetArcaWs.EntityFrameworkCore.SqlServer` agregan los providers PostgreSQL y
-SQL Server. Todos dejan la conexión y las migraciones bajo control del
+SQL Server. Los extras `.Migrations.Sqlite`, `.MySql`, `.MariaDb`,
+`.PostgreSql` y `.SqlServer` llevan cadenas oficiales versionadas separadas
+por módulo, usando contextos dedicados de migración. Todos dejan la conexión y
+la ejecución de migraciones bajo control de una tarea de despliegue del
 consumidor. El paquete core y el paquete EF base no dependen de providers de
 base de datos.
 
@@ -77,12 +80,32 @@ tampoco autodetectan la versión ni conectan al registrar.
 Para un contexto EF existente, registrar el proveedor en la aplicación y usar
 `AddNetArcaWsEntityFrameworkStores<TContext>`.
 
-La aplicación es dueña de las migraciones y de su aplicación. Debe generarlas y
-revisarlas con su propio proyecto de inicio y contexto, incorporando las tablas
-que resulten de la selección fija. No debe llamar a `EnsureCreated` en
-producción ni depender del registro DI para cambiar su esquema. Los cambios
-aditivos de servicio mantienen las tablas compartidas; una migración puede
-ampliar el modelo sin borrar las filas anteriores.
+Las migraciones oficiales poseen las cuatro tablas dedicadas: facturación posee
+`NetArcaInvoices`, `NetArcaInvoiceRevisions` y
+`NetArcaInvoiceSeriesReservations`; WSAA posee `NetArcaWsaaTickets`. Sus
+historias independientes son `__NetArcaWsInvoiceMigrations` y
+`__NetArcaWsTicketMigrations`. Cada proveedor y módulo mantiene su propia
+migración inicial y snapshot. La selección dinámica de servicios no altera el
+modelo de tablas.
+
+El consumidor actualiza los paquetes y aplica las migraciones pendientes desde
+un actor de despliegue explícito. DI y el inicio normal de APIs no abren
+conexiones ni migran. El actor requiere permisos de cambio de esquema; runtime
+usa permisos de datos acotados. Los trabajos de despliegue deben serializarse
+por base porque el preflight se ejecuta fuera del lock EF y no coordina procesos
+externos. Los módulos se pueden instalar en cualquiera de los dos órdenes;
+deshabilitarlos conserva tablas, historia y filas. No hay transacción global
+entre módulos ni rollback uniforme de DDL parcial en todos los motores.
+
+Para cambios upstream se conserva cada migración publicada y se agrega una
+nueva por proveedor y módulo, probando upgrades desde la versión anterior. El
+consumidor no agrega migraciones propias para las tablas dedicadas. No existe
+adopción automática de diario SQLite core, `EnsureCreated`, DDL manual ni
+historias administradas por el consumidor. Si se considera transferir propiedad,
+compará manualmente el esquema y diseñá un procedimiento revisado: el migrador
+rechaza tablas existentes sin historial, history IDs desconocidos, huecos e
+integridad incompleta; nunca inserta un baseline automáticamente. No se
+recomiendan instrucciones destructivas.
 
 El paquete del diario conserva las invariantes del ADR 0001: unicidad fiscal
 entre tenants, clave idempotente por tenant, snapshot/hash antes del envío,
@@ -100,24 +123,24 @@ incluyen lotes durables, WSFECred, WSCPE ni asignación automática de números.
 - Seleccionar solo tickets o solo facturación crea únicamente las tablas del
   módulo elegido; seleccionar ambos agrega ambas familias de tablas al mismo
   contexto.
-- El [modelo relacional](../wiki/Modelo-relacional.md) describe las cuatro
-  tablas y contiene 15 scripts SQL generados desde el modelo EF para SQLite,
-  MySQL, MariaDB, PostgreSQL y SQL Server, con selecciones de facturación,
-  tickets y ambas capacidades. No convierte el diario SQLite nativo ni aplica
-  el DDL automáticamente. Las relaciones actuales son lógicas por hashes; no
+- El [modelo relacional](../wiki/Modelo-relacional.md) describe cuatro tablas
+  operativas y 15 DDL actuales (cinco motores × tres selecciones). Por separado,
+  hay 10 scripts de migración versionados (cinco motores × dos módulos) para el
+  upgrade inicial `0`→`latest`; no son idempotentes ni adoptan esquemas previos.
+  SQLite puede crear además su tabla interna `__EFMigrationsLock`. Las relaciones actuales son lógicas por hashes; no
   hay FKs físicas, cascadas ni restricciones CHECK de enums.
 - Los tests sintéticos verifican código y persistencia local; no prueban ARCA.
   Los tests con engines MySQL/MariaDB reportan por separado las versiones de
   motor que hayan ejecutado; no se declara compatibilidad universal por usar un
   proveedor EF.
-- El 2026-10-06 se aprobaron 5/5 tests de integración con MySQL 8.4.11 y 5/5
+- El 2026-10-06 se aprobaron 20/20 tests de integración con MySQL 8.4.11 y 20/20
   con MariaDB 11.4.13, incluidos casos entre procesos. Esa evidencia cubre
   esas versiones y esos escenarios concretos; no es una matriz universal de
   motores ni homologación fiscal.
-- El 2026-10-06 el suite compartido aprobó 13/13 casos contra PostgreSQL 17.6,
+- El 2026-10-06 el suite compartido aprobó 19/19 casos contra PostgreSQL 17.6,
   incluidos procesos independientes y tickets compartidos/reinicio. CI dispone
-  de un job x64 con SQL Server Developer. La ejecución 37525573878 aprobó
-  13/13 casos contra ProductVersion 16.0.4295.3. Los resultados cubren las
+  de un job x64 con SQL Server Developer. La ejecución 37547645296 aprobó
+  19/19 casos contra ProductVersion 16.0.4295.3. Los resultados cubren las
   versiones concretas y escenarios ejecutados, no una matriz universal de
   motores ni homologación fiscal.
 - El almacenamiento compartido puede servir a varias réplicas, pero las
