@@ -1,0 +1,59 @@
+name: Solicitud de mejora
+description: Explica una necesidad concreta y el resultado que buscas.
+title: "[Mejora]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Las solicitudes sirven para discutir necesidades y alcance; no implican compromiso de implementación ni una fecha de entrega. No incluyas credenciales ni datos reales de tenants o contribuyentes.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Necesidad o problema
+      description: ¿Qué tarea no puedes resolver hoy y a quién afecta?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Resultado esperado
+      description: Describe qué debería poder hacer una persona usuaria.
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Caso de uso
+      description: Incluye contexto mínimo con nombres e identificadores ficticios.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas o solución temporal
+      description: ¿Qué opciones evaluaste y por qué no alcanzan?
+    validations:
+      required: false
+  - type: dropdown
+    id: component
+    attributes:
+      label: Área relacionada
+      options:
+        - WSAA
+        - WSFEv1
+        - WSFEXv1
+        - WSMTXCA
+        - Padrón A4/A5/A10/A13
+        - Health checks
+        - Herramienta CLI de certificados
+        - Documentación o empaquetado
+        - Otra
+    validations:
+      required: true
+  - type: checkboxes
+    id: safe
+    attributes:
+      label: Revisión de información sensible
+      options:
+        - label: Confirmo que no incluí secretos, certificados, tokens ni datos de tenants o contribuyentes reales.
+          required: true

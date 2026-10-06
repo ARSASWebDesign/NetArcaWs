@@ -10,19 +10,24 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           global-json-file: global.json
-      - run: dotnet restore NetArcaWs.slnx
+      - name: Validate package versions
+        id: version
+        run: python3 scripts/release-version.py
+      - run: dotnet restore NetArcaWs.slnx --locked-mode
       - run: dotnet build NetArcaWs.slnx --configuration Release --no-restore
       - run: dotnet test --solution NetArcaWs.slnx --configuration Release --no-build --no-restore
       - run: dotnet pack src/NetArcaWs/NetArcaWs.csproj --configuration Release --no-build --no-restore --output artifacts
       - run: dotnet pack src/NetArcaWs.Tool/NetArcaWs.Tool.csproj --configuration Release --no-build --no-restore --output artifacts
       - name: Smoke test local tool package
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          dotnet tool install NetArcaWs.Tool --tool-path artifacts/tool-smoke --add-source artifacts --version 0.4.0
+          dotnet tool install NetArcaWs.Tool --tool-path artifacts/tool-smoke --add-source artifacts --version "$PACKAGE_VERSION"
           artifacts/tool-smoke/netarcaws --help

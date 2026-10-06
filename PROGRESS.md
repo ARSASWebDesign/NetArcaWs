@@ -1,5 +1,8 @@
 # Progreso de NetArcaWs
 
+- [x] Plantillas de issues/PR y guía CONTRIBUTING para forks.
+- [x] Workflow de releases de biblioteca y tool con ensayo manual sin publicación.
+- [ ] Activar cuenta/organización ArsasGroup, Trusted Publishing y primera publicación de ambos paquetes en NuGet.
 - [x] Hito 1: WSAA nativo, NuGet LGPL-3.0-or-later, xUnit y FluentAssertions.
 - [x] CLI .NET tool: cert-dev, cert-prod, cert-info, paquete y suite propia.
 - [x] Certificados PEM/PFX en memoria desde configuración, vault o base de datos.

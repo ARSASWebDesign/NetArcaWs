@@ -1,0 +1,133 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'ARSASWebDesign/NetArcaWs'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require a commit from main
+        run: git merge-base --is-ancestor HEAD origin/main
+      - name: Validate release version
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: python3 scripts/release-version.py
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+      - run: dotnet restore NetArcaWs.slnx --locked-mode
+      - run: dotnet build NetArcaWs.slnx --configuration Release --no-restore
+      - run: dotnet test --solution NetArcaWs.slnx --configuration Release --no-build --no-restore
+      - run: dotnet pack src/NetArcaWs/NetArcaWs.csproj --configuration Release --no-build --no-restore --output artifacts
+      - run: dotnet pack src/NetArcaWs.Tool/NetArcaWs.Tool.csproj --configuration Release --no-build --no-restore --output artifacts
+      - name: Validate both packages and install tool
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          test -f "artifacts/NetArcaWs.$PACKAGE_VERSION.nupkg"
+          test -f "artifacts/NetArcaWs.Tool.$PACKAGE_VERSION.nupkg"
+          dotnet tool install NetArcaWs.Tool --tool-path artifacts/tool-smoke --add-source artifacts --version "$PACKAGE_VERSION"
+          artifacts/tool-smoke/netarcaws --help
+          test "$(artifacts/tool-smoke/netarcaws --version)" = "netarcaws $PACKAGE_VERSION"
+          git rev-parse HEAD > artifacts/BUILD_COMMIT
+          cd artifacts
+          sha256sum ./*.nupkg > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nuget-${{ steps.version.outputs.version }}
+          path: |
+            artifacts/*.nupkg
+            artifacts/SHA256SUMS
+            artifacts/BUILD_COMMIT
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    if: github.event_name == 'release' && github.repository == 'ARSASWebDesign/NetArcaWs'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: nuget
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: nuget-${{ needs.build.outputs.version }}
+          path: artifacts
+      - name: Verify checksums
+        working-directory: artifacts
+        run: sha256sum --check SHA256SUMS
+      - name: Attach packages to GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python3 - <<'PYTHON'
+          import hashlib, json, os, pathlib, subprocess, tempfile
+          repo = "ARSASWebDesign/NetArcaWs"
+          tag = os.environ["RELEASE_TAG"]
+          def gh(*args):
+              return subprocess.check_output(["gh", *args], text=True)
+          release = json.loads(gh("release", "view", tag, "--repo", repo, "--json", "assets"))
+          existing = {asset["name"] for asset in release["assets"]}
+          files = sorted(pathlib.Path("artifacts").glob("*.nupkg"))
+          files += [pathlib.Path("artifacts/SHA256SUMS"), pathlib.Path("artifacts/BUILD_COMMIT")]
+          missing = []
+          with tempfile.TemporaryDirectory() as directory:
+              for path in files:
+                  if path.name not in existing:
+                      missing.append(str(path))
+                      continue
+                  gh("release", "download", tag, "--repo", repo, "--pattern", path.name, "--dir", directory)
+                  old = (pathlib.Path(directory) / path.name).read_bytes()
+                  if hashlib.sha256(old).digest() != hashlib.sha256(path.read_bytes()).digest():
+                      raise SystemExit(f"Existing release asset differs: {path.name}. Do not replace published artifacts; create a new version.")
+          if missing:
+              gh("release", "upload", tag, "--repo", repo, *missing)
+          PYTHON
+      - name: Require NuGet account setup
+        env:
+          NUGET_USER: ${{ vars.NUGET_USER }}
+        run: |
+          if [ -z "$NUGET_USER" ]; then
+            echo "::error::Configure NUGET_USER and the NuGet trusted publishing policy described in docs/releases.md."
+            exit 1
+          fi
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: NuGet trusted publishing login
+        id: login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
+        with:
+          user: ${{ vars.NUGET_USER }}
+      - name: Publish library and tool
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+          PACKAGE_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          dotnet nuget push "artifacts/NetArcaWs.$PACKAGE_VERSION.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+          dotnet nuget push "artifacts/NetArcaWs.Tool.$PACKAGE_VERSION.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate

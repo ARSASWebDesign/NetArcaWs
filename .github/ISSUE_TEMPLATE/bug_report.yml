@@ -1,0 +1,92 @@
+name: Informe de error
+description: Reporta un defecto reproducible en NetArcaWs.
+title: "[Error]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Antes de enviar, elimina toda información sensible. **No incluyas certificados PEM/PFX, claves privadas, contraseñas, tokens/Sign de WSAA, credenciales ni datos de tenants o contribuyentes reales.** Usa valores sintéticos y redacta los mensajes SOAP.
+  - type: textarea
+    id: summary
+    attributes:
+      label: ¿Qué ocurre?
+      description: Describe el comportamiento incorrecto en términos concretos.
+      placeholder: Al llamar a … ocurre …
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Pasos para reproducir
+      description: Incluye un ejemplo mínimo con datos ficticios y sin secretos.
+      placeholder: |
+        1. Configurar … con datos sintéticos
+        2. Ejecutar …
+        3. Observar …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Resultado esperado
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Resultado obtenido
+      description: Puedes pegar una excepción o log después de revisarlo y quitar identificadores, credenciales y contenido SOAP sensible.
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Componente
+      options:
+        - WSAA
+        - Health checks
+        - Herramienta CLI de certificados
+        - Documentación o empaquetado
+        - Otro
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Entorno ARCA
+      description: No compartas CUIT, tenant, certificado ni respuestas reales.
+      options:
+        - Homologación
+        - Producción
+        - No aplica
+        - No lo sé
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versión de NetArcaWs o commit
+      placeholder: 0.4.0 o hash corto del commit
+    validations:
+      required: true
+  - type: input
+    id: dotnet
+    attributes:
+      label: SDK/runtime de .NET
+      placeholder: Salida de dotnet --info (sin rutas o datos personales)
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Sistema operativo y arquitectura
+      placeholder: macOS/Linux/Windows, versión y x64/arm64
+    validations:
+      required: true
+  - type: checkboxes
+    id: safe
+    attributes:
+      label: Revisión de información sensible
+      options:
+        - label: Confirmo que el reporte y sus adjuntos no contienen secretos, certificados, tokens ni datos de tenants o contribuyentes reales.
+          required: true

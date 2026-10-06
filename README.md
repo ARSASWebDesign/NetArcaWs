@@ -351,3 +351,19 @@ Copyright upstream: (C) 2008-2021 Mariano Reingart. Este port y sus cambios se
 distribuyen bajo LGPL-3.0-or-later. Se incluyen [LICENSE](LICENSE), los términos
 GPL complementarios en [COPYING](COPYING) y
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+## Contribuir desde un fork
+
+Las contribuciones se reciben mediante forks y pull requests hacia `main`.
+Ver [CONTRIBUTING.md](CONTRIBUTING.md) para preparar el entorno, ejecutar las
+verificaciones y proponer cambios. El repositorio incluye formularios de bugs y
+propuestas, y una plantilla de PR. No publicar certificados, claves, tickets ni
+datos fiscales reales en issues o ejemplos.
+
+## Releases
+
+El workflow [Release](.github/workflows/release.yml) genera y publica la biblioteca
+`NetArcaWs` y el tool `NetArcaWs.Tool` al publicar una release GitHub. Permite un
+ensayo manual sin publicar. La activación en NuGet está pendiente de crear la
+cuenta/organización prevista `ArsasGroup` y configurar Trusted Publishing.
+Ver [publicación y recuperación de releases](docs/releases.md).
