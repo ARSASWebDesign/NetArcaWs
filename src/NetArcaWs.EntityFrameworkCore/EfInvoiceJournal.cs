@@ -418,12 +418,22 @@ public sealed class EfInvoiceJournal<TContext> : IInvoiceJournal where TContext 
 
     private static bool IsConstraintFailure(Exception exception) =>
         Exceptions(exception).Any(current => current is SqliteException { SqliteErrorCode: 19 } ||
-            current is DbException { SqlState: "23000" or "23505" });
+            current is DbException dbException &&
+            (IsSqlServerError(dbException, 2601) || IsSqlServerError(dbException, 2627) ||
+             (!IsSqlServerException(dbException) && dbException.SqlState is "23000" or "23505")));
 
     private static bool IsContentionFailure(Exception exception) => Exceptions(exception).Any(current =>
         current is SqliteException sqlite && (sqlite.SqliteErrorCode & 0xff) is 5 or 6 ||
         current is DbException { SqlState: "40001" or "40P01" or "41000" } ||
-        current is DbException dbException && IsMySqlLockWaitTimeout(dbException));
+        current is DbException dbException &&
+        (IsMySqlLockWaitTimeout(dbException) || IsSqlServerError(dbException, 1205) || IsSqlServerError(dbException, 1222)));
+
+    private static bool IsSqlServerException(DbException exception) =>
+        exception.GetType().FullName == "Microsoft.Data.SqlClient.SqlException";
+
+    private static bool IsSqlServerError(DbException exception, int expectedNumber) =>
+        IsSqlServerException(exception) &&
+        exception.GetType().GetProperty("Number")?.GetValue(exception) is int number && number == expectedNumber;
 
     private static bool IsMySqlLockWaitTimeout(DbException exception)
     {
