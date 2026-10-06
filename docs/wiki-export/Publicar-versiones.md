@@ -11,14 +11,22 @@ artefactos**, sin publicar ni solicitar credenciales NuGet.
 
 ## Estado de activación
 
-El usuario NuGet `arsas` fue confirmado y el environment GitHub `nuget` ya está
-configurado con `NUGET_USER=arsas`. El mantenedor confirmó la creación de la política NuGet de Trusted Publishing;
-su funcionamiento se verifica con la primera publicación. La publicación
-externa no está activada hasta completar los pasos siguientes. Una release en
-borrador no publica
-paquetes. No confundir artefactos de GitHub con paquetes disponibles en nuget.org.
+El usuario NuGet `arsas`, el environment GitHub `nuget` (`NUGET_USER=arsas`) y la
+política de Trusted Publishing están configurados. La primera publicación
+completó el intercambio OIDC y NuGet aceptó los dos paquetes 0.5.0. La
+[ejecución de publicación](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37477043984)
+registró `Your package was pushed` para ambos; ambos aparecen en el índice v3 de
+NuGet. La [release v0.5.0](https://github.com/ARSASWebDesign/NetArcaWs/releases/tag/v0.5.0)
+está publicada. La instalación pública de `NetArcaWs.Tool` 0.5.0 desde
+`api.nuget.org` en una caché aislada y la ejecución de `--help` terminaron con
+código 0. Esa prueba no verifica la firma de autor del paquete. Una release en
+borrador no inicia la publicación.
 
 ## Configuración inicial del mantenedor
+
+Los pasos siguientes describen la configuración inicial para un fork o una
+rotación/recreación de la integración. En el repositorio principal ya se
+completaron y verificaron en la ejecución enlazada arriba.
 
 1. Verificar el propietario elegido (cuenta u organización) y sus permisos de publicación. GitHub y NuGet administran cuentas y permisos independientes.
 2. En NuGet, crear una política de **Trusted Publishing** bajo el propietario
@@ -38,6 +46,21 @@ paquetes. No confundir artefactos de GitHub con paquetes disponibles en nuget.or
 La autenticación usa OIDC con `NuGet/login`; no requiere una API key permanente
 en GitHub. La política otorga una clave temporal al job de publicación. Referencia:
 [Trusted Publishing oficial de NuGet](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing).
+
+## Firma de los paquetes
+
+Trusted Publishing autentica al workflow mediante OIDC; no es una firma de autor
+del archivo `.nupkg`. NuGet.org aplica su firma de repositorio a los paquetes
+aceptados. Los assets de GitHub se verifican mediante `SHA256SUMS` y
+`BUILD_COMMIT`, pero esta versión no incorpora firma de autor de Arsas.
+
+Agregar firma de autor requiere un certificado de firma de código aceptado por
+NuGet y registrado previamente en la cuenta, custodia segura de su clave privada
+y timestamp de la firma. Debe firmarse antes de generar checksums y distribuir
+los artefactos. Los certificados fiscales de ARCA no se reutilizan para este fin.
+No se almacena una clave privada de firma de paquetes en el repositorio.
+Referencias: [firmas NuGet](https://learn.microsoft.com/en-us/nuget/reference/signed-packages-reference)
+y [requisitos de firma de autor](https://learn.microsoft.com/en-us/nuget/create-packages/sign-a-package).
 
 ## Preparar una versión
 
@@ -86,13 +109,13 @@ Los artefactos de los ensayos manuales se retienen durante 30 días. Los assets
 adjuntos a una release permiten conservar los paquetes con sus checksums. Los
 `.snupkg` no se generan ni se publican en la configuración actual.
 
-## Consumir tras la publicación efectiva
+## Consumir desde NuGet
 
 ```sh
 dotnet add package NetArcaWs --version 0.5.0
 dotnet tool install --global NetArcaWs.Tool --version 0.5.0
 ```
 
-Estos comandos contra nuget.org solo funcionarán después de completar la primera
-publicación. Antes de eso, usar los paquetes locales con `--source`/`--add-source`
-como se describe en el README y en la guía de la CLI.
+La publicación 0.5.0 ya está indexada en NuGet. También se pueden usar los
+paquetes locales con `--source`/`--add-source` como se describe en el README y en
+la guía de la CLI.

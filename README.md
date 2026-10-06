@@ -7,8 +7,7 @@ operaciones SOAP de los snapshots ARCA actuales de WSFEv1 (22), WSFEXv1 (19),
 WSMTXCA (27), Padrón A4 (2), Constancia en la ruta A5 (5), A10 (2) y A13 (4).
 Los contratos y las fachadas de Hitos 2–5, su suite, mapeos QName/action y
 roundtrips de serialización fueron verificados. Esto no afirma paridad funcional
-completa con el repositorio Python, homologación de operaciones autenticadas ni
-publicación en nuget.org.
+completa con el repositorio Python ni homologación de operaciones autenticadas.
 
 Verificación registrada el 2026-10-06: build Release con 0 warnings/errores;
 201 casos de suite, 198 aprobados y 3 omitidos. Se comprobaron QName y
@@ -29,7 +28,7 @@ contrastan con el [upstream](https://github.com/reingart/pyafipws) y la
 
 | Extra o adaptación .NET | Estado y alcance |
 | --- | --- |
-| Biblioteca .NET 10 y empaquetado NuGet | Implementado; sin runtime Python ni wrappers COM. Paquetes locales; aún no publicados en nuget.org |
+| Biblioteca .NET 10 y empaquetado NuGet | Implementado; sin runtime Python ni wrappers COM. NetArcaWs 0.5.0 y NetArcaWs.Tool 0.5.0 publicados e indexados en NuGet |
 | Criptografía nativa de .NET | CMS/TRA, RSA y CSR con `System.Security.Cryptography.Pkcs` y `System.Formats.Asn1`; sin procesos OpenSSL ni BouncyCastle |
 | API asíncrona e inyección de dependencias | `Task`, `CancellationToken`, `IHttpClientFactory`, opciones y `TimeProvider`; SOAP con `HttpClient` y `XmlSerializer` |
 | Certificados como contenido | `WsaaCertificateContent`: PEM, PFX/P12 en bytes o Base64, configuración o parámetro por operación; apto para secretos obtenidos de vault/BD por la aplicación |
@@ -120,9 +119,10 @@ en `docs/wiki-export/`, generado desde `docs/wiki/` con enlaces internos
 convertidos. La publicación en GitHub sigue pendiente porque el acceso al
 navegador requerido fue rechazado; no se usó una vía alternativa. El [plan del
 wiki](docs/plans/hito-7-wiki.md) detalla el inventario upstream restante. La
-la cuenta NuGet `arsas` fue confirmada y el environment GitHub `nuget` está
-configurado con `NUGET_USER=arsas`; falta configurar y verificar la política de
-Trusted Publishing. Los paquetes 0.5.0 no se han publicado.
+cuenta NuGet `arsas`, el environment GitHub `nuget` y la política de Trusted
+Publishing están configurados. El workflow intercambió OIDC y NuGet aceptó e
+indexó ambos paquetes 0.5.0 en el índice v3; la [release](https://github.com/ARSASWebDesign/NetArcaWs/releases/tag/v0.5.0)
+está publicada.
 
 ## Compilar, probar y empaquetar
 
@@ -458,7 +458,6 @@ datos fiscales reales en issues o ejemplos.
 
 El workflow [Release](.github/workflows/release.yml) genera y publica la biblioteca
 `NetArcaWs` y el tool `NetArcaWs.Tool` al publicar una release GitHub. Permite un
-ensayo manual sin publicar. La cuenta NuGet `arsas` fue confirmada y el environment
-GitHub `nuget` está configurado con `NUGET_USER=arsas`; falta configurar y
-verificar la política de Trusted Publishing para activar la publicación.
+ensayo manual sin publicar. La primera release v0.5.0 completó Trusted
+Publishing mediante OIDC y ambos paquetes fueron aceptados e indexados en NuGet.
 Ver [publicación y recuperación de releases](docs/releases.md).

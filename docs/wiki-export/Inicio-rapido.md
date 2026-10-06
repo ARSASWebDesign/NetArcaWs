@@ -3,13 +3,18 @@
 # Inicio rápido
 
 NetArcaWs apunta a .NET 10. El repositorio fija SDK `10.0.401` en `global.json`.
-Los paquetes se compilan y empaquetan localmente; la guía no presupone que estén
-publicados en nuget.org.
+Los paquetes `NetArcaWs` y `NetArcaWs.Tool` versión `0.5.0` fueron aceptados e
+indexados por NuGet.
 
 ## Referenciar la biblioteca
 
-Después de compilar/empacar el repositorio, la aplicación puede consumir el
-paquete local desde su carpeta de artifacts:
+La aplicación puede consumir el paquete publicado desde nuget.org:
+
+```sh
+dotnet add package NetArcaWs --version 0.5.0
+```
+
+También puede usar el paquete local desde la carpeta de artifacts:
 
 ```sh
 dotnet add package NetArcaWs --version 0.5.0 --source /ruta/absoluta/a/artifacts

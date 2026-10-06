@@ -20,7 +20,8 @@ Verificación registrada el 2026-10-06: build Release con 0 warnings/errores;
 suite con 201 casos (198 aprobados, 3 omitidos). Los tres omitidos corresponden
 a credenciales autenticadas no disponibles y a la habilitación opt-in de pruebas
 Dummy. La corrida real de QA aprobó los siete Dummies y omitió las dos pruebas
-autenticadas. Los paquetes 0.5.0 todavía no están publicados.
+autenticadas. NuGet aceptó e indexó ambos paquetes 0.5.0 mediante OIDC. Ver
+[publicación y recuperación de releases](../releases.md).
 
 La CI realiza restore, build Release, suite completa, pack de ambos proyectos e
 instalación de prueba de la herramienta desde el feed local. No publica paquetes

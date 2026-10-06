@@ -31,6 +31,9 @@ Release terminó con 0 warnings/errores; la suite tuvo 201 casos (198 aprobados,
 cobertura]] para límites y estado real de QA. La cobertura documental de PyAfipWs
 no significa que los otros módulos estén disponibles en .NET.
 
+NuGet aceptó e indexó `NetArcaWs` y `NetArcaWs.Tool` 0.5.0 mediante Trusted
+Publishing OIDC; consultar [[Publicar versiones]].
+
 En QA real, una corrida de 9 casos respondió los siete probes `Dummy` el
 2026-10-06 y omitió las pruebas autenticadas por falta de certificados; no es una
 validación fiscal de negocio. El Hito 7 permanece pendiente porque no se publicó

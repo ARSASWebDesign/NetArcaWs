@@ -2,7 +2,8 @@
 
 - [x] Plantillas de issues/PR y guía CONTRIBUTING para forks.
 - [x] Workflow de releases de biblioteca y tool con ensayo manual sin publicación.
-- [ ] Configurar Trusted Publishing y publicar ambos paquetes en NuGet.
+- [x] Configurar Trusted Publishing y publicar `NetArcaWs` y `NetArcaWs.Tool` 0.5.0 en NuGet.
+- [x] Confirmar la indexación de ambos paquetes 0.5.0 en el feed NuGet.
 - [x] Hito 1: WSAA nativo, NuGet LGPL-3.0-or-later, xUnit y FluentAssertions.
 - [x] CLI .NET tool: cert-dev, cert-prod, cert-info, paquete y suite propia.
 - [x] Certificados PEM/PFX en memoria desde configuración, vault o base de datos.
@@ -31,10 +32,12 @@ servicios autenticados no seleccionados y `Dummy` sin habilitación opt-in. Ning
 resultado acredita una autorización de negocio con certificado real.
 
 La autenticación WSAA de homologación y las llamadas autenticadas fiscales siguen
-pendientes de certificados autorizados. El usuario NuGet `arsas` fue confirmado y
-el environment GitHub `nuget` contiene `NUGET_USER=arsas`; falta configurar y
-verificar la política de Trusted Publishing. Los paquetes 0.5.0 no se han
-publicado. El mirror wiki local contiene 29 páginas de contenido, barra
+pendientes de certificados autorizados. El environment GitHub `nuget` contiene
+`NUGET_USER=arsas`; el workflow de release intercambió OIDC correctamente y
+NuGet aceptó e indexó ambos paquetes 0.5.0 en el índice del feed v3; además, el
+Tool público se instaló desde una caché aislada y `--help` terminó con código 0.
+La [release v0.5.0](https://github.com/ARSASWebDesign/NetArcaWs/releases/tag/v0.5.0)
+está publicada. El mirror wiki local contiene 29 páginas de contenido, barra
 lateral y manifiesto. La publicación remota permanece pendiente porque el acceso
 al navegador requerido para GitHub fue rechazado; el Hito 7 queda abierto.
 La caché de tickets es local al proceso; compartir certificados entre réplicas no agrega caché distribuida.
