@@ -1,0 +1,16 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Design;
+
+namespace NetArcaWs.EntityFrameworkCore.Migrations.Sqlite;
+
+public sealed class InvoicingDesignTimeFactory : IDesignTimeDbContextFactory<SqliteInvoicingMigrationsDbContext>
+{
+    public SqliteInvoicingMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<SqliteInvoicingMigrationsDbContext>()
+        .UseSqlite("Data Source=:memory:", x => x.MigrationsAssembly(typeof(InvoicingDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsInvoiceMigrations")).Options);
+}
+
+public sealed class WsaaTicketsDesignTimeFactory : IDesignTimeDbContextFactory<SqliteWsaaTicketsMigrationsDbContext>
+{
+    public SqliteWsaaTicketsMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<SqliteWsaaTicketsMigrationsDbContext>()
+        .UseSqlite("Data Source=:memory:", x => x.MigrationsAssembly(typeof(WsaaTicketsDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsTicketMigrations")).Options);
+}
