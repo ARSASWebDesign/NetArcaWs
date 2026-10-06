@@ -160,7 +160,7 @@ internal static class AuthenticatedLookupValidation
     {
         // Some Padron error branches are optional: null means no errors were returned.
         if (errors is null) return;
-        Assert.True(errors is null || !errors.Any(), $"{label} should return no errors.");
+        Assert.True(!errors.Any(), $"{label} should return no errors.");
     }
 
     private static void ValidatePadronA4(NetArcaWs.Contracts.PadronA4.GetPersonaResponse response)
