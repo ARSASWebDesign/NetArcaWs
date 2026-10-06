@@ -78,7 +78,11 @@ public static class WikiMirror
             .Select(name => $"- [{name}]({Quote(name, "-_.")})"));
         var sidebarPath = Path.Combine(output, "_Sidebar.md");
         EnsureNotReparsePoint(sidebarPath);
-        File.WriteAllText(sidebarPath, string.Join('\n', sidebar) + "\n", new UTF8Encoding(false));
+        var sidebarTemplate = Path.Combine(repositoryRoot, "docs", "wiki-sidebar.txt");
+        EnsureNotReparsePoint(sidebarTemplate);
+        File.WriteAllText(sidebarPath, File.Exists(sidebarTemplate)
+            ? File.ReadAllText(sidebarTemplate, Encoding.UTF8).Replace("\r\n", "\n").TrimEnd() + "\n"
+            : string.Join('\n', sidebar) + "\n", new UTF8Encoding(false));
 
         var manifestBody = new StringBuilder()
             .AppendLine("# Fuentes del mirror local")

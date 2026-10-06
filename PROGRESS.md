@@ -24,7 +24,7 @@
 - [ ] Hito 7 (final): completar la revisión exhaustiva upstream y las guías/ejemplos por operación; [criterios de cierre](docs/plans/hito-7-wiki.md).
 
 La build Release terminó con 0 warnings y 0 errors. La suite completa tuvo
-222 casos: 219 aprobados y 3 omitidos. Se verificaron los QName y SOAPAction de
+223 casos: 220 aprobados y 3 omitidos. Se verificaron los QName y SOAPAction de
 81 operaciones contra WSDL y 166 tipos raíz XML en round-trip. Los 22 tipos de
 contrato con campos `DateTime` (`xs:date`/`xs:dateTime`) conservaron sus valores.
 

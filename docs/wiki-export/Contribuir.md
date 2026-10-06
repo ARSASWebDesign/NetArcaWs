@@ -75,6 +75,7 @@ En Windows, usar `artifacts/xscgen/xscgen.exe`. El wrapper opcional
 mismo generador .NET. Revisar los cambios de contratos antes de confirmarlos.
 La wiki se genera desde los Markdown versionados; el procedimiento para
 publicarla y registrar su revisión está en [el plan de la wiki](Plan-hito-7-wiki).
+La organización manual de la barra lateral se conserva en `docs/wiki-sidebar.txt`.
 El comando interno `release-assets OWNER/REPO TAG DIRECTORY` requiere GitHub CLI
 autenticado y verifica los hashes de assets existentes antes de adjuntar los
 faltantes; no reemplaza archivos ya publicados.

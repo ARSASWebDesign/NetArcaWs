@@ -27,6 +27,20 @@ public sealed class WikiMirrorTests
     }
 
     [Fact]
+    public void Run_uses_custom_sidebar_template_and_preserves_its_order_and_titles()
+    {
+        using var workspace = new BuildTestWorkspace();
+        workspace.Write("README.md", "# Project\n");
+        workspace.Write("docs/wiki/Home.md", "# Home\n");
+        workspace.Write("docs/wiki-sidebar.txt", "# NetArcaWs\r\n\r\n- [Página principal](Home)\r\n- [Documentación](Proyecto)\r\n");
+
+        WikiMirror.Run(workspace.Root);
+
+        workspace.Read("docs/wiki-export/_Sidebar.md").Should().Be(
+            "# NetArcaWs\n\n- [Página principal](Home)\n- [Documentación](Proyecto)\n");
+    }
+
+    [Fact]
     public void Run_rejects_page_name_collisions_before_cleaning_existing_output()
     {
         using var workspace = new BuildTestWorkspace();

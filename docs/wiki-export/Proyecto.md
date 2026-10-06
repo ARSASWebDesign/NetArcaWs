@@ -12,7 +12,7 @@ roundtrips de serialización fueron verificados. Esto no afirma paridad funciona
 completa con el repositorio Python ni homologación de operaciones autenticadas.
 
 Verificación registrada el 2026-10-06: build Release con 0 warnings/errores;
-222 casos de suite, 219 aprobados y 3 omitidos. Se comprobaron QName y
+223 casos de suite, 220 aprobados y 3 omitidos. Se comprobaron QName y
 SOAPAction de las 81 operaciones contra sus WSDL y 166 tipos raíz XML en
 round-trip. Los 22 tipos de contrato con campos `DateTime` (`xs:date` y
 `xs:dateTime`) conservaron sus valores. En QA real respondieron los siete

@@ -25,7 +25,7 @@ La versión actual implementa autenticación WSAA, certificados en memoria,
 contexto tenant, health checks, CLI, transporte SOAP, cálculo decimal,
 diario/orquestación fiscal y fachadas tipadas para 81 operaciones de WSFEv1,
 WSFEXv1, WSMTXCA y Padrón. Hitos 2–6 y su suite están verificados. La build
-Release terminó con 0 warnings/errores; la suite tuvo 222 casos (219 aprobados,
+Release terminó con 0 warnings/errores; la suite tuvo 223 casos (220 aprobados,
 3 omitidos), se validaron 81 QName/actions y 166 tipos raíz XML en round-trip.
 22 tipos de contrato conservaron campos `DateTime`. Ver [[Servicios y
 cobertura]] para límites y estado real de QA. La cobertura documental de PyAfipWs
