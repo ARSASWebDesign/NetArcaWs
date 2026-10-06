@@ -83,10 +83,10 @@ jobs:
           done
           docker exec netarcaws-ci-postgres pg_isready -U netarcaws -d netarcaws
           for attempt in $(seq 1 90); do
-            if docker logs netarcaws-ci-sqlserver 2>&1 | grep -q 'ready for client connections'; then break; fi
+            if docker logs netarcaws-ci-sqlserver 2>&1 | grep 'ready for client connections' >/dev/null; then break; fi
             sleep 2
           done
-          if ! docker logs netarcaws-ci-sqlserver 2>&1 | grep -q 'ready for client connections'; then
+          if ! docker logs netarcaws-ci-sqlserver 2>&1 | grep 'ready for client connections' >/dev/null; then
             echo 'SQL Server did not become ready.' >&2
             exit 1
           fi
