@@ -3,6 +3,9 @@ using System.Data.Common;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
 using NetArcaWs.EntityFrameworkCore;
 using NetArcaWs.EntityFrameworkCore.Migrations;
@@ -135,6 +138,110 @@ public sealed class OfficialSqliteMigrationsTests
     }
 
     [Fact]
+    public async Task Failure_inside_official_migration_rolls_back_ddl_and_history()
+    {
+        string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".db");
+        string connectionString = $"Data Source={path};Pooling=False";
+        var inner = new SqliteMigrationContextFactory(connectionString);
+        var factory = new FailDuringOfficialInvoiceMigrationFactory(connectionString, inner);
+        var migrator = new NetArcaWsMigrator(factory, [NetArcaWsPersistenceModule.Invoicing]);
+        try
+        {
+            Func<Task> apply = () => migrator.ApplyAsync(TestContext.Current.CancellationToken);
+            await apply.Should().ThrowAsync<InvalidOperationException>().WithMessage("Synthetic DDL failure.");
+
+            (await migrator.GetStatusAsync(TestContext.Current.CancellationToken)).Modules.Should().ContainSingle()
+                .Which.State.Should().Be(NetArcaWsMigrationState.Empty);
+            await using var verify = new SqliteConnection(connectionString);
+            await verify.OpenAsync(TestContext.Current.CancellationToken);
+            await using var command = verify.CreateCommand();
+            command.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('NetArcaInvoices','NetArcaInvoiceRevisions','NetArcaInvoiceSeriesReservations')";
+            await using var reader = await command.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+            var remaining = new List<string>();
+            while (await reader.ReadAsync(TestContext.Current.CancellationToken)) remaining.Add(reader.GetString(0));
+            remaining.Should().BeEmpty();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task Test_only_future_migration_upgrades_the_official_initial_schema()
+    {
+        await using var db = new TestDatabase(InvoiceOptions());
+        await db.Migrator.ApplyAsync(TestContext.Current.CancellationToken);
+        var factory = new FutureInvoicingMigrationFactory(db.ConnectionString);
+        INetArcaWsMigrator futureMigrator = new NetArcaWsMigrator(factory, [NetArcaWsPersistenceModule.Invoicing]);
+
+        NetArcaWsMigrationStatus before = await futureMigrator.GetStatusAsync(TestContext.Current.CancellationToken);
+        NetArcaWsModuleMigrationStatus invoice = before.Modules.Should().ContainSingle().Which;
+        invoice.State.Should().Be(NetArcaWsMigrationState.UpgradeAvailable);
+        invoice.Applied.Should().Equal("20261006000100_InitialInvoicing");
+        invoice.Pending.Should().Equal("20990101000100_TestOnlyNullableColumn");
+
+        await using (var diagnosticContext = (FutureInvoicingMigrationDbContext)factory.CreateContext(NetArcaWsPersistenceModule.Invoicing))
+        {
+            var assembly = diagnosticContext.GetService<IMigrationsAssembly>();
+            var initializer = diagnosticContext.GetService<IModelRuntimeInitializer>();
+            var current = initializer.Initialize(diagnosticContext.GetService<IDesignTimeModel>().Model, designTime: true);
+            var snapshot = initializer.Initialize(assembly.ModelSnapshot!.Model, designTime: true);
+            snapshot.FindEntityType("NetArcaWs.EntityFrameworkCore.InvoiceJournalEntity")!.GetProperties().Select(property => property.Name).Should().Contain("Attempt");
+            current.FindEntityType("NetArcaWs.EntityFrameworkCore.InvoiceJournalEntity")!.GetProperties().Select(property => property.Name).Should().Contain("Attempt");
+            var differ = diagnosticContext.GetService<IMigrationsModelDiffer>();
+            var snapshotDiff = differ.GetDifferences(snapshot.GetRelationalModel(), current.GetRelationalModel());
+            snapshotDiff.Should().BeEmpty();
+            diagnosticContext.Database.HasPendingModelChanges().Should().BeFalse();
+        }
+
+        NetArcaWsMigrationStatus upgraded = await futureMigrator.ApplyAsync(TestContext.Current.CancellationToken);
+        upgraded.Modules.Should().ContainSingle().Which.State.Should().Be(NetArcaWsMigrationState.Current);
+        upgraded.Modules.Single().Applied.Should().Equal("20261006000100_InitialInvoicing", "20990101000100_TestOnlyNullableColumn");
+
+        string[] columns = await db.InvoiceColumns();
+        columns.Should().Contain("TestOnlyFutureColumn");
+        await using var connection = new SqliteConnection(db.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA table_info(\"NetArcaInvoices\")";
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        bool nullableFutureColumn = false;
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+        {
+            if (reader.GetString(1) == "TestOnlyFutureColumn") nullableFutureColumn = reader.GetInt32(3) == 0;
+        }
+        nullableFutureColumn.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Cancellation_after_first_module_keeps_its_history_and_leaves_second_module_empty()
+    {
+        string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".db");
+        using var cancellation = new CancellationTokenSource();
+        var factory = new CancelBetweenModuleMigrationFactory($"Data Source={path};Pooling=False", cancellation);
+        var migrator = new NetArcaWsMigrator(factory,
+            [NetArcaWsPersistenceModule.Invoicing, NetArcaWsPersistenceModule.WsaaTickets]);
+        try
+        {
+            Func<Task> apply = () => migrator.ApplyAsync(cancellation.Token);
+            await apply.Should().ThrowAsync<OperationCanceledException>();
+            cancellation.IsCancellationRequested.Should().BeTrue();
+
+            NetArcaWsMigrationStatus status = await migrator.GetStatusAsync(TestContext.Current.CancellationToken);
+            status.Modules.Select(module => module.State).Should().Equal(NetArcaWsMigrationState.Current, NetArcaWsMigrationState.Empty);
+            status.Modules[0].Applied.Should().ContainSingle().Which.Should().Be("20990101001000_TestOnlyInvoicing");
+            status.Modules[1].Applied.Should().BeEmpty();
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task SqliteRejectsIdempotentScript()
     {
         await using var db = new TestDatabase(InvoiceOptions());
@@ -258,6 +365,12 @@ public sealed class OfficialSqliteMigrationsTests
             await using var command = connection.CreateCommand(); command.CommandText = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name";
             var names = new List<string>(); await using var reader = await command.ExecuteReaderAsync(); while (await reader.ReadAsync()) names.Add(reader.GetString(0)); return [.. names];
         }
+        public async Task<string[]> InvoiceColumns()
+        {
+            await using var connection = new SqliteConnection(ConnectionString); await connection.OpenAsync();
+            await using var command = connection.CreateCommand(); command.CommandText = "PRAGMA table_info(\"NetArcaInvoices\")";
+            var names = new List<string>(); await using var reader = await command.ExecuteReaderAsync(); while (await reader.ReadAsync()) names.Add(reader.GetString(1)); return [.. names];
+        }
         public async ValueTask DisposeAsync() { await provider.DisposeAsync(); if (ConnectionString.StartsWith("Data Source=", StringComparison.Ordinal)) { var path = ConnectionString[12..].Split(';')[0]; SqliteConnection.ClearAllPools(); if (File.Exists(path)) File.Delete(path); } }
     }
 
@@ -284,6 +397,30 @@ public sealed class OfficialSqliteMigrationsTests
                 x => x.MigrationsAssembly(typeof(HistoryGapFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsInvoiceMigrations")).Options)
             : throw new ArgumentOutOfRangeException(nameof(module));
         public Task<IReadOnlyList<string>> GetPresentTablesAsync(DbContext context, IReadOnlyList<string> names, CancellationToken cancellationToken) => inner.GetPresentTablesAsync(context, names, cancellationToken);
+    }
+
+    private sealed class FailDuringOfficialInvoiceMigrationFactory(string connectionString, SqliteMigrationContextFactory inner) : INetArcaWsMigrationContextFactory
+    {
+        public NetArcaWsMigrationProvider Provider => NetArcaWsMigrationProvider.Sqlite;
+        public DbContext CreateContext(NetArcaWsPersistenceModule module) => module == NetArcaWsPersistenceModule.Invoicing
+            ? new SqliteInvoicingMigrationsDbContext(new DbContextOptionsBuilder<SqliteInvoicingMigrationsDbContext>()
+                .UseSqlite(connectionString, options => options.MigrationsAssembly(typeof(SqliteMigrationContextFactory).Assembly.FullName)
+                    .MigrationsHistoryTable("__NetArcaWsInvoiceMigrations"))
+                .AddInterceptors(new FailReservationTableCreationInterceptor()).Options)
+            : inner.CreateContext(module);
+        public Task<IReadOnlyList<string>> GetPresentTablesAsync(DbContext context, IReadOnlyList<string> names, CancellationToken cancellationToken) =>
+            inner.GetPresentTablesAsync(context, names, cancellationToken);
+    }
+
+    private sealed class FailReservationTableCreationInterceptor : DbCommandInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains("CREATE TABLE \"NetArcaInvoiceSeriesReservations\"", StringComparison.Ordinal))
+                throw new InvalidOperationException("Synthetic DDL failure.");
+            return ValueTask.FromResult(result);
+        }
     }
 
     private sealed class HistoryGapMigrationContext(DbContextOptions<HistoryGapMigrationContext> options) : DbContext(options) { }
@@ -313,5 +450,181 @@ public sealed class OfficialSqliteMigrationsTests
                 throw new InvalidOperationException("Synthetic DDL failure.");
             return ValueTask.FromResult(result);
         }
+    }
+}
+
+internal sealed class CancelBetweenModuleMigrationFactory(string connectionString, CancellationTokenSource cancellation)
+    : INetArcaWsMigrationContextFactory
+{
+    public NetArcaWsMigrationProvider Provider => NetArcaWsMigrationProvider.Sqlite;
+
+    public DbContext CreateContext(NetArcaWsPersistenceModule module) => module switch
+    {
+        NetArcaWsPersistenceModule.Invoicing => CreateInvoiceContext(),
+        NetArcaWsPersistenceModule.WsaaTickets => new CancelBetweenTicketMigrationContext(
+            new DbContextOptionsBuilder<CancelBetweenTicketMigrationContext>().UseSqlite(connectionString,
+                options => options.MigrationsAssembly(typeof(CancelBetweenModuleMigrationFactory).Assembly.FullName)
+                    .MigrationsHistoryTable("__NetArcaWsTicketMigrations")).Options),
+        _ => throw new ArgumentOutOfRangeException(nameof(module))
+    };
+
+    private DbContext CreateInvoiceContext()
+    {
+        var interceptor = new CancelOnInvoiceHistoryInsertInterceptor();
+        return new CancelBetweenInvoiceMigrationContext(
+            new DbContextOptionsBuilder<CancelBetweenInvoiceMigrationContext>().UseSqlite(connectionString,
+                options => options.MigrationsAssembly(typeof(CancelBetweenModuleMigrationFactory).Assembly.FullName)
+                    .MigrationsHistoryTable("__NetArcaWsInvoiceMigrations"))
+                .AddInterceptors(interceptor).Options, cancellation, interceptor);
+    }
+
+    public async Task<IReadOnlyList<string>> GetPresentTablesAsync(DbContext context, IReadOnlyList<string> names,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        string[] parameters = new string[names.Count];
+        for (int i = 0; i < names.Count; i++)
+        {
+            parameters[i] = $"$table{i}";
+            command.Parameters.AddWithValue(parameters[i], names[i]);
+        }
+        command.CommandText = $"SELECT name FROM sqlite_master WHERE type='table' AND name IN ({string.Join(",", parameters)})";
+        var present = new List<string>();
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken)) present.Add(reader.GetString(0));
+        return Array.AsReadOnly(present.Order(StringComparer.Ordinal).ToArray());
+    }
+}
+
+public sealed class CancelBetweenInvoiceMigrationContext(DbContextOptions<CancelBetweenInvoiceMigrationContext> options,
+    CancellationTokenSource cancellation, CancelOnInvoiceHistoryInsertInterceptor interceptor) : DbContext(options)
+{
+    public override async ValueTask DisposeAsync()
+    {
+        await base.DisposeAsync();
+        if (interceptor.Observed) cancellation.Cancel();
+    }
+}
+
+public sealed class CancelBetweenTicketMigrationContext(DbContextOptions<CancelBetweenTicketMigrationContext> options) : DbContext(options) { }
+
+public sealed class CancelOnInvoiceHistoryInsertInterceptor : DbCommandInterceptor
+{
+    public bool Observed { get; private set; }
+
+    public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+        InterceptionResult<int> result, CancellationToken cancellationToken = default)
+    {
+        if (command.CommandText.Contains("__NetArcaWsInvoiceMigrations", StringComparison.Ordinal)) Observed = true;
+        return ValueTask.FromResult(result);
+    }
+}
+
+[DbContext(typeof(CancelBetweenInvoiceMigrationContext))]
+[Migration("20990101001000_TestOnlyInvoicing")]
+public sealed class CancelBetweenInvoiceMigration : Migration
+{
+    protected override void Up(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.Sql("CREATE TABLE \"NetArcaInvoices\" (SyntheticId INTEGER NOT NULL)");
+        migrationBuilder.Sql("CREATE TABLE \"NetArcaInvoiceRevisions\" (SyntheticId INTEGER NOT NULL)");
+        migrationBuilder.Sql("CREATE TABLE \"NetArcaInvoiceSeriesReservations\" (SyntheticId INTEGER NOT NULL)");
+    }
+
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(CancelBetweenTicketMigrationContext))]
+[Migration("20990101002000_TestOnlyTickets")]
+public sealed class CancelBetweenTicketMigration : Migration
+{
+    protected override void Up(MigrationBuilder migrationBuilder) => migrationBuilder.Sql("CREATE TABLE \"NetArcaWsaaTickets\" (SyntheticId INTEGER NOT NULL)");
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(CancelBetweenInvoiceMigrationContext))]
+public sealed class CancelBetweenInvoiceMigrationSnapshot : ModelSnapshot
+{
+    protected override void BuildModel(ModelBuilder modelBuilder) => modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
+}
+
+[DbContext(typeof(CancelBetweenTicketMigrationContext))]
+public sealed class CancelBetweenTicketMigrationSnapshot : ModelSnapshot
+{
+    protected override void BuildModel(ModelBuilder modelBuilder) => modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
+}
+
+internal sealed class FutureInvoicingMigrationFactory(string connectionString) : INetArcaWsMigrationContextFactory
+{
+    public NetArcaWsMigrationProvider Provider => NetArcaWsMigrationProvider.Sqlite;
+
+    public DbContext CreateContext(NetArcaWsPersistenceModule module)
+    {
+        if (module != NetArcaWsPersistenceModule.Invoicing) throw new ArgumentException("The fixture selects only invoicing.", nameof(module));
+        DbContextOptions<FutureInvoicingMigrationDbContext> options = new DbContextOptionsBuilder<FutureInvoicingMigrationDbContext>()
+            .UseSqlite(connectionString, sqlite => sqlite
+                .MigrationsAssembly(typeof(FutureInvoicingMigrationDbContext).Assembly.FullName)
+                .MigrationsHistoryTable("__NetArcaWsInvoiceMigrations"))
+            .Options;
+        return new FutureInvoicingMigrationDbContext(options);
+    }
+
+    public async Task<IReadOnlyList<string>> GetPresentTablesAsync(DbContext context, IReadOnlyList<string> names, CancellationToken cancellationToken)
+    {
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        string[] parameters = new string[names.Count];
+        for (int i = 0; i < names.Count; i++)
+        {
+            parameters[i] = $"$table{i}";
+            command.Parameters.AddWithValue(parameters[i], names[i]);
+        }
+        command.CommandText = $"SELECT name FROM sqlite_master WHERE type='table' AND name IN ({string.Join(",", parameters)})";
+        var present = new List<string>();
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken)) present.Add(reader.GetString(0));
+        return Array.AsReadOnly(present.Order(StringComparer.Ordinal).ToArray());
+    }
+}
+
+public sealed class FutureInvoicingMigrationDbContext(DbContextOptions<FutureInvoicingMigrationDbContext> options) : DbContext(options)
+{
+    protected override void OnModelCreating(ModelBuilder modelBuilder) => TestOnlyFutureInvoicingModel.Build(modelBuilder);
+}
+
+[DbContext(typeof(FutureInvoicingMigrationDbContext))]
+[Migration("20261006000100_InitialInvoicing")]
+public sealed class TestOnlyInitialInvoicingMigration : Migration
+{
+    protected override void Up(MigrationBuilder migrationBuilder) { }
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+}
+
+[DbContext(typeof(FutureInvoicingMigrationDbContext))]
+[Migration("20990101000100_TestOnlyNullableColumn")]
+public sealed class TestOnlyNullableInvoiceColumnMigration : Migration
+{
+    protected override void Up(MigrationBuilder migrationBuilder) => migrationBuilder.AddColumn<string>(
+        name: "TestOnlyFutureColumn", table: "NetArcaInvoices", type: "TEXT", nullable: true);
+
+    protected override void Down(MigrationBuilder migrationBuilder) => migrationBuilder.DropColumn(
+        name: "TestOnlyFutureColumn", table: "NetArcaInvoices");
+
+}
+
+internal static class TestOnlyFutureInvoicingModel
+{
+    public static void Build(ModelBuilder modelBuilder)
+    {
+        NetArcaWsModelOptions options = NetArcaWsModelOptions.Configure(builder =>
+            builder.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca));
+        modelBuilder.AddNetArcaWs(options);
+        Type invoiceEntityType = typeof(ArcaWsDbContext).Assembly.GetType("NetArcaWs.EntityFrameworkCore.InvoiceJournalEntity", throwOnError: true)!;
+        modelBuilder.Entity(invoiceEntityType)
+            .Property<string>("TestOnlyFutureColumn").HasColumnType("TEXT").IsRequired(false);
+        modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
     }
 }

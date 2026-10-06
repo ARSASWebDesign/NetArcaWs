@@ -1,13 +1,18 @@
 using System.Diagnostics;
+using System.Data.Common;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using MySqlConnector;
 using NetArcaWs.EntityFrameworkCore;
 using NetArcaWs.EntityFrameworkCore.MySql;
+using NetArcaWs.EntityFrameworkCore.Migrations;
+using NetArcaWs.EntityFrameworkCore.Migrations.MySql;
+using NetArcaWs.EntityFrameworkCore.Migrations.MariaDb;
 using NetArcaWs.HealthChecks;
 using NetArcaWs.Invoicing;
 using NetArcaWs.Transport;
@@ -18,6 +23,107 @@ namespace NetArcaWs.EntityFrameworkCore.MySql.Tests;
 
 public sealed class MySqlPersistenceTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Official_migrations_add_modules_in_either_order_without_losing_invoice_or_encrypted_ticket_data(bool invoicingFirst)
+    {
+        bool anyOptInSetting = new[] { "NETARCA_PERSISTENCE_DB", "NETARCA_PERSISTENCE_DB_KIND", "NETARCA_PERSISTENCE_DB_VERSION" }
+            .Any(name => Environment.GetEnvironmentVariable(name) is not null);
+        Assert.SkipWhen(!anyOptInSetting, "Opt-in MySQL/MariaDB migration lifecycle test.");
+        PersistenceDbSettings settings = PersistenceDbSettings.ReadRequired();
+        Assert.SkipWhen(settings.Kind is not ("mysql" or "mariadb"), "This suite targets MySQL/MariaDB.");
+
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        NetArcaWsPersistenceModule firstModule = invoicingFirst ? NetArcaWsPersistenceModule.Invoicing : NetArcaWsPersistenceModule.WsaaTickets;
+        NetArcaWsPersistenceModule secondModule = invoicingFirst ? NetArcaWsPersistenceModule.WsaaTickets : NetArcaWsPersistenceModule.Invoicing;
+        NetArcaWsModelOptions firstOptions = MigrationOptions(firstModule);
+        NetArcaWsModelOptions secondOptions = MigrationOptions(secondModule);
+        NetArcaWsModelOptions allOptions = MigrationOptions(NetArcaWsPersistenceModule.Invoicing, NetArcaWsPersistenceModule.WsaaTickets);
+        await using MySqlTestDatabase database = await MySqlTestDatabase.CreateAsync(settings, builder => AddModule(builder, firstModule));
+
+        (await database.ApplyOfficialMigrationsAsync(NetArcaWsModelOptions.Configure(_ => { }), cancellationToken)).Modules.Should().BeEmpty();
+        if (invoicingFirst)
+        {
+            IInvoiceJournal journal = database.Services.GetRequiredService<IInvoiceJournal>();
+            var submission = new InvoiceSubmission("mysql-migration-lifecycle", "invoice-fixture", "wsfe",
+                new InvoiceIdentity(ArcaEnvironment.Homologation, 20999888777, 72, 1, 1), "<synthetic>preserved</synthetic>");
+            InvoiceOperation prepared = await journal.PrepareAsync(submission, cancellationToken);
+            InvoiceLease lease = (await journal.TryAcquireAsync(submission.TenantId, submission.IdempotencyKey, TimeSpan.FromSeconds(30), false, cancellationToken))!;
+            InvoiceOperation rejected = await journal.CompleteAsync(lease, new InvoiceDecision(InvoiceState.Rejected), cancellationToken);
+            await journal.ReviseRejectedAsync(submission with { Payload = "<synthetic>revision</synthetic>" }, rejected.Version, cancellationToken);
+            prepared.State.Should().Be(InvoiceState.Prepared);
+        }
+        else
+        {
+            await ExecuteTicketFixtureAsync(database, cancellationToken);
+        }
+
+        (await database.ApplyOfficialMigrationsAsync(secondOptions, cancellationToken)).Modules.Should().ContainSingle().Which.State.Should().Be(NetArcaWsMigrationState.Current);
+        NetArcaWsMigrationStatus allCurrent = await database.ApplyOfficialMigrationsAsync(allOptions, cancellationToken);
+        allCurrent.Modules.Should().HaveCount(2).And.OnlyContain(module => module.State == NetArcaWsMigrationState.Current);
+        NetArcaWsMigrationStatus repeated = await database.ApplyOfficialMigrationsAsync(allOptions, cancellationToken);
+        repeated.Modules.Select(module => module.Applied).Should().BeEquivalentTo(allCurrent.Modules.Select(module => module.Applied));
+
+        if (invoicingFirst)
+        {
+            IInvoiceJournal journal = database.Services.GetRequiredService<IInvoiceJournal>();
+            (await journal.FindAsync("mysql-migration-lifecycle", "invoice-fixture", cancellationToken))!.Submission.Payload.Should().Be("<synthetic>revision</synthetic>");
+            (await journal.ListRevisionsAsync("mysql-migration-lifecycle", "invoice-fixture", cancellationToken))
+                .Should().ContainSingle().Which.Submission.Payload.Should().Be("<synthetic>preserved</synthetic>");
+        }
+        else
+        {
+            (await ReadTicketFixtureAsync(database, cancellationToken)).Should().Equal([11, 22, 33, 44, 55]);
+        }
+    }
+
+    private static NetArcaWsModelOptions MigrationOptions(params NetArcaWsPersistenceModule[] modules) => NetArcaWsModelOptions.Configure(builder =>
+    {
+        foreach (NetArcaWsPersistenceModule module in modules) AddModule(builder, module);
+    });
+
+    private static void AddModule(NetArcaWsModelOptionsBuilder builder, NetArcaWsPersistenceModule module)
+    {
+        if (module == NetArcaWsPersistenceModule.Invoicing) builder.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1);
+        else builder.AddWsaaTickets(ArcaService.Wsfev1, ArcaService.PadronA5);
+    }
+
+    private static async Task ExecuteTicketFixtureAsync(MySqlTestDatabase database, CancellationToken cancellationToken)
+    {
+        await using ArcaWsDbContext context = await database.Services.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>().CreateDbContextAsync(cancellationToken);
+        await context.Database.OpenConnectionAsync(cancellationToken);
+        await using DbCommand command = context.Database.GetDbConnection().CreateCommand();
+        command.CommandText = "INSERT INTO `NetArcaWsaaTickets` (KeyHash, CertificateHash, Endpoint, Service, State, Fence, Version, Nonce, Ciphertext, Tag, UpdatedUtcTicks) VALUES (@key, @cert, @endpoint, @service, 3, 4, 5, @nonce, @ciphertext, @tag, 123456789)";
+        AddParameter(command, "@key", new string('a', 64));
+        AddParameter(command, "@cert", new string('b', 64));
+        AddParameter(command, "@endpoint", "https://synthetic.invalid/wsaa");
+        AddParameter(command, "@service", "wsfev1");
+        AddParameter(command, "@nonce", new byte[] { 1, 2, 3 });
+        AddParameter(command, "@ciphertext", new byte[] { 11, 22, 33, 44, 55 });
+        AddParameter(command, "@tag", new byte[] { 6, 7, 8 });
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task<byte[]> ReadTicketFixtureAsync(MySqlTestDatabase database, CancellationToken cancellationToken)
+    {
+        await using ArcaWsDbContext context = await database.Services.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>().CreateDbContextAsync(cancellationToken);
+        await context.Database.OpenConnectionAsync(cancellationToken);
+        await using DbCommand command = context.Database.GetDbConnection().CreateCommand();
+        command.CommandText = "SELECT Ciphertext FROM `NetArcaWsaaTickets` WHERE KeyHash = @key";
+        AddParameter(command, "@key", new string('a', 64));
+        return (byte[])(await command.ExecuteScalarAsync(cancellationToken)
+            ?? throw new InvalidOperationException("The synthetic WSAA ticket row was not preserved."));
+    }
+
+    private static void AddParameter(DbCommand command, string name, object value)
+    {
+        DbParameter parameter = command.CreateParameter();
+        parameter.ParameterName = name;
+        parameter.Value = value;
+        command.Parameters.Add(parameter);
+    }
+
     [Fact]
     public void Registration_uses_explicit_server_version_without_connecting_or_creating_schema()
     {
@@ -212,23 +318,62 @@ internal sealed class MySqlTestDatabase : IAsyncDisposable
     }
 
     public ServiceProvider Services => services;
+    public string DatabaseConnectionString => connectionString;
 
-    public static async Task<MySqlTestDatabase> CreateAsync(PersistenceDbSettings settings)
+    public async Task<NetArcaWsMigrationStatus> ApplyOfficialMigrationsAsync(NetArcaWsModelOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        return await CreateOfficialMigrator(options).ApplyAsync(cancellationToken);
+    }
+
+    public INetArcaWsMigrator CreateOfficialMigrator(NetArcaWsModelOptions options)
+    {
+        INetArcaWsMigrationContextFactory factory = kind == "mysql"
+            ? new MySqlMigrationContextFactory(connectionString, new MySqlServerVersion(version))
+            : new MariaDbMigrationContextFactory(connectionString, new MariaDbServerVersion(version));
+        NetArcaWsPersistenceModule[] modules = Enum.GetValues<NetArcaWsPersistenceModule>()
+            .Where(module => module == NetArcaWsPersistenceModule.Invoicing ? options.InvoicingEnabled : options.WsaaTicketsEnabled).ToArray();
+        return new NetArcaWsMigrator(factory, modules);
+    }
+
+    public static async Task<MySqlTestDatabase> CreateAsync(PersistenceDbSettings settings,
+        Action<NetArcaWsModelOptionsBuilder>? configure = null, bool provision = true)
     {
         var builder = new MySqlConnectionStringBuilder(settings.ConnectionString)
         {
-            Database = "netarcaws_probe_" + Guid.NewGuid().ToString("N")
+            Database = "netarcaws_mig_" + Guid.NewGuid().ToString("N")[..27]
         };
-        NetArcaWsModelOptions model = NetArcaWsModelOptions.Configure(x =>
-            x.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1).AddWsaaTickets(ArcaService.Wsfev1, ArcaService.PadronA5));
+        NetArcaWsModelOptions model = NetArcaWsModelOptions.Configure(configure ?? (x =>
+            x.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1).AddWsaaTickets(ArcaService.Wsfev1, ArcaService.PadronA5)));
         var services = new ServiceCollection();
         services.AddSingleton<IWsaaTicketProtector>(MySqlPersistenceTests.CreateTestProtector());
         ServerVersion server = settings.Kind == "mysql" ? new MySqlServerVersion(settings.Version) : new MariaDbServerVersion(settings.Version);
         services.AddNetArcaWsMySqlStores(builder.ConnectionString, server, model);
-        ServiceProvider provider = services.BuildServiceProvider();
-        await using (ArcaWsDbContext context = await provider.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>().CreateDbContextAsync())
-            await context.Database.EnsureCreatedAsync();
-        return new MySqlTestDatabase(builder.ConnectionString, settings.Kind, settings.Version, provider);
+        await using (var admin = new MySqlConnection(settings.ConnectionString))
+        {
+            await admin.OpenAsync(TestContext.Current.CancellationToken);
+            await using var create = admin.CreateCommand();
+            create.CommandText = $"CREATE DATABASE `{builder.Database}`";
+            await create.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+        ServiceProvider? provider = null;
+        try
+        {
+            provider = services.BuildServiceProvider();
+            var database = new MySqlTestDatabase(builder.ConnectionString, settings.Kind, settings.Version, provider);
+            if (provision) await database.ApplyOfficialMigrationsAsync(model, TestContext.Current.CancellationToken);
+            return database;
+        }
+        catch
+        {
+            if (provider is not null) await provider.DisposeAsync();
+            await using var admin = new MySqlConnection(settings.ConnectionString);
+            await admin.OpenAsync(TestContext.Current.CancellationToken);
+            await using var drop = admin.CreateCommand();
+            drop.CommandText = $"DROP DATABASE IF EXISTS `{builder.Database}`";
+            await drop.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            throw;
+        }
     }
 
     public async Task<ProcessRaceResult> RunTwoProcessesAsync(InvoiceSubmission first, InvoiceSubmission second, CancellationToken cancellationToken)

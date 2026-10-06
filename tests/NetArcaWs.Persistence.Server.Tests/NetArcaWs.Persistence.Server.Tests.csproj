@@ -12,6 +12,8 @@
   <ItemGroup>
     <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.PostgreSql/NetArcaWs.EntityFrameworkCore.PostgreSql.csproj" />
     <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.SqlServer/NetArcaWs.EntityFrameworkCore.SqlServer.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer.csproj" />
     <ProjectReference Include="../NetArcaWs.Persistence.Probe/NetArcaWs.Persistence.Probe.csproj" />
   </ItemGroup>
 </Project>

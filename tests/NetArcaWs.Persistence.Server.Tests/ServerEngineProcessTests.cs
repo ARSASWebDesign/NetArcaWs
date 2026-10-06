@@ -8,6 +8,9 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NetArcaWs.EntityFrameworkCore;
+using NetArcaWs.EntityFrameworkCore.Migrations;
+using NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql;
+using NetArcaWs.EntityFrameworkCore.Migrations.SqlServer;
 using NetArcaWs.EntityFrameworkCore.PostgreSql;
 using NetArcaWs.EntityFrameworkCore.SqlServer;
 using NetArcaWs.HealthChecks;
@@ -156,9 +159,30 @@ internal sealed class ServerTestDatabase : IAsyncDisposable
     }
 
     public ServiceProvider Services => services;
+    internal string ConnectionString => connectionString;
+    internal string EngineKind => settings.Kind;
+
+    public async Task<NetArcaWsMigrationStatus> ApplyOfficialMigrationsAsync(NetArcaWsModelOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        return await CreateOfficialMigrator(options).ApplyAsync(cancellationToken);
+    }
+
+    public INetArcaWsMigrator CreateOfficialMigrator(NetArcaWsModelOptions options)
+    {
+        INetArcaWsMigrationContextFactory factory = settings.Kind switch
+        {
+            "postgresql" => new PostgreSqlMigrationContextFactory(connectionString),
+            "sqlserver" => new SqlServerMigrationContextFactory(connectionString),
+            _ => throw new InvalidOperationException("The shared server suite supports PostgreSQL and SQL Server only.")
+        };
+        NetArcaWsPersistenceModule[] modules = Enum.GetValues<NetArcaWsPersistenceModule>()
+            .Where(module => module == NetArcaWsPersistenceModule.Invoicing ? options.InvoicingEnabled : options.WsaaTicketsEnabled).ToArray();
+        return new NetArcaWsMigrator(factory, modules);
+    }
 
     public static async Task<ServerTestDatabase> CreateAsync(PersistenceServerSettings settings,
-        Action<NetArcaWsModelOptionsBuilder> configure)
+        Action<NetArcaWsModelOptionsBuilder> configure, bool provision = true)
     {
         string databaseName = "netarcaws_probe_" + Guid.NewGuid().ToString("N");
         string connectionString = await CreateDatabaseAsync(settings, databaseName);
@@ -175,9 +199,9 @@ internal sealed class ServerTestDatabase : IAsyncDisposable
                 throw new InvalidOperationException($"Requested persistence server version {settings.Version}, but the connected {settings.Kind} engine reports {actualVersion}.");
             Console.WriteLine($"Opt-in persistence test engine: {settings.Kind} {actualVersion}.");
             provider = serviceCollection.BuildServiceProvider();
-            await using ArcaWsDbContext context = await provider.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>().CreateDbContextAsync();
-            await context.Database.EnsureCreatedAsync();
-            return new ServerTestDatabase(settings, databaseName, connectionString, modelOptions, provider);
+            var database = new ServerTestDatabase(settings, databaseName, connectionString, modelOptions, provider);
+            if (provision) await database.ApplyOfficialMigrationsAsync(modelOptions, TestContext.Current.CancellationToken);
+            return database;
         }
         catch
         {
