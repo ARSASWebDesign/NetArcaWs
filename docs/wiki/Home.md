@@ -36,8 +36,10 @@ Publishing OIDC; consultar [[Publicar versiones]].
 
 En QA real, una corrida de 9 casos respondió los siete probes `Dummy` el
 2026-10-06 y omitió las pruebas autenticadas por falta de certificados; no es una
-validación fiscal de negocio. El Hito 7 permanece pendiente porque no se publicó
-el wiki remoto.
+validación fiscal de negocio. Esta wiki publica toda la documentación Markdown
+local; el Hito 7 conserva pendientes de revisión exhaustiva del material upstream
+y de ejemplos por operación. La revisión publicada figura en `SOURCE_COMMIT`
+del repositorio Git de la wiki.
 
 ## Fuentes y decisiones
 

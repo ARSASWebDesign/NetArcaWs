@@ -41,7 +41,7 @@ contrastan con el [upstream](https://github.com/reingart/pyafipws) y la
 | Arquitectura trazable | ADR de certificados en memoria y multitenancy; límites y equivalencias documentados |
 | Diario fiscal y coordinación durable | `SafeInvoiceService` + `IInvoiceJournal` / `InvoiceCoordinator` ofrecen autorización unitaria y reconciliación exacta en WSFE/WSFEX/WSMTXCA; implementación y suite local verificadas. SQLite sirve a procesos de un host, no NFS ni multi-host; sin worker ni reenvío de estados inciertos |
 | Clientes SOAP por contrato ARCA | 81 fachadas tipadas verificadas por QName/action y roundtrips; sin WCF. La autorización fiscal real requiere certificados y se valida aparte |
-| Wiki integral del repositorio | Contenido y mirror local preparados; publicación GitHub pendiente de autorización y revisión final del inventario upstream |
+| Wiki integral del repositorio | [Wiki publicada](https://github.com/ARSASWebDesign/NetArcaWs/wiki); revisión exhaustiva del inventario upstream pendiente |
 
 Ver las decisiones de [multitenancy](docs/adr/0002-arca-tenant-context.md),
 [certificados en memoria](docs/adr/0003-in-memory-certificates.md) y
@@ -110,15 +110,13 @@ ni valida todas las reglas fiscales del servicio.
 
 ## Documentación y wiki final
 
-El [checklist](PROGRESS.md) incorpora el **Hito 7 final**: publicar toda la
-documentación en el wiki de este repositorio, con fuentes versionadas y una
-matriz de cobertura basada en el manual y el wiki de PyAfipWs. Incluirá tanto
-los flujos equivalentes adaptados a C# como todos los extras anteriores. El
-mirror local contiene 29 páginas de contenido más barra lateral y manifiesto
-en `docs/wiki-export/`, generado desde `docs/wiki/` con enlaces internos
-convertidos. La publicación en GitHub sigue pendiente porque el acceso al
-navegador requerido fue rechazado; no se usó una vía alternativa. El [plan del
-wiki](docs/plans/hito-7-wiki.md) detalla el inventario upstream restante. La
+La [wiki del proyecto](https://github.com/ARSASWebDesign/NetArcaWs/wiki) reúne
+29 páginas de contenido, barra lateral y manifiesto de fuentes: guías .NET,
+README, arquitectura, ADR, contribuciones, releases, CLI, contratos y planes.
+El mirror `docs/wiki-export/` se genera desde la documentación versionada con
+enlaces internos convertidos. La revisión exhaustiva del inventario upstream y
+los ejemplos por operación siguen en el [plan del wiki](docs/plans/hito-7-wiki.md);
+la publicación no implica paridad completa con PyAfipWs. La
 cuenta NuGet `arsas`, el environment GitHub `nuget` y la política de Trusted
 Publishing están configurados. El workflow intercambió OIDC y NuGet aceptó e
 indexó ambos paquetes 0.5.0 en el índice v3; la [release](https://github.com/ARSASWebDesign/NetArcaWs/releases/tag/v0.5.0)

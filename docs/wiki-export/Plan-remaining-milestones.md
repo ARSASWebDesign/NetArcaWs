@@ -4,7 +4,7 @@
 
 Fecha de investigación y snapshots: 2026-10-06. Hitos 2–6 están completados y
 verificados en código, contratos y documentación; Hito 7 permanece pendiente de
-revisión exhaustiva y publicación autorizada. Las secciones 2–6 conservan el
+revisión exhaustiva; la documentación local ya está publicada en la wiki. Las secciones 2–6 conservan el
 alcance técnico y criterios de verificación que condujeron al cierre.
 Al corte actual existen WSAA, certificados en memoria, contexto tenant para
 WSAA y las fachadas autenticadas, health checks, CLI de certificados, transporte

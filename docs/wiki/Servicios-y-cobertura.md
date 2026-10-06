@@ -38,7 +38,7 @@ tipos de contrato conservaron sus campos `DateTime`. Una
 corrida real de QA respondió los siete probes `Dummy`; las dos pruebas
 autenticadas se omitieron por falta de certificados. Esto no acredita
 autorización fiscal. Hitos 2–6 se cerraron con build/suite local; Hito 7 sigue
-abierto y el wiki remoto no se publicó. El
+abierto por su revisión documental exhaustiva; la wiki remota ya está publicada. El
 [plan de hitos 2–7](../plans/remaining-milestones.md) define las operaciones,
 datos fiscales, cobertura de contratos y pruebas de cierre por servicio.
 

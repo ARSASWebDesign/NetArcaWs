@@ -155,8 +155,9 @@ def main() -> None:
         "de contenido, más `_Sidebar.md` y este manifiesto. Cada página incluye "
         "su fuente y reescribe enlaces relativos para navegación de wiki. Los "
         "contratos ARCA archivados en el repositorio tienen fecha de snapshot "
-        "2026-10-06. La salida refleja el árbol de trabajo y todavía no está "
-        "asociada con un commit de publicación. Revisarla antes de publicar.\n\n"
+        "2026-10-06. La salida refleja el árbol de trabajo. Al publicar, "
+        "SOURCE_COMMIT en el repositorio wiki registra el SHA de origen. "
+        "Revisar el mirror antes de publicar.\n\n"
         + "\n".join(f"- `{source.relative_to(ROOT).as_posix()}` → `{name}`" for source, name in names.items())
         + "\n",
         encoding="utf-8",

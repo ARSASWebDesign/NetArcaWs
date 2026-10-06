@@ -18,7 +18,8 @@
 - [x] Hito 4: WSMTXCA — 27 operaciones, contrato SOAP y suite verificados; no equivale al ciclo integral de Factura de Crédito Electrónica MiPyME.
 - [x] Hito 5: Padrón A4 (2), Constancia/ruta A5 (5), A10 (2), A13 (4) — contratos, fachada y suite verificados.
 - [x] Hito 6: README, arquitectura, ADR y guías integrales actualizados; suite local Release verificada.
-- [ ] Hito 7 (final): publicar TODA la documentación en el wiki del repositorio, basada en PyAfipWs y ampliada con los extras de NetArcaWs; [alcance y criterios de cierre](docs/plans/hito-7-wiki.md).
+- [x] Publicar en la wiki toda la documentación Markdown local, con navegación y revisión de origen identificada.
+- [ ] Hito 7 (final): completar la revisión exhaustiva upstream y las guías/ejemplos por operación; [criterios de cierre](docs/plans/hito-7-wiki.md).
 
 La build Release terminó con 0 warnings y 0 errors. La suite completa tuvo
 201 casos: 198 aprobados y 3 omitidos. Se verificaron los QName y SOAPAction de
@@ -38,8 +39,8 @@ NuGet aceptó e indexó ambos paquetes 0.5.0 en el índice del feed v3; además,
 Tool público se instaló desde una caché aislada y `--help` terminó con código 0.
 La [release v0.5.0](https://github.com/ARSASWebDesign/NetArcaWs/releases/tag/v0.5.0)
 está publicada. El mirror wiki local contiene 29 páginas de contenido, barra
-lateral y manifiesto. La publicación remota permanece pendiente porque el acceso
-al navegador requerido para GitHub fue rechazado; el Hito 7 queda abierto.
+lateral y manifiesto, publicados en la [wiki](https://github.com/ARSASWebDesign/NetArcaWs/wiki).
+El Hito 7 queda abierto por la revisión documental exhaustiva restante.
 La caché de tickets es local al proceso; compartir certificados entre réplicas no agrega caché distribuida.
 Este estado no equivale al 100% del port del repositorio original.
 
@@ -47,5 +48,5 @@ Decisiones: [contexto multitenant](docs/adr/0002-arca-tenant-context.md) y
 [certificados en memoria](docs/adr/0003-in-memory-certificates.md),
 [reintentos seguros](docs/adr/0001-safe-invoice-retries.md) y
 [contratos SOAP fieles a WSDL](docs/adr/0004-public-soap-contracts.md).
-El wiki integral está preparado localmente en `docs/wiki/` y `docs/wiki-export/`,
-pero todavía no se publicó.
+Las fuentes de la wiki se mantienen en `docs/wiki/` y `docs/wiki-export/`; la
+revisión del repositorio publicada se registra en `SOURCE_COMMIT` del repositorio wiki.

@@ -2,9 +2,9 @@
 
 # Hito 7 final: wiki integral de NetArcaWs
 
-Estado: fuentes y mirror local preparados; hito pendiente de revisión final del
-inventario upstream, pack/ejemplos y publicación autorizada. El wiki remoto no
-está publicado y este estado no implica que el port esté completo.
+Estado: documentación Markdown local publicada en la wiki el 2026-10-06.
+Quedan la revisión exhaustiva del inventario upstream y los ejemplos por operación;
+la publicación no implica que el port esté completo.
 
 ## Objetivo y publicación
 
@@ -14,7 +14,7 @@ como base temática y agregar las características propias de NetArcaWs, ejemplo
 C# y sus diferencias de comportamiento.
 
 Mantener las fuentes Markdown del wiki en `docs/wiki/` dentro del repositorio
-principal, revisadas junto al código. En este hito se publicará una copia en la
+principal, revisadas junto al código. Se publica una copia en la
 pestaña Wiki de `ARSASWebDesign/NetArcaWs`, con portada, barra lateral y enlaces
 entre páginas. Los ADR y contratos técnicos existentes conservarán su historial:
 el wiki incluirá su contenido y procedencia, sin crear dos versiones editadas
@@ -26,10 +26,9 @@ El espejo plano local se genera con `python3 scripts/build-wiki-mirror.py` en
 manifiesto. Incluye las páginas temáticas y copia README, arquitectura, progreso,
 ADR, guía de contribución, releases, CLI y referencias, convirtiendo enlaces
 relativos a navegación entre páginas. El manifiesto declara las fuentes, la fecha
-de snapshots de contratos (2026-10-06) y que la salida todavía no está fijada a
-un commit. Se revisa junto a las fuentes antes de cualquier publicación. La
-publicación remota permanece pendiente porque el acceso al navegador requerido
-para GitHub fue rechazado; el wiki no está publicado y no se intenta otro canal.
+de snapshots de contratos (2026-10-06) y la revisión de origen se registra en `SOURCE_COMMIT` del repositorio wiki.
+Se revisa junto a las fuentes antes de cada publicación. El mantenedor inicializó
+la wiki; la publicación utiliza su repositorio Git dedicado.
 
 ## Fuentes de base e inventario
 
@@ -91,19 +90,39 @@ como punto de partida; la estructura de operación .NET y sus extras son propios
 ## Criterios de cierre
 
 - [ ] Inventario exhaustivo de documentación upstream y local con cada entrada resuelta.
-- [ ] Toda la documentación local incorporada al wiki, incluidos ADR y referencias.
+- [x] Toda la documentación local incorporada al wiki, incluidos ADR y referencias.
 - [ ] Cada servicio y operación implementada tiene guía, parámetros, ejemplo y manejo de errores.
 - [ ] Cada tema upstream sin implementación equivalente está identificado, sin promesas de soporte.
 - [ ] Todos los extras listados en el README tienen su página y estado verificable.
 - [ ] Ejemplos C# compilados; ejemplos de credenciales ficticios y sin secretos reales.
-- [ ] Homologación real distinguida de tests simulados y de comprobaciones de infraestructura.
+- [x] Homologación real distinguida de tests simulados y de comprobaciones de infraestructura.
 - [ ] Enlaces internos/externos, navegación, portada y barra lateral revisados.
 - [ ] Información fiscal/operativa contrastada con fuentes oficiales vigentes, con fecha de revisión.
 - [ ] Procedencia, autores y licencia del material adaptado registrados; verificar la licencia documental antes de copiar textos.
-- [ ] Publicación reproducible validada: fuentes `docs/wiki/` y wiki publicado corresponden a una revisión identificada.
-- [ ] README enlaza el wiki publicado y conserva inicio rápido, extras y límites actuales.
+- [x] Publicación reproducible validada: fuentes `docs/wiki/` y wiki publicado corresponden a una revisión identificada.
+- [x] README enlaza el wiki publicado y conserva inicio rápido, extras y límites actuales.
 - [ ] Checklist y matriz de compatibilidad actualizados; revisión final antes de declarar completo este hito.
 
 Este hito permanece al final del plan. Si aparecen módulos adicionales necesarios
 para completar el port, sus hitos de implementación deben preceder al cierre del
 wiki integral.
+
+## Reproducir la publicación
+
+1. Desde una revisión limpia del repositorio principal, ejecutar
+   `python3 scripts/build-wiki-mirror.py`; el generador valida destinos internos.
+   Revisar y confirmar las fuentes y el mirror antes de continuar.
+2. Clonar `git@github.com:ARSASWebDesign/NetArcaWs.wiki.git` en una carpeta
+   externa al repositorio principal. Actualizar su rama antes de cada publicación.
+3. Copiar los Markdown de `docs/wiki-export/` a la raíz del checkout wiki.
+   Revisar conflictos con páginas editadas manualmente; conservar páginas ajenas
+   al mirror. No reemplazar el historial ni usar push forzado.
+4. Guardar el SHA completo de `git rev-parse HEAD` del repositorio principal en
+   el archivo `SOURCE_COMMIT` de la wiki. Confirmar el cambio en la wiki indicando
+   ese SHA en el mensaje y hacer push a su rama predeterminada.
+5. Verificar el HEAD remoto y comparar cada archivo publicado con el mirror.
+   La barra lateral y el manifiesto enumeran las páginas y sus fuentes originales.
+
+El manifiesto permite reproducir el contenido de una revisión concreta del
+repositorio principal; `SOURCE_COMMIT` pertenece exclusivamente al checkout wiki
+para evitar referencias circulares en los commits del repositorio principal.
