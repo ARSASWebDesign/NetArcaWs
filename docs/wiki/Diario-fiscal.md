@@ -155,6 +155,61 @@ transaccional común. El diario guarda requests y respuestas fiscales, que puede
 contener datos personales: asegurar acceso, backups y retención de la base, y no
 volcar payloads a logs.
 
+### Entity Framework Core opcional
+
+El paquete `NetArcaWs.EntityFrameworkCore` integra el diario con un contexto EF
+del consumidor; el paquete principal no depende de EF. La configuración fija
+qué servicios de factura y qué servicios autenticados tendrán tickets
+compartidos. Se puede habilitar uno o ambos módulos:
+
+```csharp
+NetArcaWsModelOptions modelOptions = NetArcaWsModelOptions.Configure(options =>
+    options.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca)
+        .AddWsaaTickets(ArcaService.Wsfev1));
+
+services.AddDbContextFactory<MyApplicationDbContext>(options => options.UseSqlite(connectionString));
+services.AddNetArcaWsEntityFrameworkStores<MyApplicationDbContext>(modelOptions);
+```
+
+`OnModelCreating` del contexto agrega `modelBuilder.AddNetArcaWs(modelOptions)`.
+Usá la misma instancia de opciones para el modelo y los stores. El contexto
+consumidor debe registrar `IDbContextFactory<TContext>`; la aplicación conserva
+la propiedad de las migraciones y del despliegue del esquema. La selección puede
+ser solo `AddInvoicing(...)`, solo `AddWsaaTickets(...)` o incluir ambas. El
+diario acepta WSFEv1, WSFEXv1 y WSMTXCA; los tickets admiten servicios
+autenticados explícitos.
+
+Para `AddWsaaTickets(...)`, registrá `IWsaaTicketProtector` antes de
+`AddNetArcaWsEntityFrameworkStores` y compartí el mismo keyring entre las
+réplicas. También registrá `AddNetArcaWs()` para WSAA; si seleccionaste el
+diario, `AddNetArcaWsInvoicing()` registra WSAA, las fachadas y
+`SafeInvoiceService`. No guardes las claves del protector en la misma base que
+los tickets.
+
+Para el helper MySQL/MariaDB, agregar el paquete separado
+`NetArcaWs.EntityFrameworkCore.MySql` y pasar la versión del servidor de forma
+explícita:
+
+```csharp
+services.AddNetArcaWsMySqlStores(
+    connectionString,
+    new MySqlServerVersion(new Version(8, 4, 11)),
+    modelOptions);
+```
+
+Para MariaDB se usa `MariaDbServerVersion`. El helper configura el contexto
+dedicado y los stores, pero no conecta, migra, crea tablas ni agrega estrategia
+de reintentos EF o reintentos SOAP. Ambos paquetes opcionales están en versión 0.5.0 y aún no se publicaron
+en NuGet; consultar el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19)
+para su estado de entrega. El cifrado de tickets requiere que la aplicación
+registre `IWsaaTicketProtector` con claves administradas fuera de la base de
+datos; ver el [ADR 0006](../adr/0006-shared-wsaa-tickets.md).
+
+La suite normal usa motores y datos sintéticos; los tests opt-in contra engines
+reales se ejecutaron con MySQL 8.4.11 y MariaDB 11.4.13, incluidos casos entre
+procesos. Esa evidencia cubre esas versiones y escenarios, no cualquier engine
+ni homologación con ARCA.
+
 El comportamiento es conservador, no exactamente una vez: una caída externa,
 una operación realizada fuera del diario, pérdida de storage o datos remotos no
 comparables pueden requerir revisión humana. No hay asignación automática de

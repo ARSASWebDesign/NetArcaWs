@@ -4,12 +4,18 @@ updates:
     directories:
       - /src/NetArcaWs
       - /src/NetArcaWs.Tool
+      - /src/NetArcaWs.EntityFrameworkCore
+      - /src/NetArcaWs.EntityFrameworkCore.MySql
       - /examples/NetArcaWs.Examples
       - /tools/NetArcaWs.Build
       - /tests/NetArcaWs.IntegrationTests
       - /tests/NetArcaWs.Tool.Tests
       - /tests/NetArcaWs.Build.Tests
       - /tests/NetArcaWs.UnitTests
+      - /tests/NetArcaWs.EntityFrameworkCore.Tests
+      - /tests/NetArcaWs.EntityFrameworkCore.MySql.Tests
+      - /tests/NetArcaWs.Persistence.PackageSmoke
+      - /tests/NetArcaWs.Persistence.Probe
     schedule:
       interval: weekly
     open-pull-requests-limit: 8

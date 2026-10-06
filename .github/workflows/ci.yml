@@ -27,9 +27,18 @@ jobs:
       - run: dotnet test --solution NetArcaWs.slnx --configuration Release --no-build --no-restore
       - run: dotnet pack src/NetArcaWs/NetArcaWs.csproj --configuration Release --no-build --no-restore --output artifacts
       - run: dotnet pack src/NetArcaWs.Tool/NetArcaWs.Tool.csproj --configuration Release --no-build --no-restore --output artifacts
+      - run: dotnet pack src/NetArcaWs.EntityFrameworkCore/NetArcaWs.EntityFrameworkCore.csproj --configuration Release --no-build --no-restore --output artifacts
+      - run: dotnet pack src/NetArcaWs.EntityFrameworkCore.MySql/NetArcaWs.EntityFrameworkCore.MySql.csproj --configuration Release --no-build --no-restore --output artifacts
       - name: Smoke test local tool package
         env:
           PACKAGE_VERSION: ${{ steps.version.outputs.version }}
         run: |
           dotnet tool install NetArcaWs.Tool --tool-path artifacts/tool-smoke --source artifacts --version "$PACKAGE_VERSION"
           artifacts/tool-smoke/netarcaws --help
+      - name: Smoke test persistence NuGet packages in a consumer
+        env:
+          NUGET_PACKAGES: ${{ runner.temp }}/netarcaws-persistence-smoke-packages
+          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          dotnet restore tests/NetArcaWs.Persistence.PackageSmoke/NetArcaWs.Persistence.PackageSmoke.csproj --configfile tests/NetArcaWs.Persistence.PackageSmoke/NuGet.config -p:PersistencePackageVersion="$PACKAGE_VERSION"
+          dotnet run --project tests/NetArcaWs.Persistence.PackageSmoke/NetArcaWs.Persistence.PackageSmoke.csproj --configuration Release --no-restore -p:PersistencePackageVersion="$PACKAGE_VERSION"
