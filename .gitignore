@@ -1,0 +1,30 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+TestResults/
+
+# Local credentials; test fixtures are embedded public test data in C#.
+*.key
+*.pfx
+*.p12
+*.pem
+*.crt
+
+# NuGet packages and local feeds
+*.nupkg
+*.snupkg
+.nuget/
+
+# IDE / local settings
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# OS files
+.DS_Store
+Thumbs.db

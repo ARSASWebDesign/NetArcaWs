@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>NetArcaWs</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>NetArcaWs .NET contributors</Authors>
+    <RepositoryUrl>https://github.com/ARSASWebDesign/NetArcaWs</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/ARSASWebDesign/NetArcaWs</PackageProjectUrl>
+    <Description>.NET client for AFIP WSAA authentication and login tickets.</Description>
+    <Copyright>Original PyAfipWs: Copyright (C) 2008-2021 Mariano Reingart. .NET port: NetArcaWs .NET contributors.</Copyright>
+    <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>afip;argentina;wsfe;web-services</PackageTags>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.12" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="/" />
+    <None Include="../../COPYING" Pack="true" PackagePath="/" />
+    <None Include="../../THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="/" />
+    <None Include="../../ARCHITECTURE.md" Pack="true" PackagePath="/" />
+    <None Include="../../docs/plans/hito-1.md" Pack="true" PackagePath="docs/plans/" />
+    <None Include="../../docs/reference/wsaa-homologation.wsdl" Pack="true" PackagePath="docs/reference/" />
+  </ItemGroup>
+</Project>
