@@ -50,6 +50,10 @@ Fallaron CUIT física en A4/Constancia y CUIL física en A4/A10/A13; el diagnós
 original no distinguía sus causas. Se agregaron categorías seguras de error para
 la siguiente ejecución, sin relajar validaciones ni publicar datos remotos.
 No se afirma que los cuatro servicios compartan datos de QA ni homologación total.
+La [corrida siguiente](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37513178195)
+falló en autenticación WSAA en los once casos, sin validar respuestas de padrón.
+El diagnóstico reconoce ahora también el código `alreadyAuthenticated` con un
+prefijo XML válido; esto no determina retrospectivamente el código de esa corrida.
 
 El environment GitHub `nuget` contiene
 `NUGET_USER=arsas`; el workflow de release intercambió OIDC correctamente y

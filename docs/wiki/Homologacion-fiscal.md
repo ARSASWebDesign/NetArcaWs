@@ -69,7 +69,7 @@ contenido de la respuesta:
 
 | Categoría | Significado |
 |---|---|
-| `AlreadyAuthenticated` | WSAA rechazó un nuevo login con ese código; no se recuperó el ticket anterior |
+| `AlreadyAuthenticated` | WSAA rechazó un nuevo login con ese código (con o sin prefijo XML válido); no se recuperó el ticket anterior |
 | `Authentication` | Otro error SOAP de WSAA |
 | `PersonNotFound` | El padrón devolvió el mensaje conocido de persona inexistente |
 | `SoapFault` | Otro error SOAP del servicio; no se interpreta como persona inexistente |

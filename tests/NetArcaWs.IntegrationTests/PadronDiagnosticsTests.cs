@@ -131,6 +131,10 @@ public sealed class PadronDiagnosticsTests
 
     public static TheoryData<Exception, string> ExceptionCases => new()
     {
+        { new WsaaSoapException("ns1:coe.alreadyAuthenticated", "synthetic remote fault", "<detail>secret</detail>", HttpStatusCode.InternalServerError), "AlreadyAuthenticated" },
+        { new WsaaSoapException("soap:coe.alreadyAuthenticated", "synthetic remote fault", "<detail>secret</detail>", HttpStatusCode.InternalServerError), "AlreadyAuthenticated" },
+        { new WsaaSoapException("bad prefix:coe.alreadyAuthenticated", "synthetic remote fault", "<detail>secret</detail>", HttpStatusCode.InternalServerError), "Authentication" },
+        { new WsaaSoapException("a:b:coe.alreadyAuthenticated", "synthetic remote fault", "<detail>secret</detail>", HttpStatusCode.InternalServerError), "Authentication" },
         { new WsaaSoapException("coe.alreadyAuthenticated", "synthetic remote fault", "<detail>secret</detail>", HttpStatusCode.InternalServerError), "AlreadyAuthenticated" },
         { new WsaaSoapException("prefix.coe.alreadyAuthenticated.extra", "synthetic remote fault", "<detail>secret</detail>", HttpStatusCode.InternalServerError), "Authentication" },
         { new WsaaSoapException("synthetic.otherFault", "synthetic remote fault", "<detail>secret</detail>", HttpStatusCode.InternalServerError), "Authentication" },

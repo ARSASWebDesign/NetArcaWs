@@ -84,7 +84,7 @@ internal static class PadronTestCases
     private static PadronFailure Classify(Exception exception) => exception switch
     {
         PadronValidationException validation => validation.Failure,
-        WsaaSoapException { FaultCode: "coe.alreadyAuthenticated" } => PadronFailure.AlreadyAuthenticated,
+        WsaaSoapException wsaa when IsFaultCode(wsaa.FaultCode, "coe.alreadyAuthenticated") => PadronFailure.AlreadyAuthenticated,
         WsaaSoapException => PadronFailure.Authentication,
         SoapFaultException { Reason: "No existe persona con ese Id" } => PadronFailure.PersonNotFound,
         SoapFaultException => PadronFailure.SoapFault,
@@ -93,6 +93,16 @@ internal static class PadronTestCases
         FormatException or System.Xml.XmlException => PadronFailure.InvalidResponse,
         _ => PadronFailure.Unexpected
     };
+
+    private static bool IsFaultCode(string code, string expected)
+    {
+        if (code == expected) return true;
+        int colon = code.IndexOf(':');
+        if (colon <= 0 || code[(colon + 1)..] != expected) return false;
+        try { System.Xml.XmlConvert.VerifyNCName(code[..colon]); }
+        catch (System.Xml.XmlException) { return false; }
+        return true;
+    }
 
     private enum PadronFailure
     {
