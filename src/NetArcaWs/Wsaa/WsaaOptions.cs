@@ -1,9 +1,14 @@
+using NetArcaWs.Cryptography;
+
 namespace NetArcaWs.Wsaa;
 
 public sealed class WsaaOptions
 {
     public static readonly Uri HomologationEndpoint = new("https://wsaahomo.afip.gov.ar/ws/services/LoginCms");
     public static readonly Uri ProductionEndpoint = new("https://wsaa.afip.gov.ar/ws/services/LoginCms");
+
+    /// <summary>Optional default signing material held in memory. No filesystem paths are required.</summary>
+    public WsaaCertificateContent? Certificate { get; set; }
 
     public Uri Endpoint { get; set; } = HomologationEndpoint;
     public TimeSpan TraTimeToLive { get; set; } = TimeSpan.FromHours(5);

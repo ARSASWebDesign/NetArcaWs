@@ -6,8 +6,10 @@ las dependencias Microsoft se distribuyen como paquetes NuGet.
 
 ## Flujo
 
-1. `AuthenticateAsync` valida servicio, certificado y vigencia, y consulta
-   IMemoryCache usando endpoint, certificado y servicio como identidad.
+1. `AuthenticateAsync` valida servicio, el certificado configurado en opciones y
+   su vigencia; `AuthenticateWithContentAsync` permite pasar contenido distinto
+   por operación. Ambos consultan IMemoryCache usando endpoint, certificado y
+   servicio como identidad.
 2. Si falta un TA vigente, espera un semáforo compartido por las instancias
    que usan esa caché y vuelve a consultarla. Un conjunto fijo de 64 semáforos
    evita acumular locks por cada clave; colisiones solo serializan llamadas.
@@ -30,10 +32,83 @@ llamada. Los DTOs públicos existen para XmlSerializer; la API de negocio es
 WsaaService/WsaaTicket. Los prefijos XML son irrelevantes, las URI no.
 
 TimeProvider permite comprobar expiraciones sin esperas. IHttpClientFactory
-administra handlers y conexiones; el cliente se libera por operación y el
-certificado sigue siendo responsabilidad de quien llama. La aplicación puede
-configurar proxy/TLS mediante el builder de DI. No hay bypass TLS ni ejecución
-de procesos externos.
+administra handlers y conexiones; el cliente se libera por operación. Si la
+aplicación obtiene un `X509Certificate2` con `LoadCertificate()`, quien llama
+es responsable de desecharlo. La aplicación puede configurar proxy/TLS mediante
+el builder de DI. No hay bypass TLS ni ejecución de procesos externos.
+
+### Certificados en memoria
+
+`WsaaCertificateContent` encapsula de forma inmutable el material de certificado
+y clave privada sin exponerlo en `ToString`. `FromPem(certificatePem,
+privateKeyPem, password)` requiere certificado y clave; `FromPkcs12(data,
+password)` acepta bytes PFX y `FromPkcs12Base64(base64, password)` decodifica
+Base64 en memoria. Base64 solo representa los bytes y no cifra por sí mismo el
+PFX. `LoadCertificate()` devuelve un `X509Certificate2` que es propiedad del
+llamador y este debe liberar.
+
+Las aplicaciones pueden cargar certificados y claves de sus propios almacenes
+de manera asíncrona y pasar el contenido resultante. NetArcaWs no incorpora
+integraciones ni SDK de vault, y no crea archivos temporales como alternativa
+de importación. El contenido configurado en `WsaaOptions.Certificate` se
+copia al crear el singleton del servicio; esa opción no sigue cambios posteriores
+del proveedor de configuración. Para una rotación explícita de una identidad
+individual, el llamador crea el contenido actualizado y lo pasa a
+`AuthenticateWithContentAsync(service, content, cancellationToken)` en cada
+operación. La ruta de opciones permite
+`AuthenticateAsync(service, cancellationToken)` con la credencial configurada.
+
+La importación PKCS#12 usa `EphemeralKeySet` en Windows y Linux para mantener la
+clave fuera del almacén persistente. La implementación de .NET no admite esa
+importación efímera de PFX en macOS; allí la aplicación debe proporcionar PEM.
+No hay fallback a disco. La ruta PEM no escribe archivos temporales explícitos y
+no necesita que la aplicación materialice archivos; al importar, .NET usa el
+proveedor criptográfico del sistema operativo, por lo que la biblioteca no promete
+que ese proveedor nunca use un keychain u otro backing storage del sistema. Las
+operaciones criptográficas dependen de los proveedores del sistema operativo y sus
+capacidades, como describe la
+[documentación multiplataforma de .NET](https://learn.microsoft.com/en-us/dotnet/standard/security/cross-platform-cryptography).
+
+La caché TA sigue identificando la credencial por endpoint, huella SHA-256 del
+certificado y servicio. Una rotación cambia la huella y separa la entrada; usar
+un certificado en más de una instancia no proporciona una caché distribuida ni
+coordinación entre procesos. La aplicación debe elegir y proteger su propia
+estrategia de persistencia compartida si la necesita.
+
+### Contexto de tenant para WSAA
+
+`ArcaTenantContext` es un valor inmutable con `TenantId`, `Cuit`, `Environment`
+(`NetArcaWs.HealthChecks.ArcaEnvironment`) y `Certificate` (`WsaaCertificateContent`).
+`WsaaService.AuthenticateForTenantAsync(service, tenant, cancellationToken)` usa el
+ambiente del contexto para seleccionar el endpoint oficial sin cambiar el estado de
+`WsaaOptions` compartido. La clave local de caché agrega tenant y CUIT a endpoint,
+servicio y huella SHA-256 del certificado; así una misma biblioteca singleton puede
+atender contextos distintos sin mezclar sus tickets locales.
+
+El contexto no autentica ni autoriza quién puede seleccionar un tenant. La capa de
+aplicación debe obtener tenant, CUIT representado, ambiente y contenido del
+certificado desde una resolución autenticada y autorizada; nunca debe tratar valores
+libres de un request como contexto confiable. El CUIT representado puede no ser el
+del titular del certificado cuando existe una delegación vigente de ARCA, por lo
+que el sistema no debe exigir que ambos coincidan. `AuthenticateWithContentAsync`
+sigue siendo una primitiva de llamada por contenido, pero no sustituye el contexto
+para aislamiento multitenant.
+
+El tenant separa entradas de caché locales, no la identidad que ARCA ve en el
+certificado. Reutilizar una misma credencial en dos contextos puede producir
+`coe.alreadyAuthenticated` y no promete sesiones remotas independientes. WSFEv1,
+WSFEXv1, WSMTXCA y Padrones todavía no implementan clientes de negocio; cuando se
+agreguen, cada operación de esos servicios debe recibir el contexto resuelto para
+elegir certificado, CUIT y ambiente de forma coherente. Los health checks siguen
+siendo probes de infraestructura por servicio/ambiente: no usan contexto ni
+certificados y no verifican permiso fiscal del tenant.
+
+La futura autorización de facturas también debe mantener la clave fiscal global
+definida en [ADR 0001](docs/adr/0001-safe-invoice-retries.md): ambiente, CUIT
+emisora, punto de venta, tipo y número. No se debe agregar tenant como parte de esa
+unicidad. Dos tenants que operan la misma CUIT no pueden registrar dos veces el
+mismo comprobante; el límite por tenant controla acceso y visibilidad, no duplica
+identidad fiscal.
 
 Un token enlazado aplica el timeout del cliente al envío y a toda la lectura
 del cuerpo, también con ResponseHeadersRead. La cancelación del consumidor se

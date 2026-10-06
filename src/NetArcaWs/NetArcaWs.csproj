@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>NetArcaWs</PackageId>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <Authors>NetArcaWs .NET contributors</Authors>
     <RepositoryUrl>https://github.com/ARSASWebDesign/NetArcaWs</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -32,6 +32,7 @@
     <None Include="../../docs/plans/hito-1.md" Pack="true" PackagePath="docs/plans/" />
     <None Include="../../docs/reference/wsaa-homologation.wsdl" Pack="true" PackagePath="docs/reference/" />
     <None Include="../../docs/reference/healthchecks-contracts.md" Pack="true" PackagePath="docs/reference/" />
+    <None Include="../../docs/adr/0002-arca-tenant-context.md" Pack="true" PackagePath="docs/adr/" />
     <None Include="../../docs/adr/0001-safe-invoice-retries.md" Pack="true" PackagePath="docs/adr/" />
   </ItemGroup>
 </Project>

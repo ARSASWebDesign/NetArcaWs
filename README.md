@@ -22,7 +22,7 @@ Las pruebas unitarias no se conectan a ARCA. El paquete compilado localmente
 puede instalarse desde una carpeta NuGet:
 
 ```sh
-dotnet add package NetArcaWs --version 0.3.0 --source /ruta/absoluta/a/artifacts
+dotnet add package NetArcaWs --version 0.4.0 --source /ruta/absoluta/a/artifacts
 ```
 
 ## Autenticación
@@ -32,33 +32,127 @@ using Microsoft.Extensions.DependencyInjection;
 using NetArcaWs.Cryptography;
 using NetArcaWs.Wsaa;
 
+var certificatePem = Environment.GetEnvironmentVariable("WSAA_CERTIFICATE_PEM")
+    ?? throw new InvalidOperationException("Falta WSAA_CERTIFICATE_PEM.");
+var privateKeyPem = Environment.GetEnvironmentVariable("WSAA_PRIVATE_KEY_PEM")
+    ?? throw new InvalidOperationException("Falta WSAA_PRIVATE_KEY_PEM.");
+var password = Environment.GetEnvironmentVariable("WSAA_KEY_PASSWORD");
+var certificateContent = WsaaCertificateContent.FromPem(certificatePem, privateKeyPem, password);
+
 var services = new ServiceCollection();
 services.AddNetArcaWs(options =>
 {
     options.Endpoint = WsaaOptions.HomologationEndpoint;
+    options.Certificate = certificateContent;
 });
 using var provider = services.BuildServiceProvider();
-using var certificate = WsaaCryptography.LoadPem(
-    await File.ReadAllTextAsync("certificado.crt"),
-    await File.ReadAllTextAsync("privada.key"),
-    Environment.GetEnvironmentVariable("WSAA_KEY_PASSWORD"));
-
 var wsaa = provider.GetRequiredService<WsaaService>();
-var ticket = await wsaa.AuthenticateAsync("wsfe", certificate);
+var cancellationToken = CancellationToken.None;
+var ticket = await wsaa.AuthenticateAsync("wsfe", cancellationToken);
 // Entregar ticket.Token y ticket.Sign al cliente del servicio de negocio.
 // No registrarlos en logs: son credenciales.
 Console.WriteLine($"Ticket válido hasta {ticket.ExpirationTime:O}");
 ```
 
+El contenido se construye con el PEM que proporciona la aplicación; esta ruta no
+necesita escribir la clave o el certificado en archivos temporales. La contraseña
+es opcional para PEM sin cifrar y se suministra a `FromPem` cuando la clave privada
+está cifrada. `WsaaCertificateContent` es inmutable, mantiene sus datos privados y
+oculta su contenido en `ToString`. Si necesitás un `X509Certificate2` directamente,
+`LoadCertificate()` devuelve un objeto desechable cuya vida y `Dispose` quedan a
+cargo del llamador.
+
+También podés importar un PKCS#12 desde bytes o desde una cadena Base64:
+
+```csharp
+var pfxBase64 = Environment.GetEnvironmentVariable("WSAA_PFX_BASE64")
+    ?? throw new InvalidOperationException("Falta WSAA_PFX_BASE64.");
+var certificateContent = WsaaCertificateContent.FromPkcs12Base64(
+    pfxBase64,
+    Environment.GetEnvironmentVariable("WSAA_PFX_PASSWORD"));
+```
+
+`FromPkcs12(byte[] data, string? password = null)` acepta los bytes del PFX. Base64
+solo codifica esos bytes; no cifra el contenido. Protegé la variable Base64 y usá
+la contraseña del PFX si corresponde. La importación PKCS#12 sin persistir la clave
+usa `EphemeralKeySet` y funciona en Windows y Linux. .NET no admite esa importación
+efímera de PFX en macOS: allí usá PEM; la biblioteca no recurre a archivos temporales.
+Más detalles por plataforma en la [documentación de criptografía multiplataforma
+de .NET](https://learn.microsoft.com/en-us/dotnet/standard/security/cross-platform-cryptography).
+
+Para una operación con material de certificado explícito —por ejemplo, al rotar
+una credencial fuera de un flujo multitenant— la aplicación puede leer el secreto
+de manera asíncrona desde su almacén, construir un nuevo `WsaaCertificateContent`
+e invocar `AuthenticateWithContentAsync`:
+
+```csharp
+// certificatePem, privateKeyPem y password provienen de la configuración
+// ya cargada por la aplicación para esta identidad.
+var rotatedContent = WsaaCertificateContent.FromPem(certificatePem, privateKeyPem, password);
+var ticket = await wsaa.AuthenticateWithContentAsync("wsfe", rotatedContent, cancellationToken);
+```
+
+NetArcaWs no incluye un SDK de vault ni carga secretos por su cuenta. El valor de
+`WsaaOptions.Certificate` se captura cuando se crea el servicio singleton; cambiar
+la configuración después no reemplaza ese contenido. Para cambiar certificados por
+rotación de una identidad individual en una instancia activa, pasá el contenido de
+esa operación a `AuthenticateWithContentAsync`. Para una selección multitenant,
+usá el contexto descrito a continuación.
+
+## Contexto multitenant para WSAA
+
+`ArcaTenantContext` agrupa el identificador de tenant, el CUIT representado, el
+ambiente y el certificado que resolvió la aplicación. Es inmutable: sus propiedades
+son de solo lectura. WSAA elige el endpoint oficial correspondiente al ambiente sin
+modificar opciones globales del servicio.
+
+```csharp
+using NetArcaWs.HealthChecks;
+using NetArcaWs.Multitenancy;
+
+// Estos valores deben provenir de la resolución autenticada/autorizada
+// del tenant y de su configuración protegida, no de campos libres del request.
+string tenantId = resolvedTenantId;
+long cuitRepresentado = resolvedCuit;
+var environment = ArcaEnvironment.Production;
+var tenant = new ArcaTenantContext(tenantId, cuitRepresentado, environment, certificateContent);
+var ticket = await wsaa.AuthenticateForTenantAsync("wsfe", tenant, cancellationToken);
+```
+
+La aplicación debe autorizar la selección del tenant y resolver su CUIT, ambiente
+y certificado desde datos confiables antes de crear el contexto. No aceptes el
+`TenantId`, el CUIT, el ambiente ni el certificado directamente como identidad
+autorizada desde un request. El CUIT representado puede diferir del titular del
+certificado cuando ARCA autorizó la delegación; la aplicación valida esa relación
+con su propio modelo y las relaciones vigentes de ARCA, no por igualdad de valores.
+
+`AuthenticateWithContentAsync` sigue disponible para una llamada con material
+explícito, pero no representa por sí solo una frontera de aislamiento multitenant.
+Para la selección por tenant, usá `AuthenticateForTenantAsync`: la identidad local
+de caché incluye tenant, CUIT, endpoint/ambiente, servicio y huella del certificado.
+Esa separación local no hace que ARCA considere distintas dos identidades que usan
+el mismo certificado; compartirlo entre tenants todavía puede provocar
+`coe.alreadyAuthenticated` y no garantiza independencia en el servidor.
+
+Este contexto es el punto de partida para los futuros clientes de WSFEv1, WSFEXv1,
+WSMTXCA y Padrones, que todavía no están implementados. Los health checks actuales
+comprueban disponibilidad de infraestructura por servicio y ambiente; no aceptan
+certificados ni contexts de tenant, y no verifican autorización fiscal.
+
+El contrato y los límites de este flujo se detallan en el
+[ADR de contexto multitenant](docs/adr/0002-arca-tenant-context.md).
+
 El certificado debe estar emitido y autorizado por ARCA para el entorno y
 servicio elegidos. Un certificado autofirmado sirve para tests unitarios, pero
 no sustituye esas autorizaciones. Para producción seleccionar explícitamente
-`WsaaOptions.ProductionEndpoint`.
+`WsaaOptions.ProductionEndpoint` en el flujo de opciones; en el flujo multitenant,
+el ambiente del contexto elige el endpoint oficial.
 
-El consumidor conserva y libera el certificado. `AddNetArcaWs` registra el
-servicio y la caché compartida; no crear un contenedor por factura. Devuelve
-`IHttpClientBuilder` para configurar timeout, proxy o autoridades de confianza.
-El transporte conserva la validación TLS de .NET.
+Si la aplicación usa `LoadCertificate()` directamente, conserva y libera ese
+`X509Certificate2`. `AddNetArcaWs` registra el servicio y la caché compartida; no
+crear un contenedor por factura. Devuelve `IHttpClientBuilder` para configurar
+timeout, proxy o autoridades de confianza. El transporte conserva la validación
+TLS de .NET.
 
 ## CLI de certificados
 
@@ -70,7 +164,7 @@ los servicios. Ver [instalación y guía de la CLI](docs/certificates-cli.md).
 ```sh
 dotnet pack src/NetArcaWs.Tool/NetArcaWs.Tool.csproj --configuration Release --no-build --output artifacts
 dotnet new tool-manifest
-dotnet tool install --local NetArcaWs.Tool --add-source ./artifacts --version 0.3.0
+dotnet tool install --local NetArcaWs.Tool --add-source ./artifacts --version 0.4.0
 dotnet tool run netarcaws cert-dev --cuit "$ARCA_CUIT" --organization "Mi Empresa" --name "Mi App" --output ./certificados/dev --password-env NETARCA_KEY_PASSWORD
 ```
 
@@ -107,10 +201,11 @@ combina el flujo y reutiliza el TA. `ParseTicket` permite analizar un TA
 persistido, `GetTag` extrae un elemento y `IsExpired` compara su vencimiento.
 
 La clave de caché combina endpoint, huella SHA-256 del certificado y servicio.
-El vencimiento es el `expirationTime` del TA, usualmente doce horas desde su
-emisión. No se renueva antes de vencer para evitar `coe.alreadyAuthenticated`.
-La caché en memoria se pierde al reiniciar y no coordina réplicas: múltiples
-procesos con la misma credencial requieren una estrategia compartida adicional.
+Rotar el certificado produce otra identidad de caché. El vencimiento es el
+`expirationTime` del TA, usualmente doce horas desde su emisión. No se renueva
+antes de vencer para evitar `coe.alreadyAuthenticated`. La caché en memoria se
+pierde al reiniciar y no coordina réplicas: usar el mismo certificado desde
+varias instancias no crea una caché TA distribuida.
 
 Los SOAP Faults arrojan `WsaaSoapException` con `FaultCode`, `FaultString`,
 `Detail` y `StatusCode`. XML inválido arroja `FormatException`; fallas HTTP sin

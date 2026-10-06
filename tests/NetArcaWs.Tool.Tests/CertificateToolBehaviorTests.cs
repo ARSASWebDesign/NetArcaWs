@@ -15,7 +15,7 @@ public sealed class CertificateToolBehaviorTests
         var code = await tool.RunAsync(["--version"], TestContext.Current.CancellationToken);
 
         code.Should().Be(0);
-        output.ToString().Should().Contain("0.3.0");
+        output.ToString().Should().Contain("0.4.0");
         error.ToString().Should().BeEmpty();
     }
 

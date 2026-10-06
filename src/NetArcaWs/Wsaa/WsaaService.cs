@@ -7,6 +7,8 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using NetArcaWs.Cryptography;
+using NetArcaWs.Multitenancy;
+using NetArcaWs.HealthChecks;
 
 namespace NetArcaWs.Wsaa;
 
@@ -32,6 +34,7 @@ public sealed partial class WsaaService
         this.clock = clock;
         settings = new WsaaOptions
         {
+            Certificate = options.Value.Certificate,
             Endpoint = options.Value.Endpoint, TraTimeToLive = options.Value.TraTimeToLive,
             AllowedClockSkew = options.Value.AllowedClockSkew, MaxResponseBytes = options.Value.MaxResponseBytes
         };
@@ -57,9 +60,52 @@ public sealed partial class WsaaService
         });
     }
 
-    /// <summary>Reuses the TA until its actual expiration. Concurrent callers share one login per cache key.</summary>
-    public async Task<WsaaTicket> AuthenticateAsync(string service, X509Certificate2 certificate,
+    /// <summary>Authenticates with the in-memory certificate configured in WsaaOptions.</summary>
+    public Task<WsaaTicket> AuthenticateAsync(string service, CancellationToken cancellationToken = default)
+    {
+        ValidateService(service);
+        cancellationToken.ThrowIfCancellationRequested();
+        return AuthenticateWithContentAsync(service, settings.Certificate
+            ?? throw new InvalidOperationException("Configure WsaaOptions.Certificate or supply signing material explicitly."), cancellationToken);
+    }
+
+    /// <summary>
+    /// Authenticates with content supplied by a vault or database, without certificate files.
+    /// Imports and disposes its own certificate per call. For tenant isolation, use AuthenticateForTenantAsync.
+    /// </summary>
+    public async Task<WsaaTicket> AuthenticateWithContentAsync(string service, WsaaCertificateContent content,
         CancellationToken cancellationToken = default)
+    {
+        ValidateService(service);
+        ArgumentNullException.ThrowIfNull(content);
+        cancellationToken.ThrowIfCancellationRequested();
+        using var certificate = content.LoadCertificate();
+        return await AuthenticateAsync(service, certificate, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Authenticates for an explicitly authorized tenant. Selects its environment and isolates its ticket cache.
+    /// WSAA does not validate the represented CUIT; authorization is enforced by each business service.
+    /// </summary>
+    public async Task<WsaaTicket> AuthenticateForTenantAsync(string service, ArcaTenantContext tenant,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateService(service);
+        ArgumentNullException.ThrowIfNull(tenant);
+        cancellationToken.ThrowIfCancellationRequested();
+        var endpoint = tenant.Environment == ArcaEnvironment.Production
+            ? WsaaOptions.ProductionEndpoint : WsaaOptions.HomologationEndpoint;
+        using var certificate = tenant.Certificate.LoadCertificate();
+        return await AuthenticateCoreAsync(service, certificate, endpoint, tenant.TenantId, tenant.Cuit, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Reuses the TA until its actual expiration. Concurrent callers share one login per cache key.</summary>
+    public Task<WsaaTicket> AuthenticateAsync(string service, X509Certificate2 certificate,
+        CancellationToken cancellationToken = default)
+        => AuthenticateCoreAsync(service, certificate, settings.Endpoint, null, null, cancellationToken);
+
+    private async Task<WsaaTicket> AuthenticateCoreAsync(string service, X509Certificate2 certificate,
+        Uri endpoint, string? tenantId, long? cuit, CancellationToken cancellationToken)
     {
         ValidateService(service);
         ArgumentNullException.ThrowIfNull(certificate);
@@ -69,7 +115,7 @@ public sealed partial class WsaaService
         var now = clock.GetUtcNow();
         if (now < certificate.NotBefore.ToUniversalTime() || now >= certificate.NotAfter.ToUniversalTime())
             throw new CryptographicException("The signing certificate is outside its validity period.");
-        var key = new TicketCacheKey(settings.Endpoint.AbsoluteUri, service,
+        var key = new TicketCacheKey(tenantId, cuit, endpoint.AbsoluteUri, service,
             certificate.GetCertHashString(HashAlgorithmName.SHA256));
         if (TryGetTicket(key, out var cached)) return cached!;
 
@@ -81,7 +127,7 @@ public sealed partial class WsaaService
         {
             if (TryGetTicket(key, out cached)) return cached!;
             var cms = WsaaCryptography.SignTra(CreateTra(service), certificate);
-            var ticket = await LoginCmsAsync(cms, cancellationToken).ConfigureAwait(false);
+            var ticket = await LoginCmsCoreAsync(cms, endpoint, cancellationToken).ConfigureAwait(false);
             var remaining = ticket.ExpirationTime - clock.GetUtcNow();
             if (remaining <= TimeSpan.Zero) throw new FormatException("WSAA returned an expired ticket.");
             cache.Set(key, ticket, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = remaining, Size = 1 });
@@ -91,14 +137,17 @@ public sealed partial class WsaaService
     }
 
     /// <summary>Calls loginCms directly without caching. SOAP faults retain ARCA's code and detail.</summary>
-    public async Task<WsaaTicket> LoginCmsAsync(string cms, CancellationToken cancellationToken = default)
+    public Task<WsaaTicket> LoginCmsAsync(string cms, CancellationToken cancellationToken = default)
+        => LoginCmsCoreAsync(cms, settings.Endpoint, cancellationToken);
+
+    private async Task<WsaaTicket> LoginCmsCoreAsync(string cms, Uri endpoint, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(cms);
         var payload = WsaaXml.Serialize(new WsaaSoapEnvelopeDto
         {
             Body = new WsaaSoapBodyDto { Request = new LoginCmsDto { Cms = cms } }
         });
-        using var request = new HttpRequestMessage(HttpMethod.Post, settings.Endpoint)
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {
             Content = new StringContent(payload, Encoding.UTF8, "text/xml")
         };
@@ -195,5 +244,5 @@ public sealed partial class WsaaService
     private static partial Regex ServicePattern();
     [GeneratedRegex("T.*(?:Z|[+-][0-9]{2}:[0-9]{2})\\z", RegexOptions.CultureInvariant)]
     private static partial Regex TimestampPattern();
-    private sealed record TicketCacheKey(string Endpoint, string Service, string CertificateHash);
+    private sealed record TicketCacheKey(string? TenantId, long? Cuit, string Endpoint, string Service, string CertificateHash);
 }
