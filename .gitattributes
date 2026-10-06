@@ -1,2 +1,3 @@
 # Preserve byte-exact upstream contract snapshots and their recorded hashes.
 docs/reference/**/*.wsdl -text -whitespace
+docs/reference/persistence/**/*.sql text eol=lf

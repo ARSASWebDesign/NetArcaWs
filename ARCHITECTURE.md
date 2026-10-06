@@ -234,15 +234,18 @@ módulo de diario (solo WSFEv1, WSFEXv1 y/o WSMTXCA), el de tickets WSAA, o ambo
 `ModelBuilder.AddNetArcaWs` agrega solo las tablas solicitadas y conserva las
 entidades del consumidor; sus migraciones son responsabilidad de la aplicación.
 
-El paquete opcional `NetArcaWs.EntityFrameworkCore.MySql` integra Microting para
-MySQL/MariaDB y recibe una versión de servidor explícita. No detecta el motor,
-conecta durante el registro, crea tablas ni agrega una estrategia de reintentos
-EF o reintentos SOAP. El
-helper registra el contexto dedicado; para contextos propios la aplicación
-registra su proveedor/factoría y añade los stores con la misma selección de
-modelo. Consultar [ADR 0005](docs/adr/0005-ef-core-invoice-journal.md) y la
-[guía del diario](docs/wiki/Diario-fiscal.md). El issue #19 mantiene el estado
-de integración y capacidades asociadas.
+Los providers opcionales `NetArcaWs.EntityFrameworkCore.MySql`,
+`NetArcaWs.EntityFrameworkCore.PostgreSql` y
+`NetArcaWs.EntityFrameworkCore.SqlServer` se instalan por separado. MySQL/MariaDB
+requiere `ServerVersion` explícita; los helpers PostgreSQL y SQL Server toman la
+connection string sin autodetección. Ninguno conecta durante el registro, crea
+tablas ni agrega una estrategia automática de reintentos EF o SOAP. Para
+contextos propios, la aplicación registra su proveedor/factoría y añade los
+stores con la misma selección del modelo. Las migraciones se generan, revisan y
+aplican desde la aplicación. Consultar [ADR 0005](docs/adr/0005-ef-core-invoice-journal.md),
+la [guía del diario](docs/wiki/Diario-fiscal.md) y el [modelo relacional](docs/wiki/Modelo-relacional.md).
+La implementación de providers no equivale a homologación fiscal; el issue #19
+mantiene las capacidades restantes del backlog.
 
 La suite del proveedor aprobó 5/5 pruebas con MySQL 8.4.11 y 5/5 con MariaDB
 11.4.13, incluidos casos de concurrencia entre procesos. Son versiones concretas de prueba; no se

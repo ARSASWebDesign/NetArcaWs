@@ -8,6 +8,8 @@
   <ItemGroup>
     <PackageReference Include="NetArcaWs.EntityFrameworkCore" Version="$(PersistencePackageVersion)" />
     <PackageReference Include="NetArcaWs.EntityFrameworkCore.MySql" Version="$(PersistencePackageVersion)" />
+    <PackageReference Include="NetArcaWs.EntityFrameworkCore.PostgreSql" Version="$(PersistencePackageVersion)" />
+    <PackageReference Include="NetArcaWs.EntityFrameworkCore.SqlServer" Version="$(PersistencePackageVersion)" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
   </ItemGroup>
 </Project>

@@ -11,7 +11,7 @@ roundtrips de serialización fueron verificados. Esto no afirma paridad funciona
 completa con el repositorio Python ni homologación de operaciones autenticadas.
 
 Verificación registrada el 2026-10-06: build Release con 0 warnings y 0 errores;
-420 casos, 415 aprobados, 5 omitidos (4 dependientes de ARCA y 1 test opt-in
+452 casos, 445 aprobados, 7 omitidos (4 dependientes de ARCA y 3 opt-in
 de engine) y 0 fallos. Se verificaron las 183
 operaciones contra sus WSDL y 369 tipos raíz XML en round-trip; los 56 tipos
 con campos `DateTime` (`xs:date` y `xs:dateTime`) conservaron sus valores. Los
@@ -21,11 +21,13 @@ por falta de certificados. Esa corrida precede a WSCPE; su nuevo Dummy solo
 se probó con SOAP simulado en este bloque. Los Dummies prueban disponibilidad, no autorización
 fiscal.
 
-Los tests de persistencia contra engine real se ejecutaron por separado con
-MySQL 8.4.11 (5/5) y MariaDB 11.4.13 (5/5), incluidos casos entre procesos. Esa evidencia
-corresponde a esas versiones; no demuestra compatibilidad universal ni
-homologación con ARCA. El consumer smoke de ambos paquetes optativos se compila
-y ejecuta con SQLite sin acceder a un servidor MySQL ni a ARCA.
+Los tests de persistencia contra engines reales se ejecutaron por separado con
+MySQL 8.4.11 (5/5), MariaDB 11.4.13 (5/5) y PostgreSQL 17.6 (13/13), incluidos
+casos entre procesos. Esa evidencia corresponde a esas versiones; no demuestra
+compatibilidad universal ni homologación con ARCA. CI tiene un job de engine
+real para SQL Server Developer en runner x64; la evidencia de SQL Server queda
+pendiente de esa ejecución. El consumer smoke de los cuatro paquetes optativos
+se compila y ejecuta con SQLite, sin acceder a otros servidores ni a ARCA.
 
 ## Extras y adaptaciones propias respecto de PyAfipWs
 
@@ -44,7 +46,7 @@ contrastan con el [upstream](https://github.com/reingart/pyafipws) y la
 | Contexto multitenant explícito | `ArcaTenantContext`: tenant, CUIT representada, entorno y certificado; usado por WSAA y las operaciones autenticadas de las fachadas SOAP actuales; autorización del tenant sigue a cargo de la aplicación |
 | Caché compartida dentro del proceso | `IMemoryCache`, vencimiento real del TA y coordinación de logins concurrentes; rotación separada por huella; no es caché distribuida |
 | Persistencia EF Core opt-in | `NetArcaWs.EntityFrameworkCore` agrega el diario fiscal y, si se selecciona, tickets WSAA cifrados compartidos; el core no depende de EF. La aplicación elige servicios y administra migraciones/esquema |
-| Proveedor MySQL/MariaDB opt-in | `NetArcaWs.EntityFrameworkCore.MySql` integra el paquete EF de Microting con `ServerVersion` explícita. Ambos paquetes opcionales están en 0.5.0 y aún no se publicaron en NuGet; ver el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19) |
+| Proveedores relacionales EF opt-in | SQLite usa el provider del consumidor; paquetes separados para MySQL/MariaDB, PostgreSQL y SQL Server. El core sigue sin EF; la selección de modelo y las migraciones pertenecen a la aplicación. Paquetes opcionales 0.5.0 sin publicar; ver [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19) |
 | Health checks integrables en ASP.NET Core | `IHealthCheck`, registro opt-in por WS/entorno, timeout, tags y estado de componentes; sin certificados ni login |
 | Herramienta instalable con `dotnet tool` | `cert-dev`, `cert-prod`, `cert-info`; manifiesto local o instalación global, contraseña por variable de entorno y protección contra sobrescrituras |
 | Manejo de recursos y errores | Certificados importados liberados por operación, claves PFX efímeras donde se soportan, XML sin DTD, límites configurables de 4 MiB para request/response y timeout de lectura; secretos ocultos en `ToString` |
@@ -64,19 +66,24 @@ Ver las decisiones de [multitenancy](docs/adr/0002-arca-tenant-context.md),
 
 ## Persistencia EF Core opcional
 
-`NetArcaWs.EntityFrameworkCore` integra el diario fiscal con un contexto EF
-del consumidor. El paquete principal no depende de EF y el proveedor MySQL se
-distribuye por separado como `NetArcaWs.EntityFrameworkCore.MySql`. Los dos
-paquetes opcionales tienen versión 0.5.0 y no están publicados en NuGet todavía.
+`NetArcaWs.EntityFrameworkCore` integra el diario fiscal y los tickets WSAA
+cifrados con un contexto EF del consumidor. El paquete principal no depende de
+EF. Los providers se distribuyen por separado como
+`NetArcaWs.EntityFrameworkCore.MySql`,
+`NetArcaWs.EntityFrameworkCore.PostgreSql` y
+`NetArcaWs.EntityFrameworkCore.SqlServer`; los cuatro paquetes opcionales
+usan versión 0.5.0 y todavía no están publicados en NuGet.
 
 La aplicación selecciona de forma inmutable sus módulos y servicios al iniciar:
 
-- Solo facturación: `options.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca)`; se puede elegir uno o más de esos tres.
+- Solo facturación: `options.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca)`; se puede elegir uno o más de esos tres servicios.
 - Solo tickets: `options.AddWsaaTickets(ArcaService.Wsfev1, ArcaService.PadronA5)`; se eligen explícitamente los servicios autenticados.
 - Ambos módulos: encadenar `AddInvoicing(...)` y `AddWsaaTickets(...)` en una misma configuración.
 
 Con un `DbContext` del consumidor, registrá su factoría, agregá las entidades al
-modelo y registrá los stores con la misma selección:
+modelo y registrá los stores con la misma selección. Para módulos solo de
+facturación, se omite el protector; al seleccionar tickets hay que registrarlo
+antes de los stores:
 
 ```csharp
 NetArcaWsModelOptions modelOptions = NetArcaWsModelOptions.Configure(options =>
@@ -84,7 +91,7 @@ NetArcaWsModelOptions modelOptions = NetArcaWsModelOptions.Configure(options =>
         .AddWsaaTickets(ArcaService.Wsfev1, ArcaService.PadronA5));
 
 services.AddDbContextFactory<MyApplicationDbContext>(options => options.UseSqlite(connectionString));
-services.AddSingleton<IWsaaTicketProtector>(protectorFromApplicationKeyRing);
+services.AddSingleton<IWsaaTicketProtector>(protectorFromApplicationKeyRing); // Keyring externo compartido por réplicas.
 services.AddNetArcaWsEntityFrameworkStores<MyApplicationDbContext>(modelOptions);
 services.AddNetArcaWsInvoicing(); // Base WSAA/fachadas y SafeInvoiceService.
 ```
@@ -93,8 +100,13 @@ services.AddNetArcaWsInvoicing(); // Base WSAA/fachadas y SafeInvoiceService.
 `modelBuilder.AddNetArcaWs(modelOptions)`. Para contexto dedicado con MySQL o
 MariaDB, el paquete opcional acepta `MySqlServerVersion` o
 `MariaDbServerVersion` explícitos en `AddNetArcaWsMySqlStores`; no detecta la
-versión del servidor. En ambos casos la aplicación genera, revisa y aplica sus
-migraciones: el registro de servicios no crea tablas ni modifica el esquema.
+versión del servidor. PostgreSQL usa `AddNetArcaWsPostgreSqlStores(connectionString, modelOptions)` y SQL Server usa
+`AddNetArcaWsSqlServerStores(connectionString, modelOptions)`. Esos helpers tampoco
+conectan ni detectan la versión. En todos los casos la aplicación genera,
+revisa y aplica sus migraciones: el registro de servicios no crea tablas ni
+modifica el esquema. La guía [Modelo relacional](docs/wiki/Modelo-relacional.md)
+describe columnas, claves, índices y los DDL generados; esos scripts describen
+el modelo EF opcional, no una conversión del diario SQLite del core.
 Cuando solo se seleccionan tickets, registrar el servicio base con
 `services.AddNetArcaWs()`; cuando se usa el diario, registrar el orquestador con
 `AddNetArcaWsInvoicing()`. El registro de tickets requiere
@@ -206,6 +218,9 @@ dotnet pack src/NetArcaWs/NetArcaWs.csproj --configuration Release --no-build --
 dotnet pack src/NetArcaWs.Tool/NetArcaWs.Tool.csproj --configuration Release --no-build --output artifacts
 dotnet pack src/NetArcaWs.EntityFrameworkCore/NetArcaWs.EntityFrameworkCore.csproj --configuration Release --no-build --output artifacts
 dotnet pack src/NetArcaWs.EntityFrameworkCore.MySql/NetArcaWs.EntityFrameworkCore.MySql.csproj --configuration Release --no-build --output artifacts
+dotnet pack src/NetArcaWs.EntityFrameworkCore.PostgreSql/NetArcaWs.EntityFrameworkCore.PostgreSql.csproj --configuration Release --no-build --output artifacts
+dotnet pack src/NetArcaWs.EntityFrameworkCore.SqlServer/NetArcaWs.EntityFrameworkCore.SqlServer.csproj --configuration Release --no-build --output artifacts
+dotnet run --project tools/NetArcaWs.Build -- persistence-schema --check
 NUGET_PACKAGES=/tmp/netarcaws-package-smoke-packages dotnet restore tests/NetArcaWs.Persistence.PackageSmoke/NetArcaWs.Persistence.PackageSmoke.csproj --configfile tests/NetArcaWs.Persistence.PackageSmoke/NuGet.config -p:PersistencePackageVersion=0.5.0
 NUGET_PACKAGES=/tmp/netarcaws-package-smoke-packages dotnet run --project tests/NetArcaWs.Persistence.PackageSmoke/NetArcaWs.Persistence.PackageSmoke.csproj --configuration Release --no-restore -p:PersistencePackageVersion=0.5.0
 ```
@@ -218,11 +233,11 @@ puede instalarse desde una carpeta NuGet:
 dotnet add package NetArcaWs --version 0.5.0 --source /ruta/absoluta/a/artifacts
 ```
 
-Los paquetes `NetArcaWs.EntityFrameworkCore` y
-`NetArcaWs.EntityFrameworkCore.MySql` también usan versión 0.5.0; todavía no
-forman parte de la release pública. Su guía de selección de módulos, migraciones
-e integración está en [Diario fiscal](docs/wiki/Diario-fiscal.md). La suite
-local usa bases y tickets sintéticos; no demuestra homologación fiscal.
+Los cuatro paquetes `NetArcaWs.EntityFrameworkCore*` también usan versión
+0.5.0; todavía no forman parte de la release pública. Su guía de selección de
+módulos y migraciones está en [Diario fiscal](docs/wiki/Diario-fiscal.md), y el
+diccionario del esquema está en [Modelo relacional](docs/wiki/Modelo-relacional.md).
+Las pruebas usan cargas y tickets sintéticos; no demuestran homologación fiscal.
 
 ## Autenticación
 

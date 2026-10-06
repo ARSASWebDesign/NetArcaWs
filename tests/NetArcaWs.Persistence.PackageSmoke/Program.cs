@@ -3,6 +3,8 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using NetArcaWs.EntityFrameworkCore;
 using NetArcaWs.EntityFrameworkCore.MySql;
+using NetArcaWs.EntityFrameworkCore.PostgreSql;
+using NetArcaWs.EntityFrameworkCore.SqlServer;
 using NetArcaWs.HealthChecks;
 using NetArcaWs.Invoicing;
 using NetArcaWs.Transport;
@@ -53,6 +55,26 @@ _ = mysqlProvider.GetRequiredService<IArcaTicketProvider>();
 await using ArcaWsDbContext mysqlContext = await mysqlProvider.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>().CreateDbContextAsync();
 _ = mysqlContext.Model;
 
+var postgreSqlServices = new ServiceCollection();
+postgreSqlServices.AddNetArcaWs();
+postgreSqlServices.AddSingleton<IWsaaTicketProtector>(new AesGcmWsaaTicketProtector("smoke", new Dictionary<string, byte[]> { ["smoke"] = key }));
+postgreSqlServices.AddNetArcaWsPostgreSqlStores("Host=127.0.0.1;Database=unused", selection);
+await using ServiceProvider postgreSqlProvider = postgreSqlServices.BuildServiceProvider();
+_ = postgreSqlProvider.GetRequiredService<IInvoiceJournal>();
+_ = postgreSqlProvider.GetRequiredService<IArcaTicketProvider>();
+await using ArcaWsDbContext postgreSqlContext = await postgreSqlProvider.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>().CreateDbContextAsync();
+_ = postgreSqlContext.Model;
+
+var sqlServerServices = new ServiceCollection();
+sqlServerServices.AddNetArcaWs();
+sqlServerServices.AddSingleton<IWsaaTicketProtector>(new AesGcmWsaaTicketProtector("smoke", new Dictionary<string, byte[]> { ["smoke"] = key }));
+sqlServerServices.AddNetArcaWsSqlServerStores("Server=127.0.0.1;Database=unused;User Id=unused;Password=unused;Encrypt=True;TrustServerCertificate=True", selection);
+await using ServiceProvider sqlServerProvider = sqlServerServices.BuildServiceProvider();
+_ = sqlServerProvider.GetRequiredService<IInvoiceJournal>();
+_ = sqlServerProvider.GetRequiredService<IArcaTicketProvider>();
+await using ArcaWsDbContext sqlServerContext = await sqlServerProvider.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>().CreateDbContextAsync();
+_ = sqlServerContext.Model;
+
 SqliteConnection.ClearAllPools();
 File.Delete(sqlitePath);
-Console.WriteLine("Optional persistence package consumer smoke passed; no ARCA or MySQL server was contacted.");
+Console.WriteLine("Optional persistence package consumer smoke passed; no database server or ARCA endpoint was contacted.");
