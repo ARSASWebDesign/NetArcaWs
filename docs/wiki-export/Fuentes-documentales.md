@@ -1,4 +1,4 @@
-# Fuentes del mirror local
+# Fuentes de la documentación
 
 Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 43 páginas de contenido y este manifiesto. GitHub muestra un único menú nativo; Home contiene la navegación por temas. Cada página incluye su fuente y reescribe enlaces relativos para navegación de wiki. Los contratos ARCA archivados en el repositorio tienen fecha de snapshot 2026-10-06. La salida refleja el árbol de trabajo. Al publicar, SOURCE_COMMIT en el repositorio wiki registra el SHA de origen. Revisar el mirror antes de publicar.
 

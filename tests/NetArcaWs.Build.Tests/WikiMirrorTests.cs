@@ -29,7 +29,7 @@ public sealed class WikiMirrorTests
         workspace.Read("docs/wiki-export/Home.md").Should().Contain("https://example.test/docs");
         workspace.Read("docs/wiki-export/Home.md").Should().Contain(
             "![diagram](https://github.com/ARSASWebDesign/NetArcaWs/raw/main/assets/diagram.png)");
-        workspace.Read("docs/wiki-export/MIRROR-SOURCES.md").Should().Contain("README.md` → `Proyecto");
+        workspace.Read("docs/wiki-export/Fuentes-documentales.md").Should().Contain("README.md` → `Proyecto");
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public sealed class WikiMirrorTests
         workspace.Write("docs/adr/0001-safe-invoice-retries.md", "# Safe invoices\n");
         workspace.Write("docs/wiki-export/ADR-0001-safe-invoice-retries.md", "old page name");
         workspace.Write("docs/wiki-export/_Sidebar.md", "old generated sidebar");
-        workspace.Write("docs/wiki-export/MIRROR-SOURCES.md", """
+        workspace.Write("docs/wiki-export/Fuentes-documentales.md", """
             # Fuentes anteriores
 
             - `docs/adr/0001-safe-invoice-retries.md` → `ADR-0001-safe-invoice-retries`
@@ -93,7 +93,7 @@ public sealed class WikiMirrorTests
         workspace.Write("outside.md", "outside sentinel");
         workspace.Write("docs/wiki-export/Old.md", "stale generated content");
         workspace.Write("docs/wiki-export/nested/Managed.md", "nested output must not be deleted by the manifest");
-        workspace.Write("docs/wiki-export/MIRROR-SOURCES.md", """
+        workspace.Write("docs/wiki-export/Fuentes-documentales.md", """
             # Fuentes del mirror local
 
             - `docs/wiki/Old.md` → `Old`
@@ -122,7 +122,7 @@ public sealed class WikiMirrorTests
 
         WikiMirror.Run(workspace.Root);
 
-        string sources = workspace.Read("docs/wiki-export/MIRROR-SOURCES.md");
+        string sources = workspace.Read("docs/wiki-export/Fuentes-documentales.md");
         sources.Should().Contain("docs/wiki/Home.md");
         sources.Should().NotContain(".git/private.md");
         sources.Should().NotContain("artifacts/private.md");
@@ -151,7 +151,7 @@ public sealed class WikiMirrorTests
 
             WikiMirror.Run(workspace.Root);
 
-            string manifest = workspace.Read("docs/wiki-export/MIRROR-SOURCES.md");
+            string manifest = workspace.Read("docs/wiki-export/Fuentes-documentales.md");
             manifest.Should().Contain("docs/wiki/Home.md");
             manifest.Should().NotContain("FileLink.md");
             manifest.Should().NotContain("DirectoryLink");

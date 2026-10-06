@@ -33,7 +33,8 @@ public static class WikiMirror
 
         if (Directory.Exists(output))
         {
-            var manifest = Path.Combine(output, "MIRROR-SOURCES.md");
+            var manifest = Path.Combine(output, "Fuentes-documentales.md");
+            if (!File.Exists(manifest)) manifest = Path.Combine(output, "MIRROR-SOURCES.md");
             if (File.Exists(manifest) && !IsReparsePoint(manifest))
             {
                 var oldManifest = File.ReadAllText(manifest, Encoding.UTF8);
@@ -55,6 +56,7 @@ public static class WikiMirror
             }
 
             DeleteIfExists(Path.Combine(output, "_Sidebar.md"));
+            DeleteIfExists(Path.Combine(output, "Fuentes-documentales.md"));
             DeleteIfExists(Path.Combine(output, "MIRROR-SOURCES.md"));
         }
 
@@ -73,7 +75,7 @@ public static class WikiMirror
         }
 
         var manifestBody = new StringBuilder()
-            .AppendLine("# Fuentes del mirror local")
+            .AppendLine("# Fuentes de la documentación")
             .AppendLine()
             .Append("Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: ")
             .Append(names.Count)
@@ -85,12 +87,12 @@ public static class WikiMirror
             .AppendLine();
         foreach (var (source, name) in names)
             manifestBody.Append("- `").Append(RelativeUnix(repositoryRoot, source)).Append("` → `").Append(name).AppendLine("`");
-        var newManifest = Path.Combine(output, "MIRROR-SOURCES.md");
+        var newManifest = Path.Combine(output, "Fuentes-documentales.md");
         EnsureNotReparsePoint(newManifest);
         File.WriteAllText(newManifest, manifestBody.ToString().Replace("\r\n", "\n"), new UTF8Encoding(false));
 
         var knownPages = names.Values.ToHashSet(StringComparer.Ordinal);
-        knownPages.Add("MIRROR-SOURCES");
+        knownPages.Add("Fuentes-documentales");
         var broken = new List<string>();
         foreach (var generated in Directory.EnumerateFiles(output, "*.md", SearchOption.TopDirectoryOnly).Where(path => !IsReparsePoint(path)))
         {
