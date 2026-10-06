@@ -1,0 +1,56 @@
+# Shared local environment for Codex in the ChatGPT desktop app.
+# Install the SDK required by global.json before running setup.
+version = 1
+name = "NetArcaWs"
+
+[setup]
+script = "dotnet restore NetArcaWs.slnx --locked-mode"
+
+[setup.darwin]
+script = '''
+set -eu
+dotnet --version
+dotnet restore NetArcaWs.slnx --locked-mode
+dotnet build NetArcaWs.slnx --configuration Release --no-restore
+'''
+
+[setup.linux]
+script = '''
+set -eu
+dotnet --version
+dotnet restore NetArcaWs.slnx --locked-mode
+dotnet build NetArcaWs.slnx --configuration Release --no-restore
+'''
+
+[setup.win32]
+script = '''
+$ErrorActionPreference = 'Stop'
+dotnet --version
+if ($LASTEXITCODE -ne 0) { throw 'Install the .NET SDK required by global.json.' }
+dotnet restore NetArcaWs.slnx --locked-mode
+if ($LASTEXITCODE -ne 0) { throw 'NuGet restore failed.' }
+dotnet build NetArcaWs.slnx --configuration Release --no-restore
+if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
+'''
+
+# Single dotnet commands work in POSIX shells and Windows PowerShell.
+# Locked restore also protects lockfiles when an action runs without setup.
+[[actions]]
+name = "Build Release"
+icon = "tool"
+command = "dotnet build NetArcaWs.slnx --configuration Release -p:RestoreLockedMode=true"
+
+[[actions]]
+name = "Tests"
+icon = "test"
+command = "dotnet test --solution NetArcaWs.slnx --configuration Release -p:RestoreLockedMode=true"
+
+[[actions]]
+name = "Pack library and tool"
+icon = "tool"
+command = "dotnet pack NetArcaWs.slnx --configuration Release -p:RestoreLockedMode=true --output artifacts"
+
+[[actions]]
+name = "CLI help"
+icon = "run"
+command = "dotnet run --project src/NetArcaWs.Tool --configuration Release -p:RestoreLockedMode=true -- --help"
