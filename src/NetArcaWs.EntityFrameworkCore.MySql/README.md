@@ -16,4 +16,4 @@ services.AddNetArcaWsMySqlStores(
 
 For MariaDB, pass `new MariaDbServerVersion(new Version(11, 4, 13))`. The selected model controls which tables exist. Apply migrations or schema changes explicitly through the application; this package never initializes a database during dependency registration.
 
-The package also supports ticket-only selection with `AddWsaaTickets(...)`. Register an `IWsaaTicketProtector` backed by an application-managed shared key ring before resolving the shared ticket store. Never use the MySQL database as the only location for its encryption keys.
+The package also supports ticket-only selection with `AddWsaaTickets(...)`. When tickets are selected, register an `IWsaaTicketProtector` backed by an application-managed shared key ring **before calling** `AddNetArcaWsMySqlStores`; registration validates that protector immediately. Never use the MySQL database as the only location for its encryption keys.
