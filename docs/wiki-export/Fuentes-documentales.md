@@ -1,6 +1,6 @@
 # Fuentes de la documentación
 
-Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 52 páginas de contenido y este manifiesto. GitHub muestra un único menú nativo; Home contiene la navegación por temas. Cada página incluye su fuente y reescribe enlaces relativos para navegación de wiki. Los contratos ARCA archivados en el repositorio tienen fecha de snapshot 2026-10-06. La salida refleja el árbol de trabajo. Al publicar, SOURCE_COMMIT en el repositorio wiki registra el SHA de origen. Revisar el mirror antes de publicar.
+Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 55 páginas de contenido y este manifiesto. GitHub muestra un único menú nativo; Home contiene la navegación por temas. Cada página incluye su fuente y reescribe enlaces relativos para navegación de wiki. Los contratos ARCA archivados en el repositorio tienen fecha de snapshot 2026-10-06. La salida refleja el árbol de trabajo. Al publicar, SOURCE_COMMIT en el repositorio wiki registra el SHA de origen. Revisar el mirror antes de publicar.
 
 - `.github/pull_request_template.md` → `Plantilla-de-pull-request`
 - `AGENTS.md` → `Documento-AGENTS`
@@ -14,6 +14,8 @@ Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 52 páginas d
 - `docs/adr/0002-arca-tenant-context.md` → `Decisión-2-Contexto-multitenant`
 - `docs/adr/0003-in-memory-certificates.md` → `Decisión-3-Certificados-en-memoria`
 - `docs/adr/0004-public-soap-contracts.md` → `Decisión-4-Contratos-SOAP-públicos`
+- `docs/adr/0005-ef-core-invoice-journal.md` → `ADR-0005-ef-core-invoice-journal`
+- `docs/adr/0006-shared-wsaa-tickets.md` → `ADR-0006-shared-wsaa-tickets`
 - `docs/certificates-cli.md` → `CLI-certificados`
 - `docs/plans/hito-1.md` → `Plan-de-autenticación-WSAA`
 - `docs/plans/hito-7-wiki.md` → `Plan-de-documentación-y-wiki`
@@ -54,3 +56,4 @@ Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 52 páginas d
 - `docs/wiki/WSCDC.md` → `WSCDC`
 - `docs/wiki/WSCPE.md` → `WSCPE`
 - `docs/wiki/WSFECred.md` → `WSFECred`
+- `src/NetArcaWs.EntityFrameworkCore.MySql/README.md` → `Documento-README`

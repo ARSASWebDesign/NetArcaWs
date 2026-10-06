@@ -28,8 +28,8 @@
 - [x] Hito 7: catálogo por servicios, extras y ejemplos compilables; el inventario vigente es de 183 operaciones en diez contratos y el seguimiento del alcance original sigue en [issue #10](https://github.com/ARSASWebDesign/NetArcaWs/issues/10).
 
 La verificación actual terminó con build Release de 0 warnings y 0 errors; la
-suite tuvo 356 casos: 351 aprobados y 5 omitidos (4 dependientes de ARCA y 1
-test opt-in de engine). Se verificaron las 183 operaciones contra sus WSDL y
+suite tuvo 420 casos: 415 aprobados, 5 omitidos (4 dependientes de ARCA y 1
+test opt-in de engine) y 0 fallos. Se verificaron las 183 operaciones contra sus WSDL y
 369 tipos raíz XML en round-trip. Los 56 tipos de
 contrato con campos `DateTime` (`xs:date`/`xs:dateTime`) conservaron sus valores.
 
@@ -41,7 +41,7 @@ acredita una autorización de negocio con certificado real.
 
 La autenticación WSAA de homologación y las llamadas autenticadas fiscales siguen
 pendientes de certificados autorizados. Tests opt-in de persistencia ejecutados
-con MySQL 8.4.11 y MariaDB 11.4.13 cubren esas versiones y casos entre procesos;
+con MySQL 8.4.11 (5/5) y MariaDB 11.4.13 (5/5) cubren esas versiones y casos entre procesos;
 no prueban otras versiones ni homologación fiscal. El consumer smoke de los
 paquetes EF locales corrió con SQLite.
 

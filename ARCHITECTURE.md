@@ -57,8 +57,8 @@ no cambia la representación SOAP. No se usa WCF: las fachadas usan
 son la fuente reproducible para la generación, no una afirmación de compatibilidad
 con todos los cambios futuros del servicio.
 
-La verificación Release actual tuvo 356 casos, 351 aprobados y 5 omitidos
-(4 dependientes de ARCA y 1 test opt-in de engine), con 0 warnings y 0 errors.
+La verificación Release actual tuvo 420 casos, 415 aprobados, 5 omitidos
+(4 dependientes de ARCA y 1 test opt-in de engine), 0 fallos, 0 warnings y 0 errors.
 Las 183 operaciones se cotejaron con sus WSDL y 369 tipos
 raíz XML pasaron round-trip; los 56 tipos con `DateTime` (`xs:date`/`xs:dateTime`)
 conservaron sus valores. Los snapshots QA/producción de WSCDC, WSFECred y WSCPE tienen
@@ -244,8 +244,8 @@ modelo. Consultar [ADR 0005](docs/adr/0005-ef-core-invoice-journal.md) y la
 [guía del diario](docs/wiki/Diario-fiscal.md). El issue #19 mantiene el estado
 de integración y capacidades asociadas.
 
-La suite del proveedor se ejecutó con MySQL 8.4.11 y MariaDB 11.4.13, incluidos
-casos de concurrencia entre procesos. Son versiones concretas de prueba; no se
+La suite del proveedor aprobó 5/5 pruebas con MySQL 8.4.11 y 5/5 con MariaDB
+11.4.13, incluidos casos de concurrencia entre procesos. Son versiones concretas de prueba; no se
 afirma compatibilidad con cualquier versión de ambos motores.
 
 ## Herramienta de certificados

@@ -11,8 +11,8 @@ roundtrips de serialización fueron verificados. Esto no afirma paridad funciona
 completa con el repositorio Python ni homologación de operaciones autenticadas.
 
 Verificación registrada el 2026-10-06: build Release con 0 warnings y 0 errores;
-356 casos, 351 aprobados y 5 omitidos (4 dependientes de ARCA y 1 test opt-in
-de engine). Se verificaron las 183
+420 casos, 415 aprobados, 5 omitidos (4 dependientes de ARCA y 1 test opt-in
+de engine) y 0 fallos. Se verificaron las 183
 operaciones contra sus WSDL y 369 tipos raíz XML en round-trip; los 56 tipos
 con campos `DateTime` (`xs:date` y `xs:dateTime`) conservaron sus valores. Los
 snapshots QA/producción de WSCDC, WSFECred y WSCPE coinciden en sus schemas. En QA real,
@@ -22,7 +22,7 @@ se probó con SOAP simulado en este bloque. Los Dummies prueban disponibilidad, 
 fiscal.
 
 Los tests de persistencia contra engine real se ejecutaron por separado con
-MySQL 8.4.11 y MariaDB 11.4.13, incluidos casos entre procesos. Esa evidencia
+MySQL 8.4.11 (5/5) y MariaDB 11.4.13 (5/5), incluidos casos entre procesos. Esa evidencia
 corresponde a esas versiones; no demuestra compatibilidad universal ni
 homologación con ARCA. El consumer smoke de ambos paquetes optativos se compila
 y ejecuta con SQLite sin acceder a un servidor MySQL ni a ARCA.

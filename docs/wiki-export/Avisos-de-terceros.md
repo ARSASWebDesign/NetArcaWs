@@ -44,6 +44,24 @@ The library references these packages and does not statically link them into
 its own managed assembly; deployment assets can include their native runtime
 library.
 
+### Optional MySQL and MariaDB provider
+
+`NetArcaWs.EntityFrameworkCore.MySql` 0.5.0 references
+`Microting.EntityFrameworkCore.MySql` 10.0.12 (MIT), which depends on
+`Microsoft.EntityFrameworkCore.Relational` 10.0.12 (MIT) and
+`MySqlConnector` 2.6.2 (MIT). The provider is an optional package; consumers
+that use SQLite or another EF provider do not acquire this dependency through
+`NetArcaWs` or `NetArcaWs.EntityFrameworkCore`. The package declarations were
+checked in the NuGet package manifests and Gallery on 2026-10-06. See the
+[Microting package](https://www.nuget.org/packages/Microting.EntityFrameworkCore.MySql/10.0.12)
+and [MySqlConnector package](https://www.nuget.org/packages/MySqlConnector/2.6.2).
+`NetArcaWs.EntityFrameworkCore` also references
+`Microsoft.EntityFrameworkCore` and `Microsoft.EntityFrameworkCore.Relational`
+10.0.12 (MIT), plus `Microsoft.Extensions.DependencyInjection.Abstractions`
+10.0.12 (MIT). The package-consumer smoke project uses
+`Microsoft.EntityFrameworkCore.Sqlite` 10.0.12 (MIT) as a development-only
+dependency; it is not included in either persistence package.
+
 ## Test dependencies
 
 | Package | Version | License |
@@ -52,6 +70,7 @@ library.
 | xunit.v3 | 4.0.1 | Apache-2.0 |
 | xunit.runner.visualstudio | 4.0.0 | Apache-2.0 |
 | AwesomeAssertions | 9.6.0 | Apache-2.0 |
+| Microsoft.EntityFrameworkCore.Sqlite | 10.0.12 | MIT |
 
 AwesomeAssertions is a community-maintained fork with an Apache-2.0 license,
 which permits commercial use subject to its license conditions. See the

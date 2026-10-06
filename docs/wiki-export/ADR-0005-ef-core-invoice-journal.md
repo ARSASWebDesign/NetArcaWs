@@ -1,8 +1,10 @@
+<!-- Source: docs/adr/0005-ef-core-invoice-journal.md. Generated wiki mirror; edit the repository source. -->
+
 # ADR 0005: Persistencia EF Core opt-in para el diario fiscal
 
 - Estado: Aceptado; implementación y pruebas locales completadas
 - Fecha: 2026-10-06
-- Complementa: [reintentos seguros](0001-safe-invoice-retries.md) y [contexto multitenant](0002-arca-tenant-context.md)
+- Complementa: [reintentos seguros](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros) y [contexto multitenant](Decisi%C3%B3n-2-Contexto-multitenant)
 
 ## Contexto
 
@@ -103,7 +105,7 @@ incluyen lotes durables, WSFECred, WSCPE ni asignación automática de números.
   propiedades transaccionales, bloqueos e índices de cada engine deben verificarse
   con ese motor y versión. No implica worker, scheduler o reintentos SOAP.
 - Los tickets compartidos, sus claves y límites se especifican en el
-  [ADR 0006](0006-shared-wsaa-tickets.md).
+  [ADR 0006](ADR-0006-shared-wsaa-tickets).
 
 El seguimiento y las capacidades diferidas asociadas a esta integración se
 mantienen en el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19).

@@ -205,9 +205,9 @@ para su estado de entrega. El cifrado de tickets requiere que la aplicación
 registre `IWsaaTicketProtector` con claves administradas fuera de la base de
 datos; ver el [ADR 0006](../adr/0006-shared-wsaa-tickets.md).
 
-La suite normal usa motores y datos sintéticos; los tests opt-in contra engines
-reales se ejecutaron con MySQL 8.4.11 y MariaDB 11.4.13, incluidos casos entre
-procesos. Esa evidencia cubre esas versiones y escenarios, no cualquier engine
+La suite normal usa motores y datos sintéticos; los tests opt-in aprobaron 5/5
+con MySQL 8.4.11 y 5/5 con MariaDB 11.4.13, incluidos casos entre procesos.
+Esa evidencia cubre esas versiones y escenarios, no cualquier engine
 ni homologación con ARCA.
 
 El comportamiento es conservador, no exactamente una vez: una caída externa,

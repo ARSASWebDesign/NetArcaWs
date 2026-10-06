@@ -59,8 +59,9 @@ no cambia la representación SOAP. No se usa WCF: las fachadas usan
 son la fuente reproducible para la generación, no una afirmación de compatibilidad
 con todos los cambios futuros del servicio.
 
-La verificación Release actual tuvo 256 casos, 253 aprobados y 3 omitidos, con
-0 warnings y 0 errors. Las 183 operaciones se cotejaron con sus WSDL y 369 tipos
+La verificación Release actual tuvo 420 casos, 415 aprobados, 5 omitidos
+(4 dependientes de ARCA y 1 test opt-in de engine), 0 fallos, 0 warnings y 0 errors.
+Las 183 operaciones se cotejaron con sus WSDL y 369 tipos
 raíz XML pasaron round-trip; los 56 tipos con `DateTime` (`xs:date`/`xs:dateTime`)
 conservaron sus valores. Los snapshots QA/producción de WSCDC, WSFECred y WSCPE tienen
 schemas coincidentes. En una corrida anterior a WSCPE respondieron 9 probes
@@ -165,9 +166,10 @@ credenciales son administrados y no garantizan borrado de memoria.
 
 El TA contiene secretos. Su ToString los oculta, pero las propiedades Token,
 Sign y Xml siguen siendo sensibles. El servicio no registra mensajes SOAP.
-No hay reintentos automáticos ni persistencia distribuida. Reinicios, expulsión
-de entradas y procesos independientes pueden perder un TA todavía válido en
-ARCA; el error correspondiente no debe ocultarse ni tratarse como éxito.
+La caché incorporada es local al proceso. El paquete EF optativo agrega tickets
+cifrados compartidos cuando se selecciona explícitamente; el registro del
+paquete base no activa almacenamiento distribuido. Sus invariantes están en
+[ADR 0006](ADR-0006-shared-wsaa-tickets).
 
 ## Hito 1: agentes y validación
 
@@ -224,6 +226,29 @@ revisión auditable que queda preparada hasta que la aplicación invoque
 explícitamente `ResumeAsync`. Aplican las reglas del
 [ADR 0001](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros); una prueba de diario no prueba
 la garantía del ciclo fiscal completo.
+
+### Persistencia opcional con Entity Framework Core
+
+El paquete `NetArcaWs.EntityFrameworkCore` implementa `IInvoiceJournal` sobre
+el `DbContext` con `IDbContextFactory<TContext>`. No agrega EF como dependencia
+del paquete base. `NetArcaWsModelOptions` selecciona de forma inmutable el
+módulo de diario (solo WSFEv1, WSFEXv1 y/o WSMTXCA), el de tickets WSAA, o ambos.
+`ModelBuilder.AddNetArcaWs` agrega solo las tablas solicitadas y conserva las
+entidades del consumidor; sus migraciones son responsabilidad de la aplicación.
+
+El paquete opcional `NetArcaWs.EntityFrameworkCore.MySql` integra Microting para
+MySQL/MariaDB y recibe una versión de servidor explícita. No detecta el motor,
+conecta durante el registro, crea tablas ni agrega una estrategia de reintentos
+EF o reintentos SOAP. El
+helper registra el contexto dedicado; para contextos propios la aplicación
+registra su proveedor/factoría y añade los stores con la misma selección de
+modelo. Consultar [ADR 0005](ADR-0005-ef-core-invoice-journal) y la
+[guía del diario](Diario-fiscal). El issue #19 mantiene el estado
+de integración y capacidades asociadas.
+
+La suite del proveedor aprobó 5/5 pruebas con MySQL 8.4.11 y 5/5 con MariaDB
+11.4.13, incluidos casos de concurrencia entre procesos. Son versiones concretas de prueba; no se
+afirma compatibilidad con cualquier versión de ambos motores.
 
 ## Herramienta de certificados
 
