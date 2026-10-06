@@ -15,11 +15,19 @@ public sealed class OperationDocumentationTests
         ("wsfev1-production.wsdl", "WsfeV1", "Wsfev1Service"),
         ("wsfexv1-production.wsdl", "WsfexV1", "Wsfexv1Service"),
         ("wsmtxca-production.wsdl", "Wsmtxca", "Wsmtxcav1Service"),
+        ("wscdc-production.wsdl", "Wscdc", "WscdcService"),
+        ("wsfecred-production.wsdl", "WsfeCred", "WsfecredService"),
         ("padron-a4-production.wsdl", "PadronA4", "PadronA4Service"),
         ("padron-a5-production.wsdl", "PadronA5", "PadronA5Service"),
         ("padron-a10-production.wsdl", "PadronA10", "PadronA10Service"),
         ("padron-a13-production.wsdl", "PadronA13", "PadronA13Service")
     ];
+
+    private static readonly HashSet<string> WsfecredWrites = new(StringComparer.Ordinal)
+    {
+        "rechazarNotaDC", "informarCancelacionTotalFECred", "aceptarFECred", "rechazarFECred",
+        "informarFacturaAgtDptoCltv", "modificarOpcionTransferencia"
+    };
 
     [Fact]
     public void Run_documents_every_pinned_operation_and_emits_reproducible_typed_examples()
@@ -85,6 +93,25 @@ public sealed class OperationDocumentationTests
                     $"### `{Regex.Escape(name)}`\\s*(?<body>.*?)(?=\\n### `|\\n## |\\z)", RegexOptions.Singleline).Groups["body"].Value;
                 section.Should().Contain($"raíz XML `{requestRoot}`");
                 section.Should().Contain($"raíz XML `{responseRoot}`");
+                if (service.Contract is "Wscdc" or "WsfeCred")
+                {
+                    string expectedClass = name is "dummy" or "ComprobanteDummy"
+                        ? "consulta técnica"
+                        : service.Contract == "WsfeCred" && WsfecredWrites.Contains(name) ? "escritura" : "consulta";
+                    section.Should().Contain($"Clase: **{expectedClass}**", $"{service.Contract}.{name}");
+                }
+                if (service.Contract == "Wscdc" && name == "ComprobanteDummy")
+                {
+                    section.Should().Contain("raíz XML `ComprobanteDummy`");
+                    section.Should().NotContain("sin elemento/payload", "the generated client sends the WSDL request root despite having no public DTO parameter");
+                }
+                if (service.Contract == "WsfeCred" && name == "consultarTiposRetenciones")
+                {
+                    section.Should().Contain("| `authRequest` |", "the WSDL request element uses a named complex type");
+                    section.Should().Contain("| `consultarTiposRetencionesReturn` |", "the response root uses a named complex type");
+                    markdown.Should().Contain("### `ConsultarTiposRetencionesReturnType`");
+                    markdown.Should().Contain("| `arrayTiposRetenciones` |", "the response type declares the WSDL catalog array");
+                }
 
                 string generatedName = Regex.Replace(service.Contract + "_" + name, "[^A-Za-z0-9_]", "_");
                 generatedExamples.Should().Contain($" {generatedName}Async(");
@@ -95,7 +122,7 @@ public sealed class OperationDocumentationTests
             }
         }
 
-        total.Should().Be(81);
+        total.Should().Be(108);
         Directory.GetFiles(Path.Combine(workspace.Root, "docs", "reference", "operations"), "*.md")
             .Should().HaveCount(Services.Length);
 

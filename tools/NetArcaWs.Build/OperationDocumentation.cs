@@ -15,6 +15,8 @@ public static class OperationDocumentation
         ("wsfev1-production.wsdl", "WsfeV1", "Wsfev1Service", "wsfe"),
         ("wsfexv1-production.wsdl", "WsfexV1", "Wsfexv1Service", "wsfex"),
         ("wsmtxca-production.wsdl", "Wsmtxca", "Wsmtxcav1Service", "wsmtxca"),
+        ("wscdc-production.wsdl", "Wscdc", "WscdcService", "wscdc"),
+        ("wsfecred-production.wsdl", "WsfeCred", "WsfecredService", "wsfecred"),
         ("padron-a4-production.wsdl", "PadronA4", "PadronA4Service", "ws_sr_padron_a4"),
         ("padron-a5-production.wsdl", "PadronA5", "PadronA5Service", "ws_sr_constancia_inscripcion"),
         ("padron-a10-production.wsdl", "PadronA10", "PadronA10Service", "ws_sr_padron_a10"),
@@ -45,7 +47,7 @@ public static class OperationDocumentation
             File.WriteAllText(Path.Combine(docsDir, service.Contract.ToLowerInvariant() + ".md"), RenderService(service, ns, schema, operations), new UTF8Encoding(false));
             RenderExamples(allExamples, service, operations);
         }
-        if (total != 81) throw new InvalidOperationException($"Expected 81 WSDL operations, found {total}.");
+        if (total != 108) throw new InvalidOperationException($"Expected 108 WSDL operations, found {total}.");
         allExamples.AppendLine("}");
         File.WriteAllText(Path.Combine(exampleDir, "OperationExamples.g.cs"), allExamples.ToString(), new UTF8Encoding(false));
         File.WriteAllText(Path.Combine(exampleDir, "NetArcaWs.Examples.csproj"), """
@@ -101,7 +103,7 @@ public static class OperationDocumentation
         foreach (var op in ops)
         {
             b.AppendLine($"\n### `{op.Name}`\n\nClase: **{(op.Dummy ? "consulta técnica" : IsWrite(op.Name) ? "escritura" : "consulta") }**; autenticación: **{(op.Dummy ? "no requiere ticket WSAA" : $"WSAA `{svc.Wsaa}`") }**. SOAPAction: `{Escape(op.Action)}`.\n");
-            b.AppendLine("**Request** (`" + (op.Dummy ? "sin elemento/payload" : svc.Contract + "." + op.RequestType) + "`, raíz XML `" + op.RequestRoot + "`)\n");
+            b.AppendLine("**Request** (`" + (op.Dummy ? (op.RequestRoot == "(vacío)" ? "cuerpo SOAP vacío" : "generado por cliente") : svc.Contract + "." + op.RequestType) + "`, raíz XML `" + op.RequestRoot + "`)\n");
             if (!op.Dummy) RenderFields(b, schema, op.RequestRoot);
             b.AppendLine("\n**Response** (`" + svc.Contract + "." + op.ResponseType + "`, raíz XML `" + op.ResponseRoot + "`)\n");
             RenderFields(b, schema, op.ResponseRoot);
@@ -127,6 +129,8 @@ public static class OperationDocumentation
     {
         var element = schema.Elements(Xsd + "element").FirstOrDefault(x => (string?)x.Attribute("name") == rootName);
         var type = schema.Elements(Xsd + "complexType").FirstOrDefault(x => (string?)x.Attribute("name") == rootName);
+        if (element?.Attribute("type") is { } typeAttribute)
+            type = schema.Elements(Xsd + "complexType").FirstOrDefault(x => (string?)x.Attribute("name") == Local(typeAttribute.Value));
         var complex = element?.Element(Xsd + "complexType") ?? type;
         var fields = complex is null ? null : DirectFields(complex);
         if (fields is null || !fields.Any()) { b.AppendLine("El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado."); return; }
@@ -137,7 +141,8 @@ public static class OperationDocumentation
             var typeName = (string?)f.Attribute("type") ?? (f.Element(Xsd + "complexType") is not null ? "(complejo anónimo)" : "(tipo local)");
             var documentation = string.Join(" ", f.Descendants(Xsd + "documentation").Select(x => x.Value.Trim()).Where(x => x.Length > 0));
             var renderedType = typeName.StartsWith("tns:", StringComparison.Ordinal) ? $"[`{typeName}`](#{Local(typeName).ToLowerInvariant()})" : $"`{typeName}`";
-            b.AppendLine($"| `{(string?)f.Attribute("name") ?? (string?)f.Attribute("ref") ?? "(sin nombre)"}` | {renderedType} | {min} | {max} | {(string?)f.Attribute("nillable") ?? "false"} | {(min == "0" ? "No" : "Sí")}; el esquema no valida reglas de negocio | {Escape(documentation)} |");
+            var required = f.Ancestors(Xsd + "choice").Any() ? "Alternativa de xs:choice; no enviar ambas ramas" : min == "0" ? "No" : "Sí";
+            b.AppendLine($"| `{(string?)f.Attribute("name") ?? (string?)f.Attribute("ref") ?? "(sin nombre)"}` | {renderedType} | {min} | {max} | {(string?)f.Attribute("nillable") ?? "false"} | {required}; el esquema no valida reglas de negocio | {Escape(documentation)} |");
         }
         var attributes = complex is null ? [] : DirectAttributes(complex).ToArray();
         if (attributes.Length > 0)
@@ -184,6 +189,8 @@ public static class OperationDocumentation
         "WsfeV1" => "Errores funcionales WSFE se devuelven en `Errors` (tipo `Err`, campos `Code` y `Msg`); los avisos van en `Observaciones` (tipo `Obs`).",
         "WsfexV1" => "El resultado WSFEX incluye `FEXErr` (`ErrCode`, `ErrMsg`) y, según la operación, `Obs`/`Obs_comerciales`; revisar también el resultado de autorización devuelto.",
         "Wsmtxca" => "Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente.",
+        "Wscdc" => "La constatación devuelve `Resultado`, `Observaciones`, `Errors` y `Events`: un HTTP 200 no acredita la validez del comprobante. Revisar los códigos devueltos según el manual de WSCDC.",
+        "WsfeCred" => "Las respuestas pueden incluir `arrayErrores` y `arrayErroresFormato`, aun con HTTP 200. Revisar el resultado de negocio específico antes de avanzar el estado local; no reenviar escrituras automáticamente ante una respuesta incierta.",
         _ => "Los WSDL de Padrón declaran `SRValidationException` como fault SOAP de servicio; su estructura aparece en el catálogo XSD y los errores no se expresan como `Errors` dentro de un resultado normal."
     };
 
@@ -194,13 +201,15 @@ public static class OperationDocumentation
         "WsfeV1" => new("WSFEv1: facturación nacional", "Emisión electrónica de comprobantes del mercado interno.", "Autorizar comprobantes, consultar comprobantes y CAEA, y leer parámetros de facturación.", "Integrarlo en el flujo de facturación nacional; proteger las escrituras con persistencia e idempotencia en la aplicación consumidora."),
         "WsfexV1" => new("WSFEXv1: facturación de exportación", "Emisión electrónica de comprobantes de exportación.", "Autorizar y consultar comprobantes de exportación, obtener último número y consultar parámetros.", "Usarlo en el circuito de exportación con datos aduaneros y comerciales validados por el sistema consumidor."),
         "Wsmtxca" => new("WSMTXCA: factura electrónica", "Servicio de factura electrónica con operaciones de autorización y consulta.", "Autorizar comprobantes y ajustes, informar CAEA y consultar catálogos, estados y comprobantes.", "Elegir las operaciones según el circuito habilitado para el contribuyente y validar los códigos de resultado con el manual vigente."),
+        "Wscdc" => new("WSCDC: constatación de comprobantes", "Verifica comprobantes emitidos y sus datos de autorización.", "Constatar un comprobante y consultar modalidades, tipos de comprobante, documentos y opcionales.", "Consultar con los datos reales del comprobante; interpretar resultado, observaciones y errores. No emite comprobantes ni reemplaza el control tributario de la aplicación."),
+        "WsfeCred" => new("WSFECred: Factura de Crédito Electrónica MiPyME", "Gestiona el ciclo posterior a la emisión de la FCE y su cuenta corriente.", "Consultar, aceptar y rechazar FCE, informar cancelaciones o transferencia, consultar historiales, remitos y parámetros.", "Usarlo con un tenant autorizado para wsfecred. Las escrituras no tienen reintentos ni diario automático; persistir la intención y reconciliar las respuestas inciertas mediante consultas antes de cualquier reenvío."),
         "PadronA4" => new("Padrón A4: consulta de persona", "Consulta de datos registrales de una persona.", "Consultar una persona por CUIT representada y persona consultada.", "Usarlo como consulta registral autenticada; el WSDL declara faults de validación del padrón."),
         "PadronA5" => new("Padrón A5: constancia de inscripción", "Consulta de constancia y datos de inscripción.", "Consultar personas y listas, con variantes de respuesta v2.", "Usarlo para recuperar datos de inscripción; verificar en el manual la variante adecuada y tratar faults `SRValidationException`."),
         "PadronA10" => new("Padrón A10: consulta registral", "Consulta individual del padrón A10.", "Consultar datos de una persona y comprobar disponibilidad técnica.", "Usarlo como lectura autenticada y tratar faults `SRValidationException`."),
         _ => new("Padrón A13: búsqueda y consulta de persona", "Búsqueda de identidad y consulta de datos registrales.", "Buscar identificadores por documento y consultar personas, incluidas respuestas v2.", "Usarlo para búsquedas y lecturas autenticadas; tratar faults `SRValidationException`.")
     };
 
-    private static bool IsWrite(string name) => Regex.IsMatch(name, "solicitar|informar|informativ|registrar|autorizar|authorize|emitir|anular|baja|alta|modificar|actualizar|asociar|insertar|grabar", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static bool IsWrite(string name) => Regex.IsMatch(name, "solicitar|informar|informativ|registrar|autorizar|authorize|emitir|anular|baja|alta|modificar|actualizar|asociar|insertar|grabar|aceptar|rechazar", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static string Local(string qname) => qname[(qname.LastIndexOf(':') + 1)..];
     private static string Escape(string text) => text.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
 }

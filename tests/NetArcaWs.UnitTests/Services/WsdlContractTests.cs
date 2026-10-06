@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Globalization;
 using System.Security.Cryptography.X509Certificates;
 using System.Xml.Linq;
 using System.Xml.Serialization;
@@ -20,6 +21,8 @@ public sealed class WsdlContractTests
         (typeof(IWsfev1Service), "wsfev1-production.wsdl"),
         (typeof(IWsfexv1Service), "wsfexv1-production.wsdl"),
         (typeof(IWsmtxcav1Service), "wsmtxca-production.wsdl"),
+        (typeof(IWscdcService), "wscdc-production.wsdl"),
+        (typeof(IWsfecredService), "wsfecred-production.wsdl"),
         (typeof(IPadronA4Service), "padron-a4-production.wsdl"),
         (typeof(IPadronA5Service), "padron-a5-production.wsdl"),
         (typeof(IPadronA10Service), "padron-a10-production.wsdl"),
@@ -75,7 +78,7 @@ public sealed class WsdlContractTests
                 }
                 else
                 {
-                    method.GetParameters().Should().NotContain(p => p.ParameterType != typeof(CancellationToken) && p.ParameterType != typeof(ArcaEnvironment) && p.ParameterType != typeof(ArcaTenantContext), "the MTX dummy WSDL body is empty");
+                    method.GetParameters().Should().NotContain(p => p.ParameterType != typeof(CancellationToken) && p.ParameterType != typeof(ArcaEnvironment) && p.ParameterType != typeof(ArcaTenantContext), "the pinned dummy WSDL body is empty");
                 }
                 responseRoot.Should().NotBeNull(operation);
                 responseRoot.ElementName.Should().Be(outputElement, operation);
@@ -97,6 +100,7 @@ public sealed class WsdlContractTests
         [
             new Wsfev1Service(transport, tickets), new Wsfexv1Service(transport, tickets),
             new Wsmtxcav1Service(transport, tickets), new PadronA4Service(transport, tickets),
+            new WscdcService(transport, tickets), new WsfecredService(transport, tickets),
             new PadronA5Service(transport, tickets), new PadronA10Service(transport, tickets), new PadronA13Service(transport, tickets)
         ];
         foreach ((Type contract, string file) in Services)
@@ -118,8 +122,9 @@ public sealed class WsdlContractTests
                 await (Task)operation.Invoke(service, arguments)!;
                 string operationName = operation.Name[..^"Async".Length];
                 transport.LastCall.Action.Should().Be(expectedActions[operationName], $"{contract.Name}.{operation.Name}");
-                if (contract == typeof(IWsmtxcav1Service) && operationName == "dummy")
-                    transport.LastCall.Request.Should().BeNull("the pinned MTXCA dummy operation has an empty SOAP body");
+                if (operationName == "dummy" &&
+                    (contract == typeof(IWsmtxcav1Service) || contract == typeof(IWsfecredService)))
+                    transport.LastCall.Request.Should().BeNull("the pinned dummy operation has an empty SOAP body");
             }
         }
     }
@@ -129,7 +134,7 @@ public sealed class WsdlContractTests
     {
         Assembly assembly = typeof(IWsfev1Service).Assembly;
         Type[] types = assembly.GetTypes().Where(t => t.Namespace?.StartsWith("NetArcaWs.Contracts.", StringComparison.Ordinal) == true && t.GetCustomAttribute<XmlRootAttribute>() is not null).ToArray();
-        types.Should().HaveCount(166);
+        types.Should().HaveCount(219);
         foreach (Type type in types)
         {
             var serializer = new XmlSerializer(type);
@@ -147,7 +152,7 @@ public sealed class WsdlContractTests
         Type[] types = typeof(IWsfev1Service).Assembly.GetTypes()
             .Where(t => t.Namespace?.StartsWith("NetArcaWs.Contracts.", StringComparison.Ordinal) == true && t.GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Any(p => p.PropertyType == typeof(DateTime) && p.CanWrite && p.GetCustomAttribute<XmlIgnoreAttribute>() is null)).ToArray();
-        types.Should().HaveCount(22);
+        types.Should().HaveCount(30);
         DateTime value = new(2026, 10, 6, 15, 45, 12, DateTimeKind.Unspecified);
         foreach (Type type in types)
         {
@@ -182,6 +187,34 @@ public sealed class WsdlContractTests
         XElement fechaEmision = XDocument.Parse(invoiceWriter.ToString()).Descendants().Single(element => element.Name.LocalName == "fechaEmision");
         System.Text.RegularExpressions.Regex.IsMatch(fechaEmision.Value, @"^\d{4}-\d{2}-\d{2}(?:Z|[+-]\d{2}:\d{2})?$")
             .Should().BeTrue("the pinned MTXCA WSDL declares fechaEmision as xsd:date, which must not serialize a time component");
+    }
+
+    [Fact]
+    public void Wsfecred_decimal_contract_values_serialize_with_invariant_xml_format_under_comma_decimal_culture()
+    {
+        var request = new NetArcaWs.Contracts.WsfeCred.InformarCancelacionTotalFeCredRequestType
+        {
+            ImporteCancelacion = 1234.56m
+        };
+        CultureInfo originalCulture = CultureInfo.CurrentCulture;
+        CultureInfo originalUiCulture = CultureInfo.CurrentUICulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("es-AR");
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("es-AR");
+            var serializer = new XmlSerializer(request.GetType());
+            using var writer = new StringWriter(CultureInfo.CurrentCulture);
+            serializer.Serialize(writer, request);
+
+            XDocument.Parse(writer.ToString()).Descendants()
+                .Single(element => element.Name.LocalName == "importeCancelacion")
+                .Value.Should().Be("1234.56");
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+            CultureInfo.CurrentUICulture = originalUiCulture;
+        }
     }
 
     private static string MessageElement(XElement message, XNamespace wsdl)

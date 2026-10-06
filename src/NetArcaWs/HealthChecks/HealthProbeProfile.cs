@@ -32,6 +32,13 @@ internal sealed record HealthProbeProfile(Uri Endpoint, string Namespace, string
             ArcaService.PadronA5 => Padron(5, production),
             ArcaService.PadronA10 => Padron(10, production),
             ArcaService.PadronA13 => Padron(13, production),
+            ArcaService.Wscdc => new(production ? ArcaServiceEndpoints.WscdcProduction : ArcaServiceEndpoints.WscdcHomologation,
+                "http://servicios1.afip.gob.ar/wscdc/", "ComprobanteDummy",
+                "http://servicios1.afip.gob.ar/wscdc/ComprobanteDummy", "ComprobanteDummyResponse", "ComprobanteDummyResult",
+                "http://servicios1.afip.gob.ar/wscdc/", "http://servicios1.afip.gob.ar/wscdc/", PascalComponents),
+            ArcaService.Wsfecred => new(production ? ArcaServiceEndpoints.WsfecredProduction : ArcaServiceEndpoints.WsfecredHomologation,
+                "http://ar.gob.afip.wsfecred/FECredService/", "dummy",
+                "http://ar.gob.afip.wsfecred/FECredService/dummy", "dummyResponse", "dummyReturn", "", "", LowerComponents, EmptyBody: true),
             _ => throw new ArgumentOutOfRangeException(nameof(service))
         };
     }

@@ -87,7 +87,7 @@ Errores funcionales WSFE se devuelven en `Errors` (tipo `Err`, campos `Code` y `
 
 Clase: **consulta técnica**; autenticación: **no requiere ticket WSAA**. SOAPAction: `http://ar.gov.afip.dif.FEV1/FEDummy`.
 
-**Request** (`sin elemento/payload`, raíz XML `FEDummy`)
+**Request** (`generado por cliente`, raíz XML `FEDummy`)
 
 
 **Response** (`WsfeV1.FeDummyResponse`, raíz XML `FEDummyResponse`)

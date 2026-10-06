@@ -274,7 +274,7 @@ El resultado WSFEX incluye `FEXErr` (`ErrCode`, `ErrMsg`) y, según la operació
 
 Clase: **consulta técnica**; autenticación: **no requiere ticket WSAA**. SOAPAction: `http://ar.gov.afip.dif.fexv1/FEXDummy`.
 
-**Request** (`sin elemento/payload`, raíz XML `FEXDummy`)
+**Request** (`generado por cliente`, raíz XML `FEXDummy`)
 
 
 **Response** (`WsfexV1.FexDummyResponse`, raíz XML `FEXDummyResponse`)

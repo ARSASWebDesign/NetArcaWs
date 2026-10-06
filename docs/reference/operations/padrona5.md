@@ -95,7 +95,7 @@ Los WSDL de Padrón declaran `SRValidationException` como fault SOAP de servicio
 
 Clase: **consulta técnica**; autenticación: **no requiere ticket WSAA**. SOAPAction: ``.
 
-**Request** (`sin elemento/payload`, raíz XML `dummy`)
+**Request** (`generado por cliente`, raíz XML `dummy`)
 
 
 **Response** (`PadronA5.DummyResponse`, raíz XML `dummyResponse`)

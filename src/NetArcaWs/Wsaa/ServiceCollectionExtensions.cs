@@ -34,6 +34,10 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<PadronA13Service>();
         services.TryAddSingleton<IPadronA13Service>(provider => provider.GetRequiredService<PadronA13Service>());
         services.TryAddSingleton<PadronService>();
+        services.TryAddSingleton<WscdcService>();
+        services.TryAddSingleton<IWscdcService>(provider => provider.GetRequiredService<WscdcService>());
+        services.TryAddSingleton<WsfecredService>();
+        services.TryAddSingleton<IWsfecredService>(provider => provider.GetRequiredService<WsfecredService>());
 
         services.AddHttpClient(SoapTransport.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30));
         return services.AddHttpClient(WsaaService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30));

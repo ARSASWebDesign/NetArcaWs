@@ -53,12 +53,16 @@ Cada tabla lista los campos XML del elemento raíz de request/response. Las refe
 
 Clase: **consulta técnica**; autenticación: **no requiere ticket WSAA**. SOAPAction: `http://impl.service.wsmtxca.afip.gov.ar/service/dummy`.
 
-**Request** (`sin elemento/payload`, raíz XML `(vacío)`)
+**Request** (`cuerpo SOAP vacío`, raíz XML `(vacío)`)
 
 
 **Response** (`Wsmtxca.DummyResponseType`, raíz XML `dummyResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `appserver` | `xsd:string` | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `authserver` | `xsd:string` | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `dbserver` | `xsd:string` | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -69,11 +73,20 @@ Clase: **escritura**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://im
 
 **Request** (`Wsmtxca.AutorizarComprobanteRequestType`, raíz XML `autorizarComprobanteRequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `comprobanteCAERequest` | [`tns:ComprobanteType`](#comprobantetype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.AutorizarComprobanteResponseType`, raíz XML `autorizarComprobanteResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `resultado` | [`tns:ResultadoSimpleType`](#resultadosimpletype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `comprobanteResponse` | [`tns:ComprobanteCAEResponseType`](#comprobantecaeresponsetype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayObservaciones` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayErrores` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -84,11 +97,18 @@ Clase: **escritura**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://im
 
 **Request** (`Wsmtxca.SolicitarCaeaRequestType`, raíz XML `solicitarCAEARequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `solicitudCAEA` | [`tns:SolicitudCAEAType`](#solicitudcaeatype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.SolicitarCaeaResponseType`, raíz XML `solicitarCAEAResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `CAEAResponse` | [`tns:CAEAResponseType`](#caearesponsetype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayErrores` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -99,11 +119,21 @@ Clase: **escritura**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://im
 
 **Request** (`Wsmtxca.InformarComprobanteCaeaRequestType`, raíz XML `informarComprobanteCAEARequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `comprobanteCAEARequest` | [`tns:ComprobanteType`](#comprobantetype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.InformarComprobanteCaeaResponseType`, raíz XML `informarComprobanteCAEAResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `resultado` | [`tns:ResultadoSimpleType`](#resultadosimpletype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `fechaProceso` | `xsd:date` | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `comprobanteCAEAResponse` | [`tns:ComprobanteCAEAResponseType`](#comprobantecaearesponsetype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayObservaciones` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayErrores` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -114,11 +144,18 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarUltimoComprobanteAutorizadoRequestType`, raíz XML `consultarUltimoComprobanteAutorizadoRequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `consultaUltimoComprobanteAutorizadoRequest` | [`tns:ConsultaUltimoComprobanteAutorizadoRequestType`](#consultaultimocomprobanteautorizadorequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarUltimoComprobanteAutorizadoResponseType`, raíz XML `consultarUltimoComprobanteAutorizadoResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `numeroComprobante` | [`tns:NumeroComprobanteSimpleType`](#numerocomprobantesimpletype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayErrores` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -129,11 +166,19 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarComprobanteRequestType`, raíz XML `consultarComprobanteRequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `consultaComprobanteRequest` | [`tns:ConsultaComprobanteRequestType`](#consultacomprobanterequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarComprobanteResponseType`, raíz XML `consultarComprobanteResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `comprobante` | [`tns:ComprobanteType`](#comprobantetype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayObservaciones` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayErrores` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -144,11 +189,16 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarTiposComprobanteRequestType`, raíz XML `consultarTiposComprobanteRequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarTiposComprobanteResponseType`, raíz XML `consultarTiposComprobanteResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `arrayTiposComprobante` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -159,11 +209,16 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarTiposDocumentoRequestType`, raíz XML `consultarTiposDocumentoRequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarTiposDocumentoResponseType`, raíz XML `consultarTiposDocumentoResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `arrayTiposDocumento` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -174,11 +229,16 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarAlicuotasIvaRequestType`, raíz XML `consultarAlicuotasIVARequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarAlicuotasIvaResponseType`, raíz XML `consultarAlicuotasIVAResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `arrayAlicuotasIVA` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -189,11 +249,16 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarCondicionesIvaRequestType`, raíz XML `consultarCondicionesIVARequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarCondicionesIvaResponseType`, raíz XML `consultarCondicionesIVAResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `arrayCondicionesIVA` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -204,11 +269,16 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarMonedasRequestType`, raíz XML `consultarMonedasRequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarMonedasResponseType`, raíz XML `consultarMonedasResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `arrayMonedas` | [`tns:ArrayCodigosDescripcionesStringType`](#arraycodigosdescripcionesstringtype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -219,11 +289,19 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarCotizacionMonedaRequestType`, raíz XML `consultarCotizacionMonedaRequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `codigoMoneda` | `xsd:string` | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `fechaCotizacion` | `xsd:date` | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarCotizacionMonedaResponseType`, raíz XML `consultarCotizacionMonedaResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `cotizacionMoneda` | `xsd:decimal` | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayErrores` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -234,11 +312,16 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarUnidadesMedidaRequestType`, raíz XML `consultarUnidadesMedidaRequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarUnidadesMedidaResponseType`, raíz XML `consultarUnidadesMedidaResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `arrayUnidadesMedida` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -249,11 +332,16 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarTiposTributoRequestType`, raíz XML `consultarTiposTributoRequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarTiposTributoResponseType`, raíz XML `consultarTiposTributoResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `arrayTiposTributo` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -264,11 +352,16 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarPuntosVentaRequestType`, raíz XML `consultarPuntosVentaRequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarPuntosVentaResponse`, raíz XML `consultarPuntosVentaResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `arrayPuntosVenta` | [`tns:ArrayPuntosVentaType`](#arraypuntosventatype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -279,11 +372,16 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarPuntosVentaCaeRequestType`, raíz XML `consultarPuntosVentaCAERequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarPuntosVentaCaeResponse`, raíz XML `consultarPuntosVentaCAEResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `arrayPuntosVenta` | [`tns:ArrayPuntosVentaType`](#arraypuntosventatype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -294,11 +392,16 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarPuntosVentaCaeaRequestType`, raíz XML `consultarPuntosVentaCAEARequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarPuntosVentaCaeaResponse`, raíz XML `consultarPuntosVentaCAEAResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `arrayPuntosVenta` | [`tns:ArrayPuntosVentaType`](#arraypuntosventatype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -309,11 +412,20 @@ Clase: **escritura**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://im
 
 **Request** (`Wsmtxca.InformarCaeaNoUtilizadoRequestType`, raíz XML `informarCAEANoUtilizadoRequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `CAEA` | `xsd:long` | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.InformarCaeaNoUtilizadoResponseType`, raíz XML `informarCAEANoUtilizadoResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `resultado` | [`tns:ResultadoSimpleType`](#resultadosimpletype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `fechaProceso` | `xsd:date` | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `CAEA` | `xsd:long` | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `arrayErrores` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -324,11 +436,22 @@ Clase: **escritura**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://im
 
 **Request** (`Wsmtxca.InformarCaeaNoUtilizadoPtoVtaRequestType`, raíz XML `informarCAEANoUtilizadoPtoVtaRequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `CAEA` | `xsd:long` | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `numeroPuntoVenta` | [`tns:NumeroPuntoVentaSimpleType`](#numeropuntoventasimpletype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.InformarCaeaNoUtilizadoPtoVtaResponseType`, raíz XML `informarCAEANoUtilizadoPtoVtaResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `resultado` | [`tns:ResultadoSimpleType`](#resultadosimpletype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `fechaProceso` | `xsd:date` | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `CAEA` | `xsd:long` | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `numeroPuntoVenta` | [`tns:NumeroPuntoVentaSimpleType`](#numeropuntoventasimpletype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `arrayErrores` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -339,11 +462,18 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarPtosVtaCaeaNoInformadosRequestType`, raíz XML `consultarPtosVtaCAEANoInformadosRequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `CAEA` | `xsd:long` | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarPtosVtaCaeaNoInformadosResponseType`, raíz XML `consultarPtosVtaCAEANoInformadosResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `arrayPuntosVenta` | [`tns:ArrayPuntosVentaType`](#arraypuntosventatype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayErrores` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -354,11 +484,18 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarCaeaRequestType`, raíz XML `consultarCAEARequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `CAEA` | `xsd:long` | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarCaeaResponseType`, raíz XML `consultarCAEAResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `CAEAResponse` | [`tns:CAEAResponseType`](#caearesponsetype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayErrores` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -369,11 +506,19 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarCaeaEntreFechasRequestType`, raíz XML `consultarCAEAEntreFechasRequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `fechaDesde` | `xsd:date` | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `fechaHasta` | `xsd:date` | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarCaeaEntreFechasResponseType`, raíz XML `consultarCAEAEntreFechasResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `arrayCAEAResponse` | [`tns:ArrayCAEAResponseType`](#arraycaearesponsetype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayErrores` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -384,11 +529,20 @@ Clase: **escritura**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://im
 
 **Request** (`Wsmtxca.AutorizarAjusteIvaRequestType`, raíz XML `autorizarAjusteIVARequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `comprobanteCAERequest` | [`tns:ComprobanteType`](#comprobantetype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.AutorizarAjusteIvaResponseType`, raíz XML `autorizarAjusteIVAResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `resultado` | [`tns:ResultadoSimpleType`](#resultadosimpletype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `comprobanteResponse` | [`tns:ComprobanteCAEResponseType`](#comprobantecaeresponsetype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayObservaciones` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayErrores` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -399,11 +553,21 @@ Clase: **escritura**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://im
 
 **Request** (`Wsmtxca.InformarAjusteIvacaeaRequestType`, raíz XML `informarAjusteIVACAEARequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `comprobanteCAEARequest` | [`tns:ComprobanteType`](#comprobantetype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.InformarAjusteIvacaeaResponseType`, raíz XML `informarAjusteIVACAEAResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `resultado` | [`tns:ResultadoSimpleType`](#resultadosimpletype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `fechaProceso` | `xsd:date` | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `comprobanteCAEAResponse` | [`tns:ComprobanteCAEAResponseType`](#comprobantecaearesponsetype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayObservaciones` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayErrores` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -414,11 +578,16 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarTiposDatosAdicionalesRequestType`, raíz XML `consultarTiposDatosAdicionalesRequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarTiposDatosAdicionalesResponseType`, raíz XML `consultarTiposDatosAdicionalesResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `arrayTiposDatosAdicionales` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -429,11 +598,17 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarActividadesVigentesRequestType`, raíz XML `consultarActividadesVigentesRequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarActividadesVigentesResponseType`, raíz XML `consultarActividadesVigentesResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `arrayActividades` | [`tns:ArrayActividadesVigentesType`](#arrayactividadesvigentestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayErrores` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
@@ -444,11 +619,18 @@ Clase: **consulta**; autenticación: **WSAA `wsmtxca`**. SOAPAction: `http://imp
 
 **Request** (`Wsmtxca.ConsultarCondicionesIvaReceptorRequestType`, raíz XML `consultarCondicionesIVAReceptorRequest`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `authRequest` | [`tns:AuthRequestType`](#authrequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
+| `consultaCondicionesIVAReceptorRequest` | [`tns:ConsultaCondicionesIVARequestType`](#consultacondicionesivarequesttype) | 1 | 1 | false | Sí; el esquema no valida reglas de negocio |  |
 
 **Response** (`Wsmtxca.ConsultarCondicionesIvaReceptorResponseType`, raíz XML `consultarCondicionesIVAReceptorResponse`)
 
-El tipo no declara elementos hijo directos en el XSD; puede ser vacío o derivar su contenido de un tipo base, que se documenta por separado.
+| Campo | Tipo XSD | minOccurs | maxOccurs | nillable | Requerido por XSD | Documentación XSD |
+|---|---|---:|---:|---|---|---|
+| `arrayCondicionesIVAReceptor` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `arrayErrores` | [`tns:ArrayCodigosDescripcionesType`](#arraycodigosdescripcionestype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
+| `evento` | [`tns:CodigoDescripcionType`](#codigodescripciontype) | 0 | 1 | false | No; el esquema no valida reglas de negocio |  |
 
 Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente. SOAP Fault: `NetArcaWs.Transport.SoapFaultException` expone código, razón, detalle y estado HTTP. Para escrituras, no repetir automáticamente tras fallo ambiguo; consultar/reconciliar primero.
 
