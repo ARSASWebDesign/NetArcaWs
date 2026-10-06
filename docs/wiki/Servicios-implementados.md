@@ -19,6 +19,8 @@ condiciones de acceso y las validaciones de negocio.
 | **Constancia, endpoint histórico A5** | Consulta de la constancia de inscripción y listas de personas, con variantes de respuesta v2. El endpoint conserva `personaServiceA5`, pero el `service` WSAA vigente es `ws_sr_constancia_inscripcion`. | [Operaciones de Constancia/A5](../reference/operations/padrona5.md) | [Manual oficial de Constancia](https://www.afip.gov.ar/ws/WSCI/manual-ws-sr-ws-constancia-inscripcion-V3.6.pdf) |
 | **Padrón A10** | Consulta registral individual. | [Operaciones A10](../reference/operations/padrona10.md) | [Manual oficial Padrón A10](https://arca.gob.ar/ws/ws_sr_padron_a10/manual_ws_sr_padron_a10_v1.2.pdf) |
 | **Padrón A13** | Busca identificadores por documento y consulta datos de persona, incluidas las operaciones v2. | [Operaciones A13](../reference/operations/padrona13.md) | [Manual oficial Padrón A13](https://ftp.afip.gob.ar/ws/ws-padron-a13/manual-ws-sr-padron-a13-v1.4.pdf) |
+| **WSCDC** | Constata si un comprobante está registrado y autorizado, y consulta modalidades y tablas referenciales. | [Operaciones WSCDC](../reference/operations/wscdc.md), [guía WSCDC](WSCDC.md) | [Manual oficial WSCDC, revisión 2025-12-01](https://www.afip.gob.ar/ws/WSCDCV1/WSCDC-manual-desarrollador-v4.pdf) |
+| **WSFECred** | Gestiona aceptación/rechazo, cancelaciones, cuentas corrientes, estados y operaciones del ciclo de FCE MiPyME. No autoriza la factura original. | [Operaciones WSFECred](../reference/operations/wsfecred.md), [guía WSFECred](WSFECred.md) | [Manual oficial del Web Service FECred](https://servicioscf.afip.gob.ar/facturadecreditoelectronica/documentos/Manual-Desarrollador-WSFECRED.pdf) |
 
 Los nombres A4/A5/A10/A13 se refieren a los contratos/endpoints y no determinan
 por sí solos cuál servicio debe usar una aplicación. En particular, A5 se
@@ -57,4 +59,5 @@ operaciones contractuales de infraestructura (transporte, certificados,
 health checks y diario). Otros servicios mencionados por PyAfipWs o en manuales
 generales no forman parte de estos clientes .NET; consulta el
 [inventario upstream](../reference/upstream-inventory.md) antes de asumir una
-equivalencia.
+equivalencia. El [seguimiento priorizado de los servicios pendientes](https://github.com/ARSASWebDesign/NetArcaWs/issues/10)
+conserva su clasificación por fuente y organismo.

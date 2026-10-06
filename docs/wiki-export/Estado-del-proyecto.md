@@ -23,17 +23,18 @@
 - [x] Hito 3: WSFEXv1 — 19 operaciones, contrato SOAP y suite verificados.
 - [x] Hito 4: WSMTXCA — 27 operaciones, contrato SOAP y suite verificados; no equivale al ciclo integral de Factura de Crédito Electrónica MiPyME.
 - [x] Hito 5: Padrón A4 (2), Constancia/ruta A5 (5), A10 (2), A13 (4) — contratos, fachada y suite verificados.
+- [x] WSCDC (6) y WSFECred (21): contratos QA/producción, fachadas multitenant, DI, health checks y referencias de las 27 operaciones. WSFECred permanece fuera de `SafeInvoiceService`/diario.
 - [x] Hito 6: README, arquitectura, ADR y guías integrales actualizados; suite local Release verificada.
 - [x] Publicar en la wiki toda la documentación Markdown local, con navegación y revisión de origen identificada.
-- [x] Hito 7 (final): inventario upstream, catálogo por servicios y extras, referencias y ejemplos compilables de las 81 operaciones; [criterios de cierre](Plan-de-documentaci%C3%B3n-y-wiki).
+- [x] Hito 7: catálogo por servicios, extras, referencias y ejemplos compilables de las 108 operaciones; seguimiento de servicios restantes en [issue #10](https://github.com/ARSASWebDesign/NetArcaWs/issues/10).
 
-La build Release terminó con 0 warnings y 0 errors. La suite completa tuvo
-225 casos: 222 aprobados y 3 omitidos. Se verificaron los QName y SOAPAction de
-81 operaciones contra WSDL y 166 tipos raíz XML en round-trip. Los 22 tipos de
+La verificación actual terminó con build Release de 0 warnings y 0 errors; la
+suite tuvo 240 casos: 237 aprobados y 3 omitidos. Se verificaron las 108
+operaciones contra sus WSDL y 219 tipos raíz XML en round-trip. Los 30 tipos de
 contrato con campos `DateTime` (`xs:date`/`xs:dateTime`) conservaron sus valores.
 
 En homologación real de QA con `ARCA_RUN_HOMOLOGY=1` el 2026-10-06, la corrida
-de integración tuvo 9 casos: 7 probes `Dummy` aprobados y 2 pruebas autenticadas
+de integración tuvo 11 casos: 9 probes `Dummy` aprobados y 2 pruebas autenticadas
 omitidas. En la suite normal, los 3 omitidos corresponden a WSAA sin credenciales,
 servicios autenticados no seleccionados y `Dummy` sin habilitación opt-in. Ningún
 resultado acredita una autorización de negocio con certificado real.

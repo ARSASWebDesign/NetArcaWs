@@ -20,11 +20,13 @@ externa mutable y no forma parte de esos SHA.
   original; NetArcaWs no implementa ese flujo o utilidad. Tener una explicación
   en un manual no significa que el paquete la soporte.
 
-El port cubre cinco familias de integración: WSFEv1, WSFEXv1, WSMTXCA y Padrón
-(A4, Constancia por ruta histórica A5, A10 y A13). Esos siete contratos suman
-81 operaciones. Para estas familias, **adaptado** significa cobertura de las
-operaciones del contrato descritas en [Servicios y cobertura](../wiki/Servicios-y-cobertura.md),
-no equivalencia completa con PyAfipWs. Otros módulos, servicios, herramientas,
+Los clientes de negocio representados actualmente son WSFEv1, WSFEXv1,
+WSMTXCA, Padrón A4, Constancia por la ruta histórica A5, A10, A13, WSCDC y
+WSFECred; estos nueve contratos suman 108 operaciones según los WSDL fijados.
+WSAA es el cliente de autenticación compartido y no forma parte de ese conteo.
+Para estos servicios, **adaptado** significa cobertura del contrato SOAP
+descrito en [Servicios y cobertura](../wiki/Servicios-y-cobertura.md), no
+equivalencia completa con PyAfipWs. Otros módulos, servicios, herramientas,
 aplicaciones o formatos no quedan incluidos por este inventario.
 
 ## Archivos de documentación y texto del repositorio
@@ -124,13 +126,13 @@ servicios no adaptados también pueden estar descritos en manuales upstream.
 | [`ws_sr_padron.py`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/ws_sr_padron.py) | Cliente histórico A4/A5 | `PadronA4Service`, `PadronA5Service` | Adaptado; A10/A13 y Constancia vigente se modelan desde fuentes ARCA actuales |
 | [`wsaa.py`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/wsaa.py) | WSAA, CMS, CSR y autenticación | `WsaaService`, `WsaaCertificateContent`, CLI de certificados | Adaptado parcialmente; API COM/helpers no equivalentes |
 | [`wsbfev1.py`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/wsbfev1.py) | Bono Fiscal Electrónico | Ninguno | Manual upstream sin soporte |
-| [`wscdc.py`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/wscdc.py) | Constatación de comprobantes | Ninguno | Manual upstream sin soporte |
+| [`wscdc.py`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/wscdc.py) | Constatación de comprobantes | `WscdcService` | Adaptado al contrato SOAP WSCDC versionado; no implica paridad con helpers/API Python ni homologación autenticada |
 | [`wscoc.py`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/wscoc.py) | Consulta de operaciones cambiarias | Ninguno | Manual upstream sin soporte |
 | [`wscpe.py`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/wscpe.py) | Carta de Porte Electrónica | Ninguno | Manual upstream sin soporte |
 | [`wscpe_cli.py`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/wscpe_cli.py) | CLI de Carta de Porte Electrónica | Ninguno | Manual upstream sin soporte |
 | [`wsct.py`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/wsct.py) | Factura electrónica de turismo | Ninguno | Manual upstream sin soporte |
 | [`wsctg.py`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/wsctg.py) | Código de Trazabilidad de Granos | Ninguno | Manual upstream sin soporte |
-| [`wsfecred.py`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/wsfecred.py) | Factura de Crédito Electrónica MiPyME | Ninguno | Manual upstream sin soporte; distinto de WSMTXCA |
+| [`wsfecred.py`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/wsfecred.py) | Factura de Crédito Electrónica MiPyME | `WsfecredService` | Adaptado al contrato SOAP WSFECred versionado; el ciclo de negocio no está integrado a `SafeInvoiceService` ni es equivalente a WSMTXCA |
 | [`wsfev1.py`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/wsfev1.py) | Web service de factura electrónica doméstica | `Wsfev1Service` | Adaptado al contrato actual, sin paridad de API/helpers |
 | [`wsfexv1.py`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/wsfexv1.py) | Web service de factura de exportación | `Wsfexv1Service` | Adaptado al contrato actual, sin paridad de API/helpers |
 | [`wslpg.py`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/wslpg.py) | Liquidación Primaria de Granos | Ninguno | Manual upstream sin soporte |

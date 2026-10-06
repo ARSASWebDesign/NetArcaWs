@@ -6,16 +6,16 @@ Esta página separa contratos de infraestructura existentes de operaciones
 fiscales. Un health check `Dummy` no implementa autorización de facturas; un
 manual enlazado no significa que NetArcaWs ya tenga ese cliente.
 
-El alcance de Hitos 2–5 es la superficie completa de las operaciones vigentes
-en los contratos ARCA para WSFEv1, WSFEXv1, WSMTXCA, Padrón A4, Constancia
-(endpoint A5 histórico), A10 y A13. El inventario de métodos de PyAfipWs ayuda a
+Las superficies SOAP incluidas hoy son los contratos ARCA de WSFEv1, WSFEXv1,
+WSMTXCA, Padrón A4, Constancia (endpoint A5 histórico), A10, A13, WSCDC y
+WSFECred. El inventario de métodos de PyAfipWs ayuda a
 entender modelos, agregadores y compatibilidad, pero no recorta ni reemplaza los
 contratos oficiales. Las operaciones enumeradas debajo vienen de los WSDL
 descargados el 2026-10-06; volver a verificar manual/versiones y bindings antes
 de usar para un release.
 
-En QA real, el 2026-10-06, una corrida de 9 casos respondió los siete probes
-`Dummy` de estos servicios y omitió las dos pruebas autenticadas por falta de
+En QA real, el 2026-10-06, una corrida respondió los nueve probes `Dummy` y
+omitió dos pruebas autenticadas por falta de
 certificados. La ejecución no acredita autorización fiscal.
 
 | Servicio | Estado funcional al corte documental | Nota de contrato/alcance |
@@ -31,19 +31,20 @@ certificados. La ejecución no acredita autorización fiscal.
 | Constancia, endpoint histórico A5 | Hito 5 verificado: 5 métodos | Ruta `personaServiceA5`; service WSAA `ws_sr_constancia_inscripcion` |
 | Padrón A10 | Hito 5 verificado: 2 métodos | Contrato conforme a manual/WSDL actual; distinto de `ws_sr_padron.py` upstream |
 | Padrón A13 | Hito 5 verificado: 4 métodos | Incluye `getIdPersonaListByDocumento`; distinto de `ws_sr_padron.py` upstream |
+| WSCDC | 6 métodos del WSDL fijado | Constatación, tablas de referencia y `ComprobanteDummy`; la constatación no autoriza ni emite comprobantes |
+| WSFECred | 21 métodos del WSDL fijado | Gestión posterior de FCE MiPyME y cuentas corrientes; separado de autorización WSFE/WSMTXCA y sin orquestación `SafeInvoiceService` |
 | Health checks | Implementados para endpoints SOAP declarados | Comprueban disponibilidad del servicio, no autorización fiscal |
 | CLI certificados | Implementada para generar CSR e inspeccionar localmente | No emite certificado ni conecta con ARCA |
 
-La suma de los siete contratos es 81 operaciones. Se verificaron QName/action
-de cada método contra WSDL y 166 tipos raíz XML en round-trip en la suite; 22
-tipos de contrato conservaron sus campos `DateTime`. Una
-corrida real de QA respondió los siete probes `Dummy`; las dos pruebas
+La suma de los nueve contratos es 108 operaciones. La suite cotejó las
+operaciones contra WSDL y verificó 219 tipos raíz XML en round-trip; 30 tipos
+con campos `DateTime` conservaron sus valores. Los snapshots QA/producción de
+WSCDC y WSFECred coinciden en sus schemas.
+La corrida real de QA respondió los nueve probes `Dummy`; las dos pruebas
 autenticadas se omitieron por falta de certificados. Esto no acredita
-autorización fiscal. Hitos 2–6 se verificaron con build/suite local. La documentación incluye un
-inventario upstream y referencias de todas las operaciones; su alcance no
-amplía automáticamente la cobertura funcional. El
-[plan de hitos 2–7](Plan-de-servicios-y-documentaci%C3%B3n) define las operaciones,
-datos fiscales, cobertura de contratos y pruebas de cierre por servicio.
+autorización fiscal. Hitos 2–6 se verificaron con build/suite local. La
+documentación de operaciones describe contratos, no amplía automáticamente la
+cobertura funcional ni afirma paridad completa con PyAfipWs.
 
 ## Mapa del upstream investigado
 
@@ -62,13 +63,15 @@ inventario enlazado debajo.
 | Constancia / A5 | [Referencia completa](Padr%C3%B3n-A5-Referencia-de-operaciones) | `ws_sr_padron.py` |
 | Padrón A10 | [Referencia completa](Padr%C3%B3n-A10-Referencia-de-operaciones) | Sin equivalente en ese módulo upstream |
 | Padrón A13 | [Referencia completa](Padr%C3%B3n-A13-Referencia-de-operaciones) | Sin equivalente en ese módulo upstream |
+| WSCDC | [Referencia completa](WSCDC-Referencia-de-operaciones), [guía](WSCDC) | `wscdc.py` |
+| WSFECred | [Referencia completa](WSFECred-Referencia-de-operaciones), [guía](WSFECred) | `wsfecred.py` |
 
 El [inventario del proyecto original](Inventario-del-proyecto-original)
-registra cada módulo y entrada documental investigada, con revisiones fijadas,
-correspondencia .NET y ausencia explícita cuando no está portado. Incluye PDF,
-formatos de intercambio, COM, aplicaciones y otros servicios que no forman parte
-del alcance implementado. La [guía de migración](Migracion-desde-PyAfipWs)
-explica las diferencias de uso y datos.
+registra fuentes fijadas y límites de adaptación. El seguimiento priorizado de
+servicios faltantes, con autoridad y vigencia por comprobar, está en el
+[issue #10](https://github.com/ARSASWebDesign/NetArcaWs/issues/10). La
+[guía de migración](Migracion-desde-PyAfipWs) explica las diferencias de uso
+y datos.
 
 ## Fuentes
 

@@ -28,7 +28,7 @@ Cada tabla lista los campos XML del elemento raíz de request/response. Las refe
 
 Clase: **consulta técnica**; autenticación: **no requiere ticket WSAA**. SOAPAction: ``.
 
-**Request** (`sin elemento/payload`, raíz XML `dummy`)
+**Request** (`generado por cliente`, raíz XML `dummy`)
 
 
 **Response** (`PadronA4.DummyResponse`, raíz XML `dummyResponse`)

@@ -147,6 +147,60 @@ public static class OperationExamples
 
     public static Task<global::NetArcaWs.Contracts.Wsmtxca.ConsultarCondicionesIvaReceptorResponseType> Wsmtxca_consultarCondicionesIVAReceptorAsync(IWsmtxcav1Service service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wsmtxca.ConsultarCondicionesIvaReceptorRequestType validatedRequest, CancellationToken cancellationToken = default) => service.consultarCondicionesIVAReceptorAsync(tenant, validatedRequest, cancellationToken);
 
+    public static Task<global::NetArcaWs.Contracts.Wscdc.ComprobantesModalidadConsultarResponse> Wscdc_ComprobantesModalidadConsultarAsync(IWscdcService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscdc.ComprobantesModalidadConsultar validatedRequest, CancellationToken cancellationToken = default) => service.ComprobantesModalidadConsultarAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscdc.ComprobantesTipoConsultarResponse> Wscdc_ComprobantesTipoConsultarAsync(IWscdcService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscdc.ComprobantesTipoConsultar validatedRequest, CancellationToken cancellationToken = default) => service.ComprobantesTipoConsultarAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscdc.DocumentosTipoConsultarResponse> Wscdc_DocumentosTipoConsultarAsync(IWscdcService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscdc.DocumentosTipoConsultar validatedRequest, CancellationToken cancellationToken = default) => service.DocumentosTipoConsultarAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscdc.OpcionalesTipoConsultarResponse> Wscdc_OpcionalesTipoConsultarAsync(IWscdcService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscdc.OpcionalesTipoConsultar validatedRequest, CancellationToken cancellationToken = default) => service.OpcionalesTipoConsultarAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscdc.ComprobanteConstatarResponse> Wscdc_ComprobanteConstatarAsync(IWscdcService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscdc.ComprobanteConstatar validatedRequest, CancellationToken cancellationToken = default) => service.ComprobanteConstatarAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscdc.ComprobanteDummyResponse> Wscdc_ComprobanteDummyAsync(IWscdcService service, ArcaEnvironment environment, CancellationToken cancellationToken = default) => service.ComprobanteDummyAsync(environment, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.DummyResponseType> WsfeCred_dummyAsync(IWsfecredService service, ArcaEnvironment environment, CancellationToken cancellationToken = default) => service.dummyAsync(environment, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.ConsultarComprobantesResponseType> WsfeCred_consultarComprobantesAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.ConsultarComprobanteRequestType validatedRequest, CancellationToken cancellationToken = default) => service.consultarComprobantesAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.RechazarNotaDcResponseType> WsfeCred_rechazarNotaDCAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.RechazarNotaDcRequestType validatedRequest, CancellationToken cancellationToken = default) => service.rechazarNotaDCAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.ConsultarCtasCtesResponseType> WsfeCred_consultarCtasCtesAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.ConsultarCtasCtesRequestType validatedRequest, CancellationToken cancellationToken = default) => service.consultarCtasCtesAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.ConsultarCtaCteResponseType> WsfeCred_consultarCtaCteAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.ConsultarCtaCteRequestType validatedRequest, CancellationToken cancellationToken = default) => service.consultarCtaCteAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.InformarCancelacionTotalFeCredResponse> WsfeCred_informarCancelacionTotalFECredAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.InformarCancelacionTotalFeCredRequestType validatedRequest, CancellationToken cancellationToken = default) => service.informarCancelacionTotalFECredAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.AceptarFeCredResponse> WsfeCred_aceptarFECredAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.AceptarFeCredRequestType validatedRequest, CancellationToken cancellationToken = default) => service.aceptarFECredAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.RechazarFeCredResponse> WsfeCred_rechazarFECredAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.RechazarFeCredRequestType validatedRequest, CancellationToken cancellationToken = default) => service.rechazarFECredAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.InformarFacturaAgtDptoCltvResponse> WsfeCred_informarFacturaAgtDptoCltvAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.InformarFacturaAgtDptoCltvRequestType validatedRequest, CancellationToken cancellationToken = default) => service.informarFacturaAgtDptoCltvAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.ConsultarFacturasAgtDptoCltvResponseType> WsfeCred_consultarFacturasAgtDptoCltvAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.ConsultarFacturasAgtDptoCltvRequestType validatedRequest, CancellationToken cancellationToken = default) => service.consultarFacturasAgtDptoCltvAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.ConsultarCuentasEnAgtDptoCltvResponseType> WsfeCred_consultarCuentasEnAgtDptoCltvAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.ConsultarCuentasEnAgtDptoCltvRequestType validatedRequest, CancellationToken cancellationToken = default) => service.consultarCuentasEnAgtDptoCltvAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.ConsultarObligadoRecepcionResponseType> WsfeCred_consultarObligadoRecepcionAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.ConsultarObligadoRecepcionRequestType validatedRequest, CancellationToken cancellationToken = default) => service.consultarObligadoRecepcionAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.ConsultarTiposRetencionesResponseType> WsfeCred_consultarTiposRetencionesAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.ConsultarTiposRetencionesRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarTiposRetencionesAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.ConsultarTiposMotivosRechazoResponse> WsfeCred_consultarTiposMotivosRechazoAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.ConsultarTiposMotivosRechazoRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarTiposMotivosRechazoAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.ConsultarTiposFormasCancelacionResponse> WsfeCred_consultarTiposFormasCancelacionAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.ConsultarTiposFormasCancelacionRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarTiposFormasCancelacionAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.ObtenerRemitosResponseType> WsfeCred_obtenerRemitosAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.ObtenerRemitosRequestType validatedRequest, CancellationToken cancellationToken = default) => service.obtenerRemitosAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.ConsultarHistorialEstadosComprobanteResponseType> WsfeCred_consultarHistorialEstadosComprobanteAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.ConsultarHistorialEstadosComprobanteRequestType validatedRequest, CancellationToken cancellationToken = default) => service.consultarHistorialEstadosComprobanteAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.ConsultarHistorialEstadosCtaCteResponseType> WsfeCred_consultarHistorialEstadosCtaCteAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.ConsultarHistorialEstadosCtaCteRequestType validatedRequest, CancellationToken cancellationToken = default) => service.consultarHistorialEstadosCtaCteAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.ConsultarTiposAjustesOperacionResponse> WsfeCred_consultarTiposAjustesOperacionAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.ConsultarTiposAjustesOperacionRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarTiposAjustesOperacionAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.ConsultarMontoObligadoRecepcionResponseType> WsfeCred_consultarMontoObligadoRecepcionAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.ConsultarMontoObligadoRecepcionRequestType validatedRequest, CancellationToken cancellationToken = default) => service.consultarMontoObligadoRecepcionAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.WsfeCred.ModificarOpcionTransferenciaResponse> WsfeCred_modificarOpcionTransferenciaAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.ModificarOpcionTransferenciaRequestType validatedRequest, CancellationToken cancellationToken = default) => service.modificarOpcionTransferenciaAsync(tenant, validatedRequest, cancellationToken);
+
     public static Task<global::NetArcaWs.Contracts.PadronA4.DummyResponse> PadronA4_dummyAsync(IPadronA4Service service, ArcaEnvironment environment, CancellationToken cancellationToken = default) => service.dummyAsync(environment, cancellationToken);
 
     public static Task<global::NetArcaWs.Contracts.PadronA4.GetPersonaResponse> PadronA4_getPersonaAsync(IPadronA4Service service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.PadronA4.GetPersona validatedRequest, CancellationToken cancellationToken = default) => service.getPersonaAsync(tenant, validatedRequest, cancellationToken);

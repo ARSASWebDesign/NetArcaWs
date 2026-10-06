@@ -8,6 +8,9 @@ using NetArcaWs.Multitenancy;
 using NetArcaWs.Taxation;
 using NetArcaWs.Wsaa;
 using NetArcaWs.Contracts.WsfeV1;
+using NetArcaWs.Services;
+using NetArcaWs.Contracts.Wscdc;
+using NetArcaWs.Contracts.WsfeCred;
 
 namespace NetArcaWs.Examples;
 
@@ -18,6 +21,18 @@ namespace NetArcaWs.Examples;
 /// </summary>
 public static class GuideExamples
 {
+    /// <summary>Reads WSCDC modalities for a tenant already authorized by the host.</summary>
+    public static Task<ComprobantesModalidadConsultarResponse> ReadVerificationModesAsync(
+        IServiceProvider provider, ArcaTenantContext tenant, CancellationToken cancellationToken)
+        => provider.GetRequiredService<IWscdcService>().ComprobantesModalidadConsultarAsync(
+            tenant, new ComprobantesModalidadConsultar(), cancellationToken);
+
+    /// <summary>Reads FCE retention types; callers must inspect the returned business errors.</summary>
+    public static Task<ConsultarTiposRetencionesResponseType> ReadCreditRetentionTypesAsync(
+        IServiceProvider provider, ArcaTenantContext tenant, CancellationToken cancellationToken)
+        => provider.GetRequiredService<IWsfecredService>().consultarTiposRetencionesAsync(
+            tenant, new ConsultarTiposRetencionesRequest(), cancellationToken);
+
     /// <summary>Wraps PEM material supplied by the host's protected configuration or secret store.</summary>
     public static WsaaCertificateContent CreateCertificateContent(string certificatePem,
         string privateKeyPem, string? password = null)

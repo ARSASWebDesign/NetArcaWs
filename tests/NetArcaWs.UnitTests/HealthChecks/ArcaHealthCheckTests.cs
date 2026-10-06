@@ -13,12 +13,16 @@ public sealed class ArcaHealthCheckTests
     private const string SoapNamespace = "http://schemas.xmlsoap.org/soap/envelope/";
     private const string WsfeNamespace = "http://ar.gov.afip.dif.FEV1/";
     private const string WsfexNamespace = "http://ar.gov.afip.dif.fexv1/";
+    private const string WscdcNamespace = "http://servicios1.afip.gob.ar/wscdc/";
+    private const string WsfecredNamespace = "http://ar.gob.afip.wsfecred/FECredService/";
     private const string WsdlNamespace = "http://schemas.xmlsoap.org/wsdl/";
 
     [Theory]
     [InlineData(ArcaService.Wsfev1, "FEDummy", WsfeNamespace, "\"http://ar.gov.afip.dif.FEV1/FEDummy\"")]
     [InlineData(ArcaService.Wsfexv1, "FEXDummy", WsfexNamespace, "\"http://ar.gov.afip.dif.fexv1/FEXDummy\"")]
     [InlineData(ArcaService.Wsmtxca, "", "http://impl.service.wsmtxca.afip.gov.ar/service/", "\"http://impl.service.wsmtxca.afip.gov.ar/service/dummy\"")]
+    [InlineData(ArcaService.Wscdc, "ComprobanteDummy", WscdcNamespace, "\"http://servicios1.afip.gob.ar/wscdc/ComprobanteDummy\"")]
+    [InlineData(ArcaService.Wsfecred, "", WsfecredNamespace, "\"http://ar.gob.afip.wsfecred/FECredService/dummy\"")]
     [InlineData(ArcaService.PadronA4, "dummy", "http://a4.soap.ws.server.puc.sr/", "\"\"")]
     [InlineData(ArcaService.PadronA5, "dummy", "http://a5.soap.ws.server.puc.sr/", "\"\"")]
     [InlineData(ArcaService.PadronA10, "dummy", "http://a10.soap.ws.server.puc.sr/", "\"\"")]
@@ -53,14 +57,39 @@ public sealed class ArcaHealthCheckTests
         result.Data["durationMs"].Should().BeOfType<double>();
         result.Data["authenticationVerified"].Should().Be(false);
         capturedMethod.Should().Be(HttpMethod.Post);
-        capturedUri.Should().NotBeNull();
+        capturedUri.Should().Be(new Uri("https://healthcheck.test/service"), "this check uses an explicit endpoint override");
         capturedAction.Should().Be(expectedSoapAction);
         XDocument request = XDocument.Parse(requestBody!);
         XElement body = request.Descendants(XName.Get("Body", SoapNamespace)).Should().ContainSingle().Which;
-        if (service == ArcaService.Wsmtxca)
+        if (service is ArcaService.Wsmtxca or ArcaService.Wsfecred)
             body.Elements().Should().BeEmpty();
         else
             body.Elements(XName.Get(requestOperation, serviceNamespace)).Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData(ArcaService.Wscdc, "https://wswhomo.afip.gov.ar/WSCDC/service.asmx")]
+    [InlineData(ArcaService.Wsfecred, "https://fwshomo.afip.gov.ar/wsfecred/FECredService")]
+    public async Task New_health_checks_use_their_homologation_endpoint_when_no_override_is_supplied(
+        ArcaService service, string expectedEndpoint)
+    {
+        Uri? capturedUri = null;
+        var handler = new RecordingHandler((request, _) =>
+        {
+            capturedUri = request.RequestUri;
+            return Task.FromResult(Response(HttpStatusCode.OK, DummyResponse(service, "OK", "OK", "OK")));
+        });
+        var check = new ArcaHealthCheck(new RecordingClientFactory(handler), new ArcaHealthCheckOptions
+        {
+            Service = service,
+            Environment = ArcaEnvironment.Homologation
+        });
+
+        HealthCheckResult result = await check.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(HealthStatus.Healthy);
+        capturedUri.Should().Be(new Uri(expectedEndpoint));
+        result.Data["endpoint"].Should().Be(expectedEndpoint);
     }
 
     [Theory]
@@ -213,14 +242,35 @@ public sealed class ArcaHealthCheckTests
 
     private static string DummyResponse(ArcaService service, string appServer, string dbServer, string authServer)
     {
-        if (service == ArcaService.Wsmtxca)
+        if (service is ArcaService.Wsmtxca or ArcaService.Wsfecred)
+        {
+            if (service == ArcaService.Wsfecred)
+                return SoapResponseWithUnqualifiedElements(WsfecredNamespace, "dummyResponse", "dummyReturn", appServer, dbServer, authServer);
             return SoapResponse("http://impl.service.wsmtxca.afip.gov.ar/service/", "dummyResponse",
                 null, appServer, dbServer, authServer);
+        }
         if (service is ArcaService.PadronA4 or ArcaService.PadronA5 or ArcaService.PadronA10 or ArcaService.PadronA13)
             return SoapResponse(ServiceNamespace(service), "dummyResponse", "return", appServer, dbServer, authServer);
         string serviceNamespace = ServiceNamespace(service);
+        if (service == ArcaService.Wscdc)
+            return SoapResponse(serviceNamespace, "ComprobanteDummyResponse", "ComprobanteDummyResult", appServer, dbServer, authServer);
         string prefix = service == ArcaService.Wsfev1 ? "FE" : "FEX";
         return SoapResponse(serviceNamespace, $"{prefix}DummyResponse", $"{prefix}DummyResult", appServer, dbServer, authServer);
+    }
+
+    private static string SoapResponseWithUnqualifiedElements(string serviceNamespace, string responseName, string resultName,
+        string appServer, string dbServer, string authServer)
+    {
+        XNamespace soap = SoapNamespace;
+        XNamespace ns = serviceNamespace;
+        return new XDocument(new XElement(soap + "Envelope",
+            new XAttribute(XNamespace.Xmlns + "soap", soap),
+            new XElement(soap + "Body", new XElement(ns + responseName,
+                new XElement(XNamespace.None + resultName,
+                    new XElement(XNamespace.None + "appserver", appServer),
+                    new XElement(XNamespace.None + "authserver", authServer),
+                    new XElement(XNamespace.None + "dbserver", dbServer))))))
+            .ToString(SaveOptions.DisableFormatting);
     }
 
     private static string SoapResponse(string serviceNamespace, string responseName, string? resultName,
@@ -229,9 +279,10 @@ public sealed class ArcaHealthCheckTests
         XNamespace soap = SoapNamespace;
         XNamespace ns = serviceNamespace;
         XNamespace none = XNamespace.None;
-        string appName = responseName == "FEDummyResponse" || responseName == "FEXDummyResponse" ? "AppServer" : "appserver";
-        string dbName = responseName == "FEDummyResponse" || responseName == "FEXDummyResponse" ? "DbServer" : "dbserver";
-        string authName = responseName == "FEDummyResponse" || responseName == "FEXDummyResponse" ? "AuthServer" : "authserver";
+        bool upperCaseComponents = responseName is "FEDummyResponse" or "FEXDummyResponse" or "ComprobanteDummyResponse";
+        string appName = upperCaseComponents ? "AppServer" : "appserver";
+        string dbName = upperCaseComponents ? "DbServer" : "dbserver";
+        string authName = upperCaseComponents ? "AuthServer" : "authserver";
         XNamespace componentNs = serviceNamespace.Contains("puc.sr", StringComparison.Ordinal) || serviceNamespace.Contains("wsmtxca", StringComparison.Ordinal)
             ? XNamespace.None
             : ns;
@@ -275,6 +326,8 @@ public sealed class ArcaHealthCheckTests
     {
         ArcaService.Wsfev1 => WsfeNamespace,
         ArcaService.Wsfexv1 => WsfexNamespace,
+        ArcaService.Wscdc => WscdcNamespace,
+        ArcaService.Wsfecred => WsfecredNamespace,
         ArcaService.PadronA4 => "http://a4.soap.ws.server.puc.sr/",
         ArcaService.PadronA5 => "http://a5.soap.ws.server.puc.sr/",
         ArcaService.PadronA10 => "http://a10.soap.ws.server.puc.sr/",

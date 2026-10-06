@@ -40,10 +40,11 @@ el builder de DI. No hay bypass TLS ni ejecución de procesos externos.
 ## Fachadas fiscales y contratos de servicio
 
 El repositorio contiene modelos públicos XML y fachadas generadas desde los
-WSDL versionados. El inventario actual es de 81 operaciones: WSFEv1 22,
-WSFEXv1 19, WSMTXCA 27, Padrón A4 2, Constancia por ruta A5 5, A10 2 y A13 4.
-Están en `NetArcaWs.Contracts.*` y `NetArcaWs.Services`; `AddNetArcaWs` registra
-las siete fachadas y `PadronService`. Los requests/responses autenticados son
+WSDL versionados. El inventario actual es de 108 operaciones: WSFEv1 22,
+WSFEXv1 19, WSMTXCA 27, Padrón A4 2, Constancia por ruta A5 5, A10 2, A13 4,
+WSCDC 6 y WSFECred 21. Están en `NetArcaWs.Contracts.*` y
+`NetArcaWs.Services`; `AddNetArcaWs` registra las nueve fachadas de negocio y
+`PadronService`. Los requests/responses autenticados son
 tipados 1:1 con los XSD y la llamada recibe `ArcaTenantContext`; el cliente pide
 su ticket a WSAA e inserta la autenticación en una copia serializable del request.
 Los `Dummy` sin autenticación eligen entorno explícito y no piden ticket.
@@ -56,17 +57,18 @@ no cambia la representación SOAP. No se usa WCF: las fachadas usan
 son la fuente reproducible para la generación, no una afirmación de compatibilidad
 con todos los cambios futuros del servicio.
 
-La build Release y la suite de Hitos 2–5 se verificaron: 225 casos, 222 aprobados
-y 3 omitidos. Los 81 QName/SOAPAction se compararon con sus WSDL y 166 tipos
-raíz XML pasaron round-trip. Los 22 tipos de contrato con campos `DateTime`
-(`xs:date`/`xs:dateTime`) conservaron sus valores. En QA real hubo 9 casos:
-7 probes `Dummy` respondieron y 2 pruebas autenticadas se omitieron por falta de
-certificados; la homologación fiscal autenticada sigue pendiente.
+La verificación Release actual tuvo 240 casos, 237 aprobados y 3 omitidos, con
+0 warnings y 0 errors. Las 108 operaciones se cotejaron con sus WSDL y 219 tipos
+raíz XML pasaron round-trip; los 30 tipos con `DateTime` (`xs:date`/`xs:dateTime`)
+conservaron sus valores. Los snapshots QA/producción de WSCDC y WSFECred tienen
+schemas coincidentes. En QA real respondieron 9 probes `Dummy`; 2 pruebas
+autenticadas se omitieron por falta de certificados. La homologación fiscal
+autenticada sigue pendiente.
 
 WSMTXCA modela el web service de factura electrónica con detalle y sus
-operaciones CAE/CAEA. No cubre por equivalencia todo el ciclo de Factura de
-Crédito Electrónica MiPyME; los contratos y reglas adicionales quedan fuera de
-esta afirmación. Ver el [ADR de contratos](docs/adr/0004-public-soap-contracts.md)
+operaciones CAE/CAEA. WSFECred implementa el contrato posterior para la gestión
+de FCE MiPyME y cuentas corrientes, pero no está integrado con el diario ni
+`SafeInvoiceService`. Ver el [ADR de contratos](docs/adr/0004-public-soap-contracts.md)
 y la [matriz de operaciones](docs/wiki/Servicios-y-cobertura.md).
 
 `SoapTransport` limita la serialización del request y la lectura de response a
@@ -173,8 +175,8 @@ Integración revisó el contrato SOAP y la caché en una segunda tarea del agent
 Cripto, debido al límite de threads del entorno.
 
 La suite validada comprobó CMS y CSR con primitivas independientes de
-verificación, simuló HTTP/SOAP y controló el reloj. La suite Release final pasó
-198/225 casos (3 omitidos); build con 0 warnings y 0 errors. Los Dummies reales
+verificación, simuló HTTP/SOAP y controló el reloj. La suite Release actual pasó
+237/240 casos (3 omitidos); build con 0 warnings y 0 errors. Los Dummies reales
 en QA comprobaron disponibilidad, no autorización de negocio. La suite de
 homologación autenticada requiere certificados autorizados; compilar y pasar
 tests no demuestra aceptación fiscal. El inventario y las diferencias con Python están documentados en

@@ -11,6 +11,8 @@ using NetArcaWs.Wsaa;
 using NetArcaWs.Contracts.WsfeV1;
 using NetArcaWs.Contracts.WsfexV1;
 using NetArcaWs.Contracts.Wsmtxca;
+using NetArcaWs.Contracts.Wscdc;
+using NetArcaWs.Contracts.WsfeCred;
 using Xunit;
 
 namespace NetArcaWs.IntegrationTests;
@@ -21,7 +23,7 @@ public sealed class ArcaServicesHomologationFactAttribute : FactAttribute
         : base(sourceFilePath, sourceLineNumber)
     {
         if (!string.Equals(Environment.GetEnvironmentVariable("ARCA_RUN_HOMOLOGY"), "1", StringComparison.Ordinal))
-            Skip = "Set ARCA_RUN_HOMOLOGY=1 to run read-only dummy probes against all seven ARCA homologation services.";
+            Skip = "Set ARCA_RUN_HOMOLOGY=1 to run read-only dummy probes against all ARCA homologation services.";
     }
 }
 
@@ -52,6 +54,8 @@ public sealed class ArcaServicesHomologationTests
     [InlineData("wsfe")]
     [InlineData("wsfex")]
     [InlineData("wsmtxca")]
+    [InlineData("wscdc")]
+    [InlineData("wsfecred")]
     [InlineData("padron-a4")]
     [InlineData("padron-a5")]
     [InlineData("padron-a10")]
@@ -67,6 +71,8 @@ public sealed class ArcaServicesHomologationTests
             "wsfe" => await new Wsfev1Service(transport, tickets).FEDummyAsync(ArcaEnvironment.Homologation, token),
             "wsfex" => await new Wsfexv1Service(transport, tickets).FEXDummyAsync(ArcaEnvironment.Homologation, token),
             "wsmtxca" => await new Wsmtxcav1Service(transport, tickets).dummyAsync(ArcaEnvironment.Homologation, token),
+            "wscdc" => await new WscdcService(transport, tickets).ComprobanteDummyAsync(ArcaEnvironment.Homologation, token),
+            "wsfecred" => await new WsfecredService(transport, tickets).dummyAsync(ArcaEnvironment.Homologation, token),
             "padron-a4" => await new PadronA4Service(transport, tickets).dummyAsync(ArcaEnvironment.Homologation, token),
             "padron-a5" => await new PadronA5Service(transport, tickets).dummyAsync(ArcaEnvironment.Homologation, token),
             "padron-a10" => await new PadronA10Service(transport, tickets).dummyAsync(ArcaEnvironment.Homologation, token),
@@ -108,6 +114,8 @@ public sealed class ArcaServicesHomologationTests
                 "wsfe" => await provider.GetRequiredService<Wsfev1Service>().FEParamGetTiposMonedasAsync(tenant, new FeParamGetTiposMonedas(), token),
                 "wsfex" => await provider.GetRequiredService<Wsfexv1Service>().FEXGetPARAM_MONAsync(tenant, new FexGetParamMon(), token),
                 "wsmtxca" => await provider.GetRequiredService<Wsmtxcav1Service>().consultarMonedasAsync(tenant, new ConsultarMonedasRequestType(), token),
+                "wscdc" => await provider.GetRequiredService<WscdcService>().ComprobantesModalidadConsultarAsync(tenant, new ComprobantesModalidadConsultar(), token),
+                "wsfecred" => await provider.GetRequiredService<WsfecredService>().consultarTiposRetencionesAsync(tenant, new ConsultarTiposRetencionesRequest(), token),
                 "padron-a4" => await provider.GetRequiredService<PadronA4Service>().getPersonaAsync(tenant, new NetArcaWs.Contracts.PadronA4.GetPersona { IdPersona = queryCuit }, token),
                 "padron-a5" => await provider.GetRequiredService<PadronA5Service>().getPersonaAsync(tenant, new NetArcaWs.Contracts.PadronA5.GetPersona { IdPersona = queryCuit }, token),
                 "padron-a10" => await provider.GetRequiredService<PadronA10Service>().getPersonaAsync(tenant, new NetArcaWs.Contracts.PadronA10.GetPersona { IdPersona = queryCuit }, token),

@@ -14,11 +14,29 @@ Los snapshots se descargaron el 2026-10-06 desde los WSDL públicos indicados. S
 
 ## Decisiones de generación y diferencias de entorno
 
+### WSCDC y WSFECred (2026-10-06)
+
+| Contrato | Fuente QA | Fuente producción | SHA-256 QA | SHA-256 producción |
+|---|---|---|---|---|
+| WSCDC | `https://wswhomo.afip.gov.ar/WSCDC/service.asmx?WSDL` | `https://servicios1.afip.gov.ar/WSCDC/service.asmx?WSDL` | `7f3e5d23cea4f4a91777f542187010a0796223b38490d975087a8695305d2bbc` | `1d892ef1991e3408c1daafebc45d7034e619146814b253c5a0b51dd6291e568c` |
+| WSFECred | `https://fwshomo.afip.gov.ar/wsfecred/FECredService?wsdl` | `https://serviciosjava.afip.gob.ar/wsfecred/FECredService?wsdl` | `3b870b489ee2b6e2797c0c1a9d5a9d7c1805df198d36c85ab78f058420de14a3` | `9389219ec9661d6093a6499aaca45c1fad5963ad93fd5eedc229dfc29b351fc7` |
+
+Los DTO y clientes se generan desde los contratos de producción completos:
+6 operaciones WSCDC y 21 WSFECred. Los snapshots QA se conservan para comparar
+contratos, sin sustituir pruebas autenticadas de negocio.
+El [manual WSCDC v4](https://www.afip.gob.ar/ws/WSCDCV1/WSCDC-manual-desarrollador-v4.pdf)
+publica `servicios1.arca.gob.ar` y `wshomo.afip.gob.ar`. Durante la verificación,
+el primero falló por nombre de certificado TLS y el segundo no resolvió por DNS.
+Se utilizan los hosts AFIP de la tabla, disponibles con validación TLS completa;
+el WSDL de producción también anuncia ese endpoint. No se deshabilita TLS.
+WSFECred conserva elementos internos sin namespace, incluido `dummyReturn`;
+su operación `dummy` envía un cuerpo SOAP vacío según el mensaje de entrada WSDL.
+
 `wsmtxca-homologation-invalid.wsdl` se conserva sólo como evidencia: el contenido recibido no es XML bien formado/reutilizable como esquema de operaciones. Los DTO WSMTXCA se generan desde el snapshot de producción válido; las URLs del cliente siguen separando QA y producción. No se afirma equivalencia entre el WSDL inválido de QA y el de producción.
 
 Para los otros servicios, las operaciones y los tipos embebidos de los WSDL QA/producción capturados coincidieron en la comparación de los snapshots; los clientes seleccionan endpoints por ambiente. Padrón A5 migró el host de servicio a `arca.gob.ar`: el snapshot del WSDL de producción todavía anuncia `aws.afip.gov.ar`. El endpoint runtime usa el alias `.arca.gob.ar` de producción y `.afip.gov.ar` de QA, que se verificaron disponibles el 2026-10-06; las URL de contrato anteriores conservan la evidencia descargada. A10/A13 usan HTTPS en runtime según sus manuales aunque el WSDL capturado anuncia esquema HTTP.
 
-Regeneración: `scripts/generate-contracts.sh`. El script instala `dotnet-xscgen` versión `3.0.1240` en un directorio temporal, conserva namespaces QName al extraer el XSD inline y emite los DTO/wrappers. Revisar y actualizar hashes/snapshots antes de cambiar una versión de contrato.
+Regeneración: instalar la herramienta .NET `dotnet-xscgen` versión `3.0.1240` y ejecutar `dotnet run --project tools/NetArcaWs.Build -- contracts --xscgen /ruta/a/xscgen`. El generador conserva namespaces QName al extraer el XSD inline y emite los DTO/wrappers. Revisar y actualizar hashes/snapshots antes de cambiar una versión de contrato.
 
 ## Manuales consultados el 2026-10-06
 
