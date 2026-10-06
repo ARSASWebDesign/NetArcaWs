@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+unset ARCA_QUERY_CUIT
 
 # This script receives credentials only in the protected workflow step.
 # Do not enable shell tracing, print payloads, or publish its temporary directory.
@@ -30,7 +31,6 @@ if [[ "$ARCA_HOMOLOGY_MODE" != 'consultas' && "$ARCA_HOMOLOGY_MODE" != 'emision'
 fi
 
 if [[ "$ARCA_HOMOLOGY_MODE" == 'emision' ]]; then
-  unset ARCA_QUERY_CUIT
   if [[ "$ARCA_HOMOLOGY_SERVICES" != 'wsfe' ]]; then
     echo 'La emisión solo admite ARCA_HOMOLOGY_SERVICES=wsfe.' >&2
     exit 1
@@ -55,7 +55,6 @@ else
     exit 1
   fi
   IFS=',' read -r -a selected_services <<< "$ARCA_HOMOLOGY_SERVICES"
-  has_padron_service=0
   for service in "${selected_services[@]}"; do
     case "$service" in
       wsfe|wsfex|wsmtxca|wscdc|wsfecred|padron-a4|padron-a5|padron-a10|padron-a13) ;;
@@ -64,17 +63,7 @@ else
         exit 1
         ;;
     esac
-    case "$service" in
-      padron-*) has_padron_service=1 ;;
-    esac
   done
-  if [[ "$has_padron_service" == '1' && ! "${ARCA_QUERY_CUIT:-}" =~ ^[0-9]{11}$ ]]; then
-    echo 'ARCA_QUERY_CUIT es obligatorio para servicios de padrón y debe contener 11 dígitos.' >&2
-    exit 1
-  fi
-  if [[ "$has_padron_service" != '1' ]]; then
-    unset ARCA_QUERY_CUIT
-  fi
 fi
 
 export ARCA_HOMOLOGY_MODE ARCA_HOMOLOGY_SERVICES ARCA_HOMOLOGY_POINT_OF_SALE

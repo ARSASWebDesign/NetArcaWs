@@ -29,12 +29,46 @@ espacios. Se necesita autorización del certificado para **cada servicio**:
 | `wsmtxca` | Monedas de facturación con detalle |
 | `wscdc` | Modalidades de constatación |
 | `wsfecred` | Tipos de retenciones |
-| `padron-a4`, `padron-a5`, `padron-a10`, `padron-a13` | Persona de prueba; requiere secreto `ARCA_QUERY_CUIT` |
+| `padron-a4`, `padron-a10`, `padron-a13` | Tres casos públicos: CUIT física, CUIL física y CUIT jurídica |
+| `padron-a5` | Dos casos públicos: CUIT física y CUIT jurídica (Constancia) |
 
 La ruta A5 corresponde a Constancia de inscripción. No se omiten fallos de permiso
 ni respuestas funcionalmente inválidas: la ejecución falla. Las consultas no crean
 autorizaciones WSASS ni conceden acceso a otros servicios. WSCPE conserva pruebas
 públicas Dummy; su escenario autenticado de negocio queda pendiente de datos y permisos.
+
+## Personas de prueba para Padrón
+
+La suite conserva tres casos representativos del [listado público oficial de A4](https://www.afip.gob.ar/ws/ws_sr_padron_a4/datos-prueba-padron-a4.txt),
+consultado el 6 de octubre de 2026:
+
+| Identificador público | Tipo de persona | Tipo de clave |
+|---|---|---|
+| `20002307554` | `FISICA` | `CUIT` |
+| `20203032723` | `FISICA` | `CUIL` |
+| `30202020204` | `JURIDICA` | `CUIT` |
+
+Se mantienen en `tests/NetArcaWs.IntegrationTests/PadronTestCases.cs`, exclusivamente
+para homologación. No se consulta la CUIT representada como dato de prueba ni se
+usa `ARCA_QUERY_CUIT`. La autenticación continúa usando los secretos del entorno
+protegido. Los datos públicos no conceden acceso a los servicios.
+
+El [catálogo oficial](https://www.afip.gob.ar/ws/documentacion/catalogo.asp) enlaza
+ese listado solo para A4. No encontramos un listado equivalente para Constancia,
+A10 o A13: allí se reutilizan como **candidatos pendientes de validación real**,
+sin afirmar que compartan la base de testing. Constancia documenta consultas por
+CUIT; no se exige un caso CUIL positivo sin evidencia que lo respalde.
+
+Cada respuesta debe contener datos y coincidir exactamente en identificador,
+`tipoPersona` y `tipoClave`. No se infiere el tipo por el prefijo del número.
+Si un caso falla, se prueban los siguientes casos y padrones seleccionados; al final
+la suite falla si hubo cualquier error. No se omiten casos inexistentes ni se
+transforman errores SOAP en resultados aprobados. El resumen informa servicio,
+categoría y resultado, sin nombres, domicilios, XML ni mensajes remotos.
+
+Esta matriz cubre `getPersona`; no acredita las demás operaciones ni reglas de cada
+padrón. Las comprobaciones locales usan respuestas sintéticas; la disponibilidad
+real de estos casos se registra por ejecución en la issue de homologación.
 
 ## Emisión de prueba WSFE
 

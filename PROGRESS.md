@@ -37,8 +37,15 @@ omitidas. En la suite normal, los 3 omitidos corresponden a WSAA sin credenciale
 servicios autenticados no seleccionados y `Dummy` sin habilitación opt-in. Ningún
 resultado acredita una autorización de negocio con certificado real.
 
-La autenticación WSAA de homologación y las llamadas autenticadas fiscales siguen
-pendientes de certificados autorizados. El environment GitHub `nuget` contiene
+El seguimiento vigente de autenticación y escenarios ejecutados se registra en
+[la issue de homologación](https://github.com/ARSASWebDesign/NetArcaWs/issues/12).
+La suite de padrón incorpora tres identidades públicas del listado oficial A4:
+CUIT física, CUIL física y CUIT jurídica. Las reutiliza como candidatos en A10/A13
+y solo CUIT en Constancia, comprobando identificador y tipos devueltos. No requiere
+`ARCA_QUERY_CUIT`; su disponibilidad real en cada padrón queda pendiente de una
+ejecución protegida. No se afirma que los cuatro servicios compartan datos de QA.
+
+El environment GitHub `nuget` contiene
 `NUGET_USER=arsas`; el workflow de release intercambió OIDC correctamente y
 NuGet aceptó e indexó ambos paquetes 0.5.0 en el índice del feed v3; además, el
 Tool público se instaló desde una caché aislada y `--help` terminó con código 0.
