@@ -433,11 +433,15 @@ protocolo y recuperación de `ListPendingAsync` mediante `ResumeAsync`.
 
 ## Homologación
 
-El workflow manual **Homologación WSFE** usa exclusivamente `main` y el entorno
-protegido `homologacion`. Solicita aprobación y ejecuta una consulta de monedas
-autenticada; falla si falta configuración, sin omitir esa prueba. Ver la
-[guía de ejecución y secretos](docs/wiki/Homologacion.md). No emite comprobantes
-ni acredita cobertura fiscal completa.
+El workflow manual **Homologación ARCA** usa exclusivamente `main` y el entorno
+protegido `homologacion`. Solicita aprobación y ejecuta las consultas seleccionadas;
+falla si falta configuración, sin omitir esa prueba. Padrón usa fixtures públicos
+de CUIT física, CUIL física y CUIT jurídica (Constancia solo CUIT), sin un secreto
+`ARCA_QUERY_CUIT`. Su procedencia y los límites de reutilización entre padrones se
+detallan en [Pruebas fiscales](docs/wiki/Homologacion-fiscal.md).
+La emisión WSFE requiere seleccionar explícitamente el escenario y la numeración.
+Ver la [guía de ejecución y secretos](docs/wiki/Homologacion.md).
+Estos escenarios no acreditan cobertura fiscal completa.
 
 La suite actual debe volver a validarse junto con las nuevas fachadas SOAP. La
 homologación WSAA continúa siendo opt-in y requiere certificados autorizados;

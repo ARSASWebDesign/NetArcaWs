@@ -70,5 +70,4 @@ jobs:
           ARCA_HOMOLOGY_POINT_OF_SALE: ${{ inputs.point_of_sale }}
           ARCA_HOMOLOGY_VOUCHER_TYPE: ${{ inputs.voucher_type }}
           ARCA_HOMOLOGY_VOUCHER_NUMBER: ${{ inputs.voucher_number }}
-          ARCA_QUERY_CUIT: ${{ (contains(format(',{0},', inputs.services), ',padron-a4,') || contains(format(',{0},', inputs.services), ',padron-a5,') || contains(format(',{0},', inputs.services), ',padron-a10,') || contains(format(',{0},', inputs.services), ',padron-a13,')) && secrets.ARCA_QUERY_CUIT || '' }}
         run: bash scripts/run-homologacion.sh

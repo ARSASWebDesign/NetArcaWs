@@ -68,8 +68,10 @@ Variable del mismo entorno:
 | `WSAA_SERVICE` | `wsfe` |
 
 La selección `services` del formulario reemplaza la variable de entorno
-`ARCA_HOMOLOGY_SERVICES`. El secreto `ARCA_QUERY_CUIT` se usa cuando se selecciona
-una consulta de Padrón. Autorizar el alias/certificado para cada servicio en
+`ARCA_HOMOLOGY_SERVICES`. Padrón consulta los fixtures públicos versionados descritos
+en [Pruebas fiscales](Homologacion-fiscal); no requiere `ARCA_QUERY_CUIT`.
+La CUIT representada y sus credenciales siguen siendo secretos independientes.
+Autorizar el alias/certificado para cada servicio en
 WSASS antes de la ejecución. Un certificado emitido no implica habilitación
 para todos los servicios.
 
