@@ -1,6 +1,6 @@
 # Fuentes de la documentación
 
-Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 55 páginas de contenido y este manifiesto. GitHub muestra un único menú nativo; Home contiene la navegación por temas. Cada página incluye su fuente y reescribe enlaces relativos para navegación de wiki. Los contratos ARCA archivados en el repositorio tienen fecha de snapshot 2026-10-06. La salida refleja el árbol de trabajo. Al publicar, SOURCE_COMMIT en el repositorio wiki registra el SHA de origen. Revisar el mirror antes de publicar.
+Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 58 páginas de contenido y este manifiesto. GitHub muestra un único menú nativo; Home contiene la navegación por temas. Cada página incluye su fuente y reescribe enlaces relativos para navegación de wiki. Los contratos ARCA archivados en el repositorio tienen fecha de snapshot 2026-10-06. La salida refleja el árbol de trabajo. Al publicar, SOURCE_COMMIT en el repositorio wiki registra el SHA de origen. Revisar el mirror antes de publicar.
 
 - `.github/pull_request_template.md` → `Plantilla-de-pull-request`
 - `AGENTS.md` → `Documento-AGENTS`
@@ -48,6 +48,7 @@ Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 55 páginas d
 - `docs/wiki/Homologacion.md` → `Homologacion`
 - `docs/wiki/Inicio-rapido.md` → `Inicio-rapido`
 - `docs/wiki/Migracion-desde-PyAfipWs.md` → `Migracion-desde-PyAfipWs`
+- `docs/wiki/Modelo-relacional.md` → `Modelo-relacional`
 - `docs/wiki/Seguridad-y-publicacion.md` → `Seguridad-y-publicacion`
 - `docs/wiki/Servicios-implementados.md` → `Servicios-implementados`
 - `docs/wiki/Servicios-y-cobertura.md` → `Servicios-y-cobertura`
@@ -56,4 +57,6 @@ Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 55 páginas d
 - `docs/wiki/WSCDC.md` → `WSCDC`
 - `docs/wiki/WSCPE.md` → `WSCPE`
 - `docs/wiki/WSFECred.md` → `WSFECred`
-- `src/NetArcaWs.EntityFrameworkCore.MySql/README.md` → `Documento-README`
+- `src/NetArcaWs.EntityFrameworkCore.MySql/README.md` → `MySQL-MariaDB-EF-Core`
+- `src/NetArcaWs.EntityFrameworkCore.PostgreSql/README.md` → `PostgreSQL-EF-Core`
+- `src/NetArcaWs.EntityFrameworkCore.SqlServer/README.md` → `SQL-Server-EF-Core`

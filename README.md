@@ -11,7 +11,7 @@ roundtrips de serialización fueron verificados. Esto no afirma paridad funciona
 completa con el repositorio Python ni homologación de operaciones autenticadas.
 
 Verificación registrada el 2026-10-06: build Release con 0 warnings y 0 errores;
-452 casos, 445 aprobados, 7 omitidos (4 dependientes de ARCA y 3 opt-in
+454 casos, 447 aprobados, 7 omitidos (4 dependientes de ARCA y 3 opt-in
 de engine) y 0 fallos. Se verificaron las 183
 operaciones contra sus WSDL y 369 tipos raíz XML en round-trip; los 56 tipos
 con campos `DateTime` (`xs:date` y `xs:dateTime`) conservaron sus valores. Los
@@ -21,13 +21,14 @@ por falta de certificados. Esa corrida precede a WSCPE; su nuevo Dummy solo
 se probó con SOAP simulado en este bloque. Los Dummies prueban disponibilidad, no autorización
 fiscal.
 
-Los tests de persistencia contra engines reales se ejecutaron por separado con
-MySQL 8.4.11 (5/5), MariaDB 11.4.13 (5/5) y PostgreSQL 17.6 (13/13), incluidos
-casos entre procesos. Esa evidencia corresponde a esas versiones; no demuestra
-compatibilidad universal ni homologación con ARCA. CI tiene un job de engine
-real para SQL Server Developer en runner x64; la evidencia de SQL Server queda
-pendiente de esa ejecución. El consumer smoke de los cuatro paquetes optativos
-se compila y ejecuta con SQLite, sin acceder a otros servidores ni a ARCA.
+Los tests de persistencia contra engines reales se ejecutaron con MySQL 8.4.11
+(5/5), MariaDB 11.4.13 (5/5), PostgreSQL 17.6 (13/13) y SQL Server Developer
+16.0.4295.3 (13/13), incluidos casos entre procesos. Son versiones y escenarios
+concretos; no demuestran compatibilidad universal ni homologación con ARCA. La
+[corrida gratuita de CI en runner x64](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37525573878)
+ejecutó los suites PostgreSQL y SQL Server sin omisiones. El consumer smoke de
+los cuatro paquetes optativos se compila y ejecuta con SQLite, sin acceder a
+otros servidores ni a ARCA.
 
 ## Extras y adaptaciones propias respecto de PyAfipWs
 

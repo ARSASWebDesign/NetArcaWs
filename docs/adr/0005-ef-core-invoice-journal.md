@@ -1,6 +1,6 @@
 # ADR 0005: Persistencia EF Core opt-in para diario fiscal y tickets WSAA
 
-- Estado: Aceptado; PostgreSQL probado en engine real; primera ejecución SQL Server en CI pendiente
+- Estado: Aceptado; MySQL/MariaDB/PostgreSQL/SQL Server verificados en engines reales, con evidencia acotada por versión
 - Fecha: 2026-10-06
 - Complementa: [reintentos seguros](0001-safe-invoice-retries.md) y [contexto multitenant](0002-arca-tenant-context.md)
 
@@ -116,9 +116,10 @@ incluyen lotes durables, WSFECred, WSCPE ni asignación automática de números.
   motores ni homologación fiscal.
 - El 2026-10-06 el suite compartido aprobó 13/13 casos contra PostgreSQL 17.6,
   incluidos procesos independientes y tickets compartidos/reinicio. CI dispone
-  de un job con SQL Server Developer en runner x64, pero aún no hay resultado
-  real de ese motor; no se afirma compatibilidad SQL Server hasta que ese job
-  termine correctamente.
+  de un job x64 con SQL Server Developer. La ejecución 37525573878 aprobó
+  13/13 casos contra ProductVersion 16.0.4295.3. Los resultados cubren las
+  versiones concretas y escenarios ejecutados, no una matriz universal de
+  motores ni homologación fiscal.
 - El almacenamiento compartido puede servir a varias réplicas, pero las
   propiedades transaccionales, bloqueos e índices de cada engine deben verificarse
   con ese motor y versión. No implica worker, scheduler o reintentos SOAP.

@@ -62,6 +62,38 @@ and [MySqlConnector package](https://www.nuget.org/packages/MySqlConnector/2.6.2
 `Microsoft.EntityFrameworkCore.Sqlite` 10.0.12 (MIT) as a development-only
 dependency; it is not included in either persistence package.
 
+### Optional PostgreSQL and SQL Server providers
+
+`NetArcaWs.EntityFrameworkCore.PostgreSql` 0.5.0 references
+`Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.3, whose restored NuGet manifest
+declares the `PostgreSQL` license expression; its `Npgsql` 10.0.3 dependency
+declares the same license. These are optional provider dependencies and are not
+referenced by the core or base EF package. See the
+[Npgsql EF provider](https://www.nuget.org/packages/Npgsql.EntityFrameworkCore.PostgreSQL/10.0.3),
+[Npgsql driver](https://www.nuget.org/packages/Npgsql/10.0.3), and
+[PostgreSQL license](https://www.postgresql.org/about/licence/).
+
+`NetArcaWs.EntityFrameworkCore.SqlServer` 0.5.0 references
+`Microsoft.EntityFrameworkCore.SqlServer` 10.0.12 (MIT), which resolves
+`Microsoft.Data.SqlClient` 6.1.6 (MIT). SqlClient in turn references
+`Microsoft.Data.SqlClient.SNI.runtime` 6.0.2, whose NuGet manifest points to
+its included `LICENSE.txt` with the Microsoft Software License Terms; the
+package contains platform-specific native SNI binaries for Windows. This
+transitive native component is not licensed as MIT in this notice. The
+NetArcaWs SQL Server package itself does not embed SqlClient or SNI files;
+NuGet resolves their dependencies for consumers. Both provider packages are
+optional and neither dependency is referenced by the core or base EF package.
+The provider metadata and included SNI license file were checked in restored
+NuGet artifacts on 2026-10-06. See
+[EF Core SQL Server](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.SqlServer/10.0.12)
+and [Microsoft.Data.SqlClient](https://www.nuget.org/packages/Microsoft.Data.SqlClient/6.1.6),
+plus SqlClient's [NOTICE](https://github.com/dotnet/SqlClient/blob/main/NOTICE.txt)
+and [copyright/license notes](https://github.com/dotnet/SqlClient/blob/main/COPYRIGHT.md).
+
+The native Build tool uses provider packages as development-only dependencies
+to emit DDL from the actual EF models. The scripts do not bundle provider
+assemblies into any NetArcaWs library package.
+
 ## Test dependencies
 
 | Package | Version | License |

@@ -18,7 +18,7 @@
 - [x] Health checks independientes y opt-in por WS, sin credenciales.
 - [x] Diseño documentado de reintentos y reconciliación para evitar duplicados.
 - [x] `SafeInvoiceService`, diario durable y reconciliación conservadora para emisión unitaria WSFE/WSFEX/WSMTXCA; SQLite local multi-proceso en un host, no NFS ni multi-host.
-- [x] Issue #19: persistencia EF opt-in para diario y tickets, provider MySQL/MariaDB, consumer package smoke y pruebas locales con engines; los paquetes opcionales 0.5.0 no están publicados. Las capacidades diferidas siguen en el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19).
+- [x] Incremento EF del issue #19: persistencia opt-in para diario y tickets; providers MySQL/MariaDB, PostgreSQL y SQL Server; consumer package smoke y modelo relacional con DDL generado para cinco engines. Paquetes opcionales 0.5.0 sin publicar. Pruebas reales aprobadas: MySQL 8.4.11 (5/5), MariaDB 11.4.13 (5/5), PostgreSQL 17.6 (13/13) y SQL Server Developer 16.0.4295.3 (13/13), incluidos procesos independientes. Los resultados son por versión/escenario, no homologación ARCA ni compatibilidad universal. Certificados/worker y otras funciones diferidas siguen en el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19).
 - [ ] WSAA: ejecutar homologación real con certificados autorizados.
 - [x] Hito 2: WSFEv1 — 22 operaciones, contrato SOAP y suite verificados.
 - [x] Hito 3: WSFEXv1 — 19 operaciones, contrato SOAP y suite verificados.
@@ -30,22 +30,25 @@
 - [x] Hito 7: catálogo por servicios, extras y ejemplos compilables; el inventario vigente es de 183 operaciones en diez contratos y el seguimiento del alcance original sigue en [issue #10](https://github.com/ARSASWebDesign/NetArcaWs/issues/10).
 
 La verificación actual terminó con build Release de 0 warnings y 0 errors; la
-suite tuvo 420 casos: 415 aprobados, 5 omitidos (4 dependientes de ARCA y 1
-test opt-in de engine) y 0 fallos. Se verificaron las 183 operaciones contra sus WSDL y
+suite tuvo 454 casos: 447 aprobados, 7 omitidos (4 dependientes de ARCA y 3
+tests opt-in de engine) y 0 fallos. Se verificaron las 183 operaciones contra sus WSDL y
 369 tipos raíz XML en round-trip. Los 56 tipos de
 contrato con campos `DateTime` (`xs:date`/`xs:dateTime`) conservaron sus valores.
 
 En homologación real de QA con `ARCA_RUN_HOMOLOGY=1` el 2026-10-06, la corrida
 de integración tuvo 11 casos: 9 probes `Dummy` aprobados y 2 pruebas autenticadas
 omitidas. En la suite normal, cuatro casos dependen de credenciales/opt-in de
-ARCA y uno de la configuración opt-in de un engine de base. Ningún resultado
+ARCA y tres de la configuración opt-in de engines de base. Ningún resultado
 acredita una autorización de negocio con certificado real.
 
 La autenticación WSAA de homologación y las llamadas autenticadas fiscales siguen
 pendientes de certificados autorizados. Tests opt-in de persistencia ejecutados
-con MySQL 8.4.11 (5/5) y MariaDB 11.4.13 (5/5) cubren esas versiones y casos entre procesos;
-no prueban otras versiones ni homologación fiscal. El consumer smoke de los
-paquetes EF locales corrió con SQLite.
+con MySQL 8.4.11 (5/5), MariaDB 11.4.13 (5/5), PostgreSQL 17.6 (13/13) y SQL
+Server Developer 16.0.4295.3 (13/13) cubren
+esas versiones y casos entre procesos; no prueban otras versiones ni
+homologación fiscal. Los casos PostgreSQL y SQL Server se ejecutaron en el
+[job público de CI](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37525573878)
+en runner x64. El consumer smoke de los paquetes EF locales corrió con SQLite.
 
 El seguimiento vigente de autenticación y escenarios ejecutados se registra en
 [la issue de homologación](https://github.com/ARSASWebDesign/NetArcaWs/issues/12).

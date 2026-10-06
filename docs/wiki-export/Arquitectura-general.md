@@ -236,19 +236,25 @@ módulo de diario (solo WSFEv1, WSFEXv1 y/o WSMTXCA), el de tickets WSAA, o ambo
 `ModelBuilder.AddNetArcaWs` agrega solo las tablas solicitadas y conserva las
 entidades del consumidor; sus migraciones son responsabilidad de la aplicación.
 
-El paquete opcional `NetArcaWs.EntityFrameworkCore.MySql` integra Microting para
-MySQL/MariaDB y recibe una versión de servidor explícita. No detecta el motor,
-conecta durante el registro, crea tablas ni agrega una estrategia de reintentos
-EF o reintentos SOAP. El
-helper registra el contexto dedicado; para contextos propios la aplicación
-registra su proveedor/factoría y añade los stores con la misma selección de
-modelo. Consultar [ADR 0005](ADR-0005-ef-core-invoice-journal) y la
-[guía del diario](Diario-fiscal). El issue #19 mantiene el estado
-de integración y capacidades asociadas.
+Los providers opcionales `NetArcaWs.EntityFrameworkCore.MySql`,
+`NetArcaWs.EntityFrameworkCore.PostgreSql` y
+`NetArcaWs.EntityFrameworkCore.SqlServer` se instalan por separado. MySQL/MariaDB
+requiere `ServerVersion` explícita; los helpers PostgreSQL y SQL Server toman la
+connection string sin autodetección. Ninguno conecta durante el registro, crea
+tablas ni agrega una estrategia automática de reintentos EF o SOAP. Para
+contextos propios, la aplicación registra su proveedor/factoría y añade los
+stores con la misma selección del modelo. Las migraciones se generan, revisan y
+aplican desde la aplicación. Consultar [ADR 0005](ADR-0005-ef-core-invoice-journal),
+la [guía del diario](Diario-fiscal) y el [modelo relacional](Modelo-relacional).
+La implementación de providers no equivale a homologación fiscal; el issue #19
+mantiene las capacidades restantes del backlog.
 
-La suite del proveedor aprobó 5/5 pruebas con MySQL 8.4.11 y 5/5 con MariaDB
-11.4.13, incluidos casos de concurrencia entre procesos. Son versiones concretas de prueba; no se
-afirma compatibilidad con cualquier versión de ambos motores.
+Los suites reales aprobaron MySQL 8.4.11 (5/5), MariaDB 11.4.13 (5/5),
+PostgreSQL 17.6 (13/13) y SQL Server Developer 16.0.4295.3 (13/13), con casos
+de concurrencia entre procesos. Son resultados por versión y escenario, no una
+garantía universal de compatibilidad ni validación ante ARCA. El
+[job x64 de CI](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37525573878)
+ejecutó PostgreSQL y SQL Server.
 
 ## Herramienta de certificados
 

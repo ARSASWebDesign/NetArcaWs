@@ -170,6 +170,9 @@ public static class WikiMirror
         "docs/reference/operations/padrona5.md" => "Padrón-A5-Referencia-de-operaciones",
         "docs/reference/operations/padrona10.md" => "Padrón-A10-Referencia-de-operaciones",
         "docs/reference/operations/padrona13.md" => "Padrón-A13-Referencia-de-operaciones",
+        "src/NetArcaWs.EntityFrameworkCore.MySql/README.md" => "MySQL-MariaDB-EF-Core",
+        "src/NetArcaWs.EntityFrameworkCore.PostgreSql/README.md" => "PostgreSQL-EF-Core",
+        "src/NetArcaWs.EntityFrameworkCore.SqlServer/README.md" => "SQL-Server-EF-Core",
         _ => LegacyPageName(root, source)
     };
 

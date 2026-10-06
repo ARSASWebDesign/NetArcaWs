@@ -49,4 +49,16 @@ public sealed class PersistenceSchemaTests
             Directory.Delete(root, recursive: true);
         }
     }
+
+    [Fact]
+    public void GeneratedDdlPreservesOptionalModelConstraintsAndProviderNullSemantics()
+    {
+        IReadOnlyDictionary<string, string> scripts = PersistenceSchema.GenerateScripts();
+
+        scripts.Values.Should().OnlyContain(script => !script.Contains("FOREIGN KEY", StringComparison.OrdinalIgnoreCase));
+        scripts.Values.Should().OnlyContain(script => !script.Contains("CHECK (", StringComparison.OrdinalIgnoreCase));
+        scripts["sqlserver/all.sql"].Should().Contain("WHERE [RemoteHash] IS NOT NULL");
+        foreach (string provider in new[] { "sqlite", "mysql", "mariadb", "postgresql" })
+            scripts[$"{provider}/all.sql"].Should().Contain("RemoteHash").And.NotContain("WHERE");
+    }
 }

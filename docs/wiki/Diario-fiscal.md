@@ -212,10 +212,12 @@ registre `IWsaaTicketProtector` con claves administradas fuera de la base de
 datos; ver el [ADR 0006](../adr/0006-shared-wsaa-tickets.md).
 
 La suite normal usa motores y datos sintéticos; los tests opt-in aprobaron 5/5
-con MySQL 8.4.11, 5/5 con MariaDB 11.4.13 y 13/13 con PostgreSQL 17.6,
-incluidos casos entre procesos. Esa evidencia cubre esas versiones y escenarios,
-no cualquier engine ni homologación con ARCA. El job SQL Server Developer para
-runner x64 está configurado, pero su primera ejecución real sigue pendiente.
+con MySQL 8.4.11, 5/5 con MariaDB 11.4.13, 13/13 con PostgreSQL 17.6 y 13/13
+con SQL Server Developer 16.0.4295.3, incluidos casos entre procesos. Son
+versiones y escenarios concretos; no demuestran compatibilidad universal ni
+homologación con ARCA. PostgreSQL y SQL Server corrieron en el
+[job público de CI](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37525573878)
+en runner x64.
 
 El comportamiento es conservador, no exactamente una vez: una caída externa,
 una operación realizada fuera del diario, pérdida de storage o datos remotos no

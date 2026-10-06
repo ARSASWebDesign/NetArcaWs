@@ -1,8 +1,8 @@
 <!-- Source: docs/adr/0005-ef-core-invoice-journal.md. Generated wiki mirror; edit the repository source. -->
 
-# ADR 0005: Persistencia EF Core opt-in para el diario fiscal
+# ADR 0005: Persistencia EF Core opt-in para diario fiscal y tickets WSAA
 
-- Estado: Aceptado; implementación y pruebas locales completadas
+- Estado: Aceptado; MySQL/MariaDB/PostgreSQL/SQL Server verificados en engines reales, con evidencia acotada por versión
 - Fecha: 2026-10-06
 - Complementa: [reintentos seguros](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros) y [contexto multitenant](Decisi%C3%B3n-2-Contexto-multitenant)
 
@@ -22,7 +22,12 @@ dependen de Entity Framework Core. `NetArcaWs.EntityFrameworkCore` proporciona
 las entidades, el diario y el almacenamiento compartido de tickets WSAA;
 `NetArcaWs.EntityFrameworkCore.MySql` agrega un registro para el proveedor
 Microting compatible con EF Core 10. La aplicación pasa la versión exacta del
-servidor MySQL/MariaDB, sin autodetección.
+servidor MySQL/MariaDB, sin autodetección. Los paquetes opcionales
+`NetArcaWs.EntityFrameworkCore.PostgreSql` (Npgsql EF provider) y
+`NetArcaWs.EntityFrameworkCore.SqlServer` agregan los providers PostgreSQL y
+SQL Server. Todos dejan la conexión y las migraciones bajo control del
+consumidor. El paquete core y el paquete EF base no dependen de providers de
+base de datos.
 
 La selección de capacidades y servicios se realiza una vez mediante
 `NetArcaWsModelOptions`. Puede habilitar el diario para WSFEv1, WSFEXv1 y/o
@@ -67,7 +72,10 @@ services.AddNetArcaWsMySqlStores(
 `MariaDbServerVersion` se usa cuando la base es MariaDB. El helper registra
 `ArcaWsDbContext`, la factoría y los stores con las opciones exactas; no abre
 conexiones, crea esquema ni aplica migraciones. No agrega una estrategia de
-reintentos EF ni reintentos SOAP.
+reintentos EF ni reintentos SOAP. Los helpers PostgreSQL y SQL Server usan
+`AddNetArcaWsPostgreSqlStores(connectionString, modelOptions)` y
+`AddNetArcaWsSqlServerStores(connectionString, modelOptions)`, respectivamente;
+tampoco autodetectan la versión ni conectan al registrar.
 Para un contexto EF existente, registrar el proveedor en la aplicación y usar
 `AddNetArcaWsEntityFrameworkStores<TContext>`.
 
@@ -87,12 +95,19 @@ incluyen lotes durables, WSFECred, WSCPE ni asignación automática de números.
 ## Consecuencias y límites
 
 - Se puede seguir usando solo el paquete principal, SQLite o una implementación
-  propia de `IInvoiceJournal`; EF y el proveedor MySQL son opt-in.
+  propia de `IInvoiceJournal`; EF y los providers MySQL/MariaDB, PostgreSQL y SQL
+  Server son opt-in.
 - La aplicación controla proveedor, claves de conexión, migraciones, despliegue,
   backups, retención y protección de los datos fiscales guardados.
 - Seleccionar solo tickets o solo facturación crea únicamente las tablas del
   módulo elegido; seleccionar ambos agrega ambas familias de tablas al mismo
   contexto.
+- El [modelo relacional](Modelo-relacional) describe las cuatro
+  tablas y contiene 15 scripts SQL generados desde el modelo EF para SQLite,
+  MySQL, MariaDB, PostgreSQL y SQL Server, con selecciones de facturación,
+  tickets y ambas capacidades. No convierte el diario SQLite nativo ni aplica
+  el DDL automáticamente. Las relaciones actuales son lógicas por hashes; no
+  hay FKs físicas, cascadas ni restricciones CHECK de enums.
 - Los tests sintéticos verifican código y persistencia local; no prueban ARCA.
   Los tests con engines MySQL/MariaDB reportan por separado las versiones de
   motor que hayan ejecutado; no se declara compatibilidad universal por usar un
@@ -100,6 +115,12 @@ incluyen lotes durables, WSFECred, WSCPE ni asignación automática de números.
 - El 2026-10-06 se aprobaron 5/5 tests de integración con MySQL 8.4.11 y 5/5
   con MariaDB 11.4.13, incluidos casos entre procesos. Esa evidencia cubre
   esas versiones y esos escenarios concretos; no es una matriz universal de
+  motores ni homologación fiscal.
+- El 2026-10-06 el suite compartido aprobó 13/13 casos contra PostgreSQL 17.6,
+  incluidos procesos independientes y tickets compartidos/reinicio. CI dispone
+  de un job x64 con SQL Server Developer. La ejecución 37525573878 aprobó
+  13/13 casos contra ProductVersion 16.0.4295.3. Los resultados cubren las
+  versiones concretas y escenarios ejecutados, no una matriz universal de
   motores ni homologación fiscal.
 - El almacenamiento compartido puede servir a varias réplicas, pero las
   propiedades transaccionales, bloqueos e índices de cada engine deben verificarse

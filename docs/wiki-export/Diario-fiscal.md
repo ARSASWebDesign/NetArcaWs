@@ -199,18 +199,27 @@ services.AddNetArcaWsMySqlStores(
     modelOptions);
 ```
 
-Para MariaDB se usa `MariaDbServerVersion`. El helper configura el contexto
-dedicado y los stores, pero no conecta, migra, crea tablas ni agrega estrategia
-de reintentos EF o reintentos SOAP. Ambos paquetes opcionales están en versión 0.5.0 y aún no se publicaron
-en NuGet; consultar el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19)
-para su estado de entrega. El cifrado de tickets requiere que la aplicación
+Para MariaDB se usa `MariaDbServerVersion`. Los paquetes
+`NetArcaWs.EntityFrameworkCore.PostgreSql` y
+`NetArcaWs.EntityFrameworkCore.SqlServer` exponen
+`AddNetArcaWsPostgreSqlStores(connectionString, modelOptions)` y
+`AddNetArcaWsSqlServerStores(connectionString, modelOptions)`. Cada helper
+configura el contexto dedicado y los stores, pero no conecta, migra, crea tablas
+ni agrega estrategia de reintentos EF o reintentos SOAP. Los cuatro paquetes
+opcionales de persistencia están en versión 0.5.0 y aún no se publicaron en
+NuGet; consultar el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19)
+para su estado de entrega. El [modelo relacional](Modelo-relacional) contiene
+el diccionario de columnas y los scripts DDL por proveedor. El cifrado de tickets requiere que la aplicación
 registre `IWsaaTicketProtector` con claves administradas fuera de la base de
 datos; ver el [ADR 0006](ADR-0006-shared-wsaa-tickets).
 
 La suite normal usa motores y datos sintéticos; los tests opt-in aprobaron 5/5
-con MySQL 8.4.11 y 5/5 con MariaDB 11.4.13, incluidos casos entre procesos.
-Esa evidencia cubre esas versiones y escenarios, no cualquier engine
-ni homologación con ARCA.
+con MySQL 8.4.11, 5/5 con MariaDB 11.4.13, 13/13 con PostgreSQL 17.6 y 13/13
+con SQL Server Developer 16.0.4295.3, incluidos casos entre procesos. Son
+versiones y escenarios concretos; no demuestran compatibilidad universal ni
+homologación con ARCA. PostgreSQL y SQL Server corrieron en el
+[job público de CI](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37525573878)
+en runner x64.
 
 El comportamiento es conservador, no exactamente una vez: una caída externa,
 una operación realizada fuera del diario, pérdida de storage o datos remotos no

@@ -247,9 +247,12 @@ la [guía del diario](docs/wiki/Diario-fiscal.md) y el [modelo relacional](docs/
 La implementación de providers no equivale a homologación fiscal; el issue #19
 mantiene las capacidades restantes del backlog.
 
-La suite del proveedor aprobó 5/5 pruebas con MySQL 8.4.11 y 5/5 con MariaDB
-11.4.13, incluidos casos de concurrencia entre procesos. Son versiones concretas de prueba; no se
-afirma compatibilidad con cualquier versión de ambos motores.
+Los suites reales aprobaron MySQL 8.4.11 (5/5), MariaDB 11.4.13 (5/5),
+PostgreSQL 17.6 (13/13) y SQL Server Developer 16.0.4295.3 (13/13), con casos
+de concurrencia entre procesos. Son resultados por versión y escenario, no una
+garantía universal de compatibilidad ni validación ante ARCA. El
+[job x64 de CI](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37525573878)
+ejecutó PostgreSQL y SQL Server.
 
 ## Herramienta de certificados
 
