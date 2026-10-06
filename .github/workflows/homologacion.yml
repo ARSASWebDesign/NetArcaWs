@@ -1,0 +1,39 @@
+name: Homologación WSFE
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homologacion-wsfe
+  cancel-in-progress: false
+
+jobs:
+  wsfe:
+    if: github.repository == 'ARSASWebDesign/NetArcaWs' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: homologacion
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+      - name: Restore and build without certificate credentials
+        run: |
+          dotnet restore tests/NetArcaWs.IntegrationTests/NetArcaWs.IntegrationTests.csproj --locked-mode
+          dotnet build tests/NetArcaWs.IntegrationTests/NetArcaWs.IntegrationTests.csproj --configuration Release --no-restore
+      - name: Authenticate and query WSFE homologation
+        env:
+          HOMO_CERTIFICATE_PEM: ${{ secrets.WSAA_CERTIFICATE_PEM }}
+          HOMO_PRIVATE_KEY_PEM: ${{ secrets.WSAA_PRIVATE_KEY_PEM }}
+          WSAA_KEY_PASSWORD: ${{ secrets.WSAA_KEY_PASSWORD }}
+          ARCA_CUIT: ${{ secrets.ARCA_CUIT }}
+          WSAA_SERVICE: ${{ vars.WSAA_SERVICE }}
+          ARCA_HOMOLOGY_SERVICES: ${{ vars.ARCA_HOMOLOGY_SERVICES }}
+        run: bash scripts/run-homologacion.sh
