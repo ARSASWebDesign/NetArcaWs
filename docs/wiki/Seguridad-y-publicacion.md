@@ -13,6 +13,7 @@ para subir paquetes a NuGet.
 | Una aprobación de CODEOWNER, distinta de quien hizo el último push | Un colaborador no puede aprobar su propio último cambio. Los tres administradores están declarados en `.github/CODEOWNERS`. |
 | Invalidación de aprobaciones ante cambios y conversaciones resueltas | Una aprobación anterior no cubre código agregado después. |
 | Checks obligatorios y rama actualizada | `verify`, `CodeQL analysis` y `Dependency review` deben aprobarse. Se vinculan a la aplicación GitHub Actions, no a estados publicados por cualquier integración. |
+| Resultados de CodeQL obligatorios | Los resultados deben estar disponibles para la PR; alertas de seguridad altas/críticas y errores de análisis bloquean la integración. |
 | Prohibición de borrar `main` y de force push | Evita reemplazar su historia mediante push. |
 | Creación restringida de tags `v*` | Solo los tres administradores designados pueden crear tags de release. Un permiso de escritura ordinario no alcanza. |
 | Tags `v*` inmutables | Una regla separada impide modificar o borrar tags; no tiene excepciones de administradores. Una corrección requiere otra versión. |
@@ -23,6 +24,7 @@ para subir paquetes a NuGet.
 Las reglas son configuración externa de GitHub: copiar los YAML a un fork no
 las activa. Los mantenedores deben comprobarlas en
 [Rules](https://github.com/ARSASWebDesign/NetArcaWs/rules) y en Settings.
+Las reglas publicadas son [main](https://github.com/ARSASWebDesign/NetArcaWs/rules/24588965), [creación de tags](https://github.com/ARSASWebDesign/NetArcaWs/rules/24588801) e [inmutabilidad de tags](https://github.com/ARSASWebDesign/NetArcaWs/rules/24588803).
 Los cambios administrativos a esas reglas requieren vigilancia y revisión del
 registro de auditoría de la organización.
 
