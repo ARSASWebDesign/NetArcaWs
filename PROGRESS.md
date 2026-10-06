@@ -1,5 +1,7 @@
 # Progreso de NetArcaWs
 
+- [x] Auditar los 33 issues y 21 PR abiertos de PyAfipWs contra el código actual; [hallazgos y propuestas](docs/wiki/Revision-de-issues-y-PR-de-PyAfipWs.md). Las mejoras propuestas no se consideran implementadas.
+
 - [x] Automatizaciones de wiki, contratos y releases migradas a `NetArcaWs.Build` (.NET 10), sin scripts Python.
 
 - [x] Seguridad: revisión CODEOWNER/CI, análisis CodeQL y dependencias, protección de secretos, tags inmutables y publicación automática OIDC aislada del código de compilación.

@@ -33,6 +33,8 @@ PyAfipWs ni homologación fiscal de una instalación.
 
 - [Seguridad y publicación](Seguridad-y-publicacion) — protecciones, revisión y respuesta a incidentes.
 
+- [Revisión de issues y PR de PyAfipWs](Revision-de-issues-y-PR-de-PyAfipWs) — aplicabilidad, evidencia y mejoras priorizadas.
+
 ## Referencias
 
 - [Inventario de PyAfipWs](Inventario-del-proyecto-original) — fuentes investigadas y alcance que sigue fuera del port.
