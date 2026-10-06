@@ -4,8 +4,11 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace NetArcaWs.EntityFrameworkCore.Migrations;
 
-public sealed class NetArcaWsMigrator(INetArcaWsMigrationContextFactory contextFactory, IReadOnlyList<NetArcaWsPersistenceModule> modules) : INetArcaWsMigrator
+public sealed class NetArcaWsMigrator : INetArcaWsMigrator
 {
+    private readonly INetArcaWsMigrationContextFactory contextFactory;
+    private readonly IReadOnlyList<NetArcaWsPersistenceModule> modules;
+
     private static readonly IReadOnlyDictionary<NetArcaWsPersistenceModule, string[]> OwnedTables = new Dictionary<NetArcaWsPersistenceModule, string[]>
     {
         [NetArcaWsPersistenceModule.Invoicing] = ["NetArcaInvoices", "NetArcaInvoiceRevisions", "NetArcaInvoiceSeriesReservations"],
@@ -16,6 +19,23 @@ public sealed class NetArcaWsMigrator(INetArcaWsMigrationContextFactory contextF
         [NetArcaWsPersistenceModule.Invoicing] = "__NetArcaWsInvoiceMigrations",
         [NetArcaWsPersistenceModule.WsaaTickets] = "__NetArcaWsTicketMigrations"
     };
+
+    public NetArcaWsMigrator(INetArcaWsMigrationContextFactory contextFactory, IReadOnlyList<NetArcaWsPersistenceModule> modules)
+    {
+        ArgumentNullException.ThrowIfNull(contextFactory);
+        ArgumentNullException.ThrowIfNull(modules);
+        var selection = new HashSet<NetArcaWsPersistenceModule>();
+        foreach (NetArcaWsPersistenceModule module in modules)
+        {
+            if (!Enum.IsDefined(module))
+                throw new ArgumentOutOfRangeException(nameof(modules), module, "The migration module is undefined.");
+            if (!selection.Add(module))
+                throw new ArgumentException($"The migration module '{module}' was selected more than once.", nameof(modules));
+        }
+
+        this.contextFactory = contextFactory;
+        this.modules = Array.AsReadOnly(selection.Order().ToArray());
+    }
 
     public async Task<NetArcaWsMigrationStatus> GetStatusAsync(CancellationToken cancellationToken = default)
     {

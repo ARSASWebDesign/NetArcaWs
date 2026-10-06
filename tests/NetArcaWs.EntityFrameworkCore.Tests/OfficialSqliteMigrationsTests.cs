@@ -161,6 +161,31 @@ public sealed class OfficialSqliteMigrationsTests
     }
 
     [Fact]
+    public async Task MigratorCopiesAndCanonicalizesModuleSelection()
+    {
+        var selected = new List<NetArcaWsPersistenceModule>
+        {
+            NetArcaWsPersistenceModule.WsaaTickets,
+            NetArcaWsPersistenceModule.Invoicing
+        };
+        var migrator = new NetArcaWsMigrator(new SqliteMigrationContextFactory("Data Source=:memory:"), selected);
+        selected.Clear();
+
+        NetArcaWsMigrationStatus status = await migrator.GetStatusAsync(TestContext.Current.CancellationToken);
+        status.Modules.Select(x => x.Module).Should().Equal(NetArcaWsPersistenceModule.Invoicing, NetArcaWsPersistenceModule.WsaaTickets);
+    }
+
+    [Fact]
+    public void MigratorRejectsInvalidOrDuplicateModules()
+    {
+        var factory = new SqliteMigrationContextFactory("Data Source=:memory:");
+        Action invalid = () => new NetArcaWsMigrator(factory, [(NetArcaWsPersistenceModule)999]);
+        Action duplicate = () => new NetArcaWsMigrator(factory, [NetArcaWsPersistenceModule.Invoicing, NetArcaWsPersistenceModule.Invoicing]);
+        invalid.Should().Throw<ArgumentException>();
+        duplicate.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void ServiceSelectionDoesNotChangeMigrationModel()
     {
         using var one = new SqliteInvoicingMigrationsDbContext(new DbContextOptionsBuilder<SqliteInvoicingMigrationsDbContext>().UseSqlite("Data Source=:memory:").Options);
