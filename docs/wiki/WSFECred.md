@@ -37,20 +37,10 @@ servicio WSAA `wsfecred`, endpoint separado por ambiente, y reciben el
 `ArcaTenantContext` por llamada. La aplicación debe autorizar al tenant y
 resolver CUIT representada, ambiente y certificado antes de invocar.
 
-```csharp
-using Microsoft.Extensions.DependencyInjection;
-using NetArcaWs.Contracts.WsfeCred;
-using NetArcaWs.Services;
-
-var fecred = provider.GetRequiredService<IWsfecredService>();
-var request = new ConsultarTiposRetencionesRequest();
-var response = await fecred.consultarTiposRetencionesAsync(
-    tenant, request, cancellationToken);
-```
-
-El fragmento muestra el patrón de DI y contexto tenant. Los campos y
-cardinalidades se deben revisar en la referencia generada y en el manual vigente;
-no es un payload listo para enviar.
+El ejemplo compilable de consulta está en
+[GuideExamples.ReadCreditRetentionTypesAsync](../../examples/NetArcaWs.Examples/GuideExamples.cs#L31).
+El host debe proporcionar un `ArcaTenantContext` autorizado y un
+`CancellationToken`.
 
 La biblioteca transporta los tipos del contrato, pero no decide si una empresa
 está alcanzada por el régimen, calcula plazos, interpreta elegibilidad, ni

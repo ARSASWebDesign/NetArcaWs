@@ -29,20 +29,10 @@ interpretarse con la respuesta del contrato y no como un fallo de transporte.
 el tenant y obtener la CUIT representada, el ambiente y el certificado de una
 fuente confiable antes de llamar.
 
-```csharp
-using Microsoft.Extensions.DependencyInjection;
-using NetArcaWs.Contracts.Wscdc;
-using NetArcaWs.Services;
-
-var wscdc = provider.GetRequiredService<IWscdcService>();
-var request = new ComprobantesModalidadConsultar(); // El cliente agrega Auth con el ticket de tenant.
-var modalidades = await wscdc.ComprobantesModalidadConsultarAsync(
-    tenant, request, cancellationToken);
-```
-
-Los nombres y tipos definitivos se pueden consultar en la interfaz y la
-referencia SOAP generada; el fragmento ilustra el patrón de uso, no un ejemplo
-fiscal validado.
+El ejemplo compilable de consulta está en
+[GuideExamples.ReadVerificationModesAsync](../../examples/NetArcaWs.Examples/GuideExamples.cs#L25).
+El host debe proporcionar un `ArcaTenantContext` autorizado y un
+`CancellationToken`.
 
 ## Health checks y límites
 
