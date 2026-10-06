@@ -120,6 +120,9 @@ public sealed class OfficialServerMigrationTests
         var disabled = NetArcaWsModelOptions.Configure(_ => { });
         (await database.ApplyOfficialMigrationsAsync(disabled, cancellationToken)).Modules.Should().BeEmpty();
         await PersistFixtureAsync(database, selected.Kind, invoicingFirst, cancellationToken);
+        InvoiceStoreSnapshot? invoiceBefore = invoicingFirst
+            ? await CaptureInvoiceStoreAsync(database, selected.Kind, "migration-lifecycle", "invoice-fixture", cancellationToken)
+            : null;
 
         NetArcaWsMigrationStatus added = await database.ApplyOfficialMigrationsAsync(secondOptions, cancellationToken);
         added.Modules.Should().ContainSingle().Which.State.Should().Be(NetArcaWsMigrationState.Current);
@@ -131,9 +134,15 @@ public sealed class OfficialServerMigrationTests
         if (invoicingFirst)
         {
             IInvoiceJournal journal = database.Services.GetRequiredService<IInvoiceJournal>();
-            (await journal.FindAsync("migration-lifecycle", "invoice-fixture", cancellationToken))!.Submission.Payload.Should().Be("<synthetic>revision</synthetic>");
+            InvoiceOperation current = (await journal.FindAsync("migration-lifecycle", "invoice-fixture", cancellationToken))!;
+            current.Submission.Payload.Should().Be("<synthetic>revision</synthetic>");
+            current.State.Should().Be(InvoiceState.Prepared);
             (await journal.ListRevisionsAsync("migration-lifecycle", "invoice-fixture", cancellationToken))
                 .Should().ContainSingle().Which.Submission.Payload.Should().Be("<synthetic>preserved</synthetic>");
+            InvoiceStoreSnapshot after = await CaptureInvoiceStoreAsync(database, selected.Kind, "migration-lifecycle", "invoice-fixture", cancellationToken);
+            after.Should().BeEquivalentTo(invoiceBefore);
+            after.Revisions.Should().ContainSingle();
+            after.Reservations.Should().ContainSingle();
         }
         else
         {
@@ -141,6 +150,54 @@ public sealed class OfficialServerMigrationTests
             savedCiphertext.Should().Equal([11, 22, 33, 44, 55]);
         }
     }
+
+    private static async Task<InvoiceStoreSnapshot> CaptureInvoiceStoreAsync(ServerTestDatabase database, string kind,
+        string tenant, string key, CancellationToken cancellationToken)
+    {
+        await using ArcaWsDbContext context = await database.Services.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>()
+            .CreateDbContextAsync(cancellationToken);
+        await context.Database.OpenConnectionAsync(cancellationToken);
+        string invoiceTable = kind == "sqlserver" ? "[dbo].[NetArcaInvoices]" : "\"NetArcaInvoices\"";
+        string revisionTable = kind == "sqlserver" ? "[dbo].[NetArcaInvoiceRevisions]" : "\"NetArcaInvoiceRevisions\"";
+        string reservationTable = kind == "sqlserver" ? "[dbo].[NetArcaInvoiceSeriesReservations]" : "\"NetArcaInvoiceSeriesReservations\"";
+        string column(string name) => kind == "sqlserver" ? $"[{name}]" : $"\"{name}\"";
+        string[] current = await ReadRowAsync(context,
+            $"SELECT {string.Join(", ", new[] { "TenantHash", "KeyHash", "FiscalHash", "PayloadHash", "Payload", "CanonicalVersion", "State", "Version", "Attempt" }.Select(column))} FROM {invoiceTable} WHERE {column("TenantId")} = @tenant AND {column("IdempotencyKey")} = @key",
+            cancellationToken, ("@tenant", tenant), ("@key", key));
+        string[][] revisions = await ReadRowsAsync(context,
+            $"SELECT {string.Join(", ", new[] { "RevisionNumber", "TenantHash", "KeyHash", "Payload", "PayloadHash", "SnapshotHash", "CanonicalVersion", "State", "Version", "Attempt" }.Select(column))} FROM {revisionTable} WHERE {column("TenantHash")} = @tenantHash AND {column("KeyHash")} = @keyHash ORDER BY {column("RevisionNumber")}",
+            cancellationToken, ("@tenantHash", current[0]), ("@keyHash", current[1]));
+        string[][] reservations = await ReadRowsAsync(context,
+            $"SELECT {string.Join(", ", new[] { "SeriesHash", "TenantHash", "KeyHash" }.Select(column))} FROM {reservationTable} WHERE {column("TenantHash")} = @tenantHash AND {column("KeyHash")} = @keyHash ORDER BY {column("SeriesHash")}",
+            cancellationToken, ("@tenantHash", current[0]), ("@keyHash", current[1]));
+        return new InvoiceStoreSnapshot(current, revisions, reservations);
+    }
+
+    private static async Task<string[]> ReadRowAsync(DbContext context, string sql, CancellationToken cancellationToken,
+        params (string Name, object Value)[] parameters)
+    {
+        string[][] rows = await ReadRowsCoreAsync(context, sql, cancellationToken, parameters);
+        rows.Should().ContainSingle();
+        return rows[0];
+    }
+
+    private static async Task<string[][]> ReadRowsAsync(DbContext context, string sql, CancellationToken cancellationToken,
+        params (string Name, object Value)[] parameters) => await ReadRowsCoreAsync(context, sql, cancellationToken, parameters);
+
+    private static async Task<string[][]> ReadRowsCoreAsync(DbContext context, string sql, CancellationToken cancellationToken,
+        (string Name, object Value)[] parameters)
+    {
+        await using DbCommand command = context.Database.GetDbConnection().CreateCommand();
+        command.CommandText = sql;
+        foreach ((string name, object value) in parameters) AddParameter(command, name, value);
+        await using DbDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        var rows = new List<string[]>();
+        while (await reader.ReadAsync(cancellationToken))
+            rows.Add(Enumerable.Range(0, reader.FieldCount).Select(index => Convert.ToString(reader.GetValue(index), System.Globalization.CultureInfo.InvariantCulture) ?? "").ToArray());
+        return [.. rows];
+    }
+
+    private sealed record InvoiceStoreSnapshot(string[] Current, string[][] Revisions, string[][] Reservations);
 
     private static async Task PersistFixtureAsync(ServerTestDatabase database, string kind, bool invoicingFirst, CancellationToken cancellationToken)
     {

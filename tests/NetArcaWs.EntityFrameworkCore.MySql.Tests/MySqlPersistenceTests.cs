@@ -59,6 +59,10 @@ public sealed class MySqlPersistenceTests
             await ExecuteTicketFixtureAsync(database, cancellationToken);
         }
 
+        InvoiceStoreSnapshot? invoiceBefore = invoicingFirst
+            ? await CaptureInvoiceStoreAsync(database, "mysql-migration-lifecycle", "invoice-fixture", cancellationToken)
+            : null;
+
         (await database.ApplyOfficialMigrationsAsync(secondOptions, cancellationToken)).Modules.Should().ContainSingle().Which.State.Should().Be(NetArcaWsMigrationState.Current);
         NetArcaWsMigrationStatus allCurrent = await database.ApplyOfficialMigrationsAsync(allOptions, cancellationToken);
         allCurrent.Modules.Should().HaveCount(2).And.OnlyContain(module => module.State == NetArcaWsMigrationState.Current);
@@ -68,15 +72,62 @@ public sealed class MySqlPersistenceTests
         if (invoicingFirst)
         {
             IInvoiceJournal journal = database.Services.GetRequiredService<IInvoiceJournal>();
-            (await journal.FindAsync("mysql-migration-lifecycle", "invoice-fixture", cancellationToken))!.Submission.Payload.Should().Be("<synthetic>revision</synthetic>");
-            (await journal.ListRevisionsAsync("mysql-migration-lifecycle", "invoice-fixture", cancellationToken))
-                .Should().ContainSingle().Which.Submission.Payload.Should().Be("<synthetic>preserved</synthetic>");
+            InvoiceOperation current = (await journal.FindAsync("mysql-migration-lifecycle", "invoice-fixture", cancellationToken))!;
+            current.Submission.Payload.Should().Be("<synthetic>revision</synthetic>");
+            current.State.Should().Be(InvoiceState.Prepared);
+            var revisions = await journal.ListRevisionsAsync("mysql-migration-lifecycle", "invoice-fixture", cancellationToken);
+            revisions.Should().ContainSingle().Which.Submission.Payload.Should().Be("<synthetic>preserved</synthetic>");
+            InvoiceStoreSnapshot after = await CaptureInvoiceStoreAsync(database, "mysql-migration-lifecycle", "invoice-fixture", cancellationToken);
+            after.Should().BeEquivalentTo(invoiceBefore);
+            after.Revisions.Should().ContainSingle();
+            after.Reservations.Should().ContainSingle();
         }
         else
         {
             (await ReadTicketFixtureAsync(database, cancellationToken)).Should().Equal([11, 22, 33, 44, 55]);
         }
     }
+
+    private static async Task<InvoiceStoreSnapshot> CaptureInvoiceStoreAsync(MySqlTestDatabase database, string tenant, string key,
+        CancellationToken cancellationToken)
+    {
+        await using ArcaWsDbContext context = await database.Services.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>()
+            .CreateDbContextAsync(cancellationToken);
+        await context.Database.OpenConnectionAsync(cancellationToken);
+        string[] current = await ReadRowAsync(context, "SELECT `TenantHash`, `KeyHash`, `FiscalHash`, `PayloadHash`, `Payload`, `CanonicalVersion`, `State`, `Version`, `Attempt` FROM `NetArcaInvoices` WHERE `TenantId` = @tenant AND `IdempotencyKey` = @key",
+            cancellationToken, ("@tenant", tenant), ("@key", key));
+        string[][] revisions = await ReadRowsAsync(context, "SELECT `RevisionNumber`, `TenantHash`, `KeyHash`, `Payload`, `PayloadHash`, `SnapshotHash`, `CanonicalVersion`, `State`, `Version`, `Attempt` FROM `NetArcaInvoiceRevisions` WHERE `TenantHash` = @tenantHash AND `KeyHash` = @keyHash ORDER BY `RevisionNumber`",
+            cancellationToken, ("@tenantHash", current[0]), ("@keyHash", current[1]));
+        string[][] reservations = await ReadRowsAsync(context, "SELECT `SeriesHash`, `TenantHash`, `KeyHash` FROM `NetArcaInvoiceSeriesReservations` WHERE `TenantHash` = @tenantHash AND `KeyHash` = @keyHash ORDER BY `SeriesHash`",
+            cancellationToken, ("@tenantHash", current[0]), ("@keyHash", current[1]));
+        return new InvoiceStoreSnapshot(current, revisions, reservations);
+    }
+
+    private static async Task<string[]> ReadRowAsync(DbContext context, string sql, CancellationToken cancellationToken,
+        params (string Name, object Value)[] parameters)
+    {
+        string[][] rows = await ReadRowsCoreAsync(context, sql, cancellationToken, parameters);
+        rows.Should().ContainSingle();
+        return rows[0];
+    }
+
+    private static async Task<string[][]> ReadRowsAsync(DbContext context, string sql, CancellationToken cancellationToken,
+        params (string Name, object Value)[] parameters) => await ReadRowsCoreAsync(context, sql, cancellationToken, parameters);
+
+    private static async Task<string[][]> ReadRowsCoreAsync(DbContext context, string sql, CancellationToken cancellationToken,
+        (string Name, object Value)[] parameters)
+    {
+        await using DbCommand command = context.Database.GetDbConnection().CreateCommand();
+        command.CommandText = sql;
+        foreach ((string name, object value) in parameters) AddParameter(command, name, value);
+        await using DbDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        var rows = new List<string[]>();
+        while (await reader.ReadAsync(cancellationToken))
+            rows.Add(Enumerable.Range(0, reader.FieldCount).Select(index => Convert.ToString(reader.GetValue(index), System.Globalization.CultureInfo.InvariantCulture) ?? "").ToArray());
+        return [.. rows];
+    }
+
+    private sealed record InvoiceStoreSnapshot(string[] Current, string[][] Revisions, string[][] Reservations);
 
     private static NetArcaWsModelOptions MigrationOptions(params NetArcaWsPersistenceModule[] modules) => NetArcaWsModelOptions.Configure(builder =>
     {
