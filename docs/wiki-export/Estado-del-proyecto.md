@@ -2,6 +2,8 @@
 
 # Progreso de NetArcaWs
 
+- [x] Automatizaciones de wiki, contratos y releases migradas a `NetArcaWs.Build` (.NET 10), sin scripts Python.
+
 - [x] Plantillas de issues/PR y guía CONTRIBUTING para forks.
 - [x] Workflow de releases de biblioteca y tool con ensayo manual sin publicación.
 - [x] Configurar Trusted Publishing y publicar `NetArcaWs` y `NetArcaWs.Tool` 0.5.0 en NuGet.
@@ -24,7 +26,7 @@
 - [ ] Hito 7 (final): completar la revisión exhaustiva upstream y las guías/ejemplos por operación; [criterios de cierre](Plan-hito-7-wiki).
 
 La build Release terminó con 0 warnings y 0 errors. La suite completa tuvo
-201 casos: 198 aprobados y 3 omitidos. Se verificaron los QName y SOAPAction de
+222 casos: 219 aprobados y 3 omitidos. Se verificaron los QName y SOAPAction de
 81 operaciones contra WSDL y 166 tipos raíz XML en round-trip. Los 22 tipos de
 contrato con campos `DateTime` (`xs:date`/`xs:dateTime`) conservaron sus valores.
 

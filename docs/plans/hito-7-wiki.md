@@ -19,7 +19,7 @@ el wiki incluirá su contenido y procedencia, sin crear dos versiones editadas
 independientemente. Definir y verificar un mecanismo reproducible de publicación
 para que fuentes y wiki correspondan al mismo commit.
 
-El espejo plano local se genera con `python3 scripts/build-wiki-mirror.py` en
+El espejo plano local se genera con `dotnet run --project tools/NetArcaWs.Build -- wiki` en
 `docs/wiki-export/`; contiene 29 páginas de contenido más barra lateral y
 manifiesto. Incluye las páginas temáticas y copia README, arquitectura, progreso,
 ADR, guía de contribución, releases, CLI y referencias, convirtiendo enlaces
@@ -108,7 +108,7 @@ wiki integral.
 ## Reproducir la publicación
 
 1. Desde una revisión limpia del repositorio principal, ejecutar
-   `python3 scripts/build-wiki-mirror.py`; el generador valida destinos internos.
+   `dotnet run --project tools/NetArcaWs.Build -- wiki`; el generador valida destinos internos.
    Revisar y confirmar las fuentes y el mirror antes de continuar.
 2. Clonar `git@github.com:ARSASWebDesign/NetArcaWs.wiki.git` en una carpeta
    externa al repositorio principal. Actualizar su rama antes de cada publicación.

@@ -17,10 +17,10 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           global-json-file: global.json
+      - run: dotnet restore NetArcaWs.slnx --locked-mode
       - name: Validate package versions
         id: version
-        run: python3 scripts/release-version.py
-      - run: dotnet restore NetArcaWs.slnx --locked-mode
+        run: dotnet run --project tools/NetArcaWs.Build --configuration Release --no-restore -- release-version
       - run: dotnet build NetArcaWs.slnx --configuration Release --no-restore
       - run: dotnet test --solution NetArcaWs.slnx --configuration Release --no-build --no-restore
       - run: dotnet pack src/NetArcaWs/NetArcaWs.csproj --configuration Release --no-build --no-restore --output artifacts
@@ -29,5 +29,5 @@ jobs:
         env:
           PACKAGE_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          dotnet tool install NetArcaWs.Tool --tool-path artifacts/tool-smoke --add-source artifacts --version "$PACKAGE_VERSION"
+          dotnet tool install NetArcaWs.Tool --tool-path artifacts/tool-smoke --source artifacts --version "$PACKAGE_VERSION"
           artifacts/tool-smoke/netarcaws --help

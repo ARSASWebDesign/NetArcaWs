@@ -56,6 +56,27 @@ para desarrollar, probar o revisar un cambio. Los chequeos de CI compilan,
 ejecutan las pruebas, empaquetan los proyectos y hacen una instalación de prueba
 local de la herramienta.
 
+## Herramientas de mantenimiento .NET
+
+El desarrollo, CI y las releases no requieren Python. La herramienta interna
+`tools/NetArcaWs.Build` usa .NET 10 y no se publica como paquete NuGet:
+
+```sh
+dotnet run --project tools/NetArcaWs.Build -- wiki
+dotnet run --project tools/NetArcaWs.Build -- release-version
+dotnet tool install dotnet-xscgen --tool-path artifacts/xscgen --version 3.0.1240
+dotnet run --project tools/NetArcaWs.Build -- contracts --xscgen artifacts/xscgen/xscgen
+```
+
+En Windows, usar `artifacts/xscgen/xscgen.exe`. El wrapper opcional
+`scripts/generate-contracts.sh` realiza la instalación temporal y ejecuta el
+mismo generador .NET. Revisar los cambios de contratos antes de confirmarlos.
+La wiki se genera desde los Markdown versionados; el procedimiento para
+publicarla y registrar su revisión está en [el plan de la wiki](docs/plans/hito-7-wiki.md).
+El comando interno `release-assets OWNER/REPO TAG DIRECTORY` requiere GitHub CLI
+autenticado y verifica los hashes de assets existentes antes de adjuntar los
+faltantes; no reemplaza archivos ya publicados.
+
 ## Issues y pull requests
 
 Usa los formularios de issue para reportar defectos reproducibles o explicar una

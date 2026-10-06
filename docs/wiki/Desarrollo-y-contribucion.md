@@ -17,7 +17,7 @@ sin ellas se omite. No guardar credenciales en fixtures, logs o commits y no
 ejecutar prueba productiva.
 
 Verificación registrada el 2026-10-06: build Release con 0 warnings/errores;
-suite con 201 casos (198 aprobados, 3 omitidos). Los tres omitidos corresponden
+suite con 222 casos (219 aprobados, 3 omitidos). Los tres omitidos corresponden
 a credenciales autenticadas no disponibles y a la habilitación opt-in de pruebas
 Dummy. La corrida real de QA aprobó los siete Dummies y omitió las dos pruebas
 autenticadas. NuGet aceptó e indexó ambos paquetes 0.5.0 mediante OIDC. Ver

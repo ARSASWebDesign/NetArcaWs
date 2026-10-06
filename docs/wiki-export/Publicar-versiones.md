@@ -67,7 +67,7 @@ y [requisitos de firma de autor](https://learn.microsoft.com/en-us/nuget/create-
 1. Integrar las PR en `main` con CI aprobada.
 2. Actualizar `<Version>` en ambos `.csproj` al mismo SemVer. Ajustar referencias
    de versión en documentación y la expectativa del test de `--version` del tool.
-   El workflow usa `scripts/release-version.py` para detectar discrepancias.
+   El workflow usa `NetArcaWs.Build release-version` para detectar discrepancias.
 3. Usar `X.Y.Z` para una release estable o `X.Y.Z-preview.N` para una previa.
    Los identificadores previos deben estar en minúsculas; no usar metadata `+...`.
 4. Ejecutar el workflow Release manualmente desde `main`. Revisar los tests,

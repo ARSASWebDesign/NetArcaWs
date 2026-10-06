@@ -56,7 +56,7 @@ no cambia la representación SOAP. No se usa WCF: las fachadas usan
 son la fuente reproducible para la generación, no una afirmación de compatibilidad
 con todos los cambios futuros del servicio.
 
-La build Release y la suite de Hitos 2–5 se verificaron: 201 casos, 198 aprobados
+La build Release y la suite de Hitos 2–5 se verificaron: 222 casos, 219 aprobados
 y 3 omitidos. Los 81 QName/SOAPAction se compararon con sus WSDL y 166 tipos
 raíz XML pasaron round-trip. Los 22 tipos de contrato con campos `DateTime`
 (`xs:date`/`xs:dateTime`) conservaron sus valores. En QA real hubo 9 casos:
@@ -174,7 +174,7 @@ Cripto, debido al límite de threads del entorno.
 
 La suite validada comprobó CMS y CSR con primitivas independientes de
 verificación, simuló HTTP/SOAP y controló el reloj. La suite Release final pasó
-198/201 casos (3 omitidos); build con 0 warnings y 0 errors. Los Dummies reales
+198/222 casos (3 omitidos); build con 0 warnings y 0 errors. Los Dummies reales
 en QA comprobaron disponibilidad, no autorización de negocio. La suite de
 homologación autenticada requiere certificados autorizados; compilar y pasar
 tests no demuestra aceptación fiscal. El inventario y las diferencias con Python están documentados en
