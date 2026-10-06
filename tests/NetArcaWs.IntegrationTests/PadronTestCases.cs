@@ -4,27 +4,26 @@ using Xunit.Sdk;
 
 namespace NetArcaWs.IntegrationTests;
 
-internal sealed record PadronTestCase(long Id, string PersonType, string KeyType);
+internal sealed record PadronTestCase(long Id, string PersonType, string KeyType, string? PublishedKeyType = null);
 
 /// <summary>
 /// Public A4 QA identities, sampled from ARCA's three published categories on 2026-10-06.
 /// https://www.afip.gob.ar/ws/ws_sr_padron_a4/datos-prueba-padron-a4.txt
-/// Availability on Constancia, A10 and A13 is unverified until an authenticated run.
+/// Expected types verified against all four QA services on 2026-10-06.
+/// The published CUIL sample currently returns CUIT; this does not cover a live CUIL response.
 /// These are query fixtures, never the represented CUIT or authentication credentials.
 /// </summary>
 internal static class PadronTestCases
 {
     private static readonly IReadOnlyList<PadronTestCase> All = Array.AsReadOnly<PadronTestCase>([
-        new(20002307554, "FISICA", "CUIT"),
-        new(20203032723, "FISICA", "CUIL"),
+        new(20188192514, "FISICA", "CUIT"),
+        new(20188027963, "FISICA", "CUIT", PublishedKeyType: "CUIL"),
         new(30202020204, "JURIDICA", "CUIT")
     ]);
-    private static readonly IReadOnlyList<PadronTestCase> CuitOnly = Array.AsReadOnly(All.Where(x => x.KeyType == "CUIT").ToArray());
 
     public static IReadOnlyList<PadronTestCase> ForService(string service) => service switch
     {
-        "padron-a4" or "padron-a10" or "padron-a13" => All,
-        "padron-a5" => CuitOnly,
+        "padron-a4" or "padron-a5" or "padron-a10" or "padron-a13" => All,
         _ => throw new ArgumentOutOfRangeException(nameof(service))
     };
 
@@ -62,6 +61,8 @@ internal static class PadronTestCases
         {
             token.ThrowIfCancellationRequested();
             string label = $"{service} / {fixture.PersonType} / {fixture.KeyType}";
+            if (fixture.PublishedKeyType is not null)
+                label += $" / listado {fixture.PublishedKeyType}";
             PadronFailure? failure = null;
             try
             {

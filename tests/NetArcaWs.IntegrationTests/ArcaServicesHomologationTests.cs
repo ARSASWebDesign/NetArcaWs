@@ -155,7 +155,7 @@ public sealed class ArcaServicesHomologationTests
             {
                 await ReportAsync(service == "padron-a4"
                     ? "### Padrón A4: casos del listado oficial de testing"
-                    : $"### {service}: candidatos del listado A4; disponibilidad en este padrón por verificar", token);
+                    : $"### {service}: casos del listado A4 contrastados en QA el 2026-10-06", token);
                 padronFailures.AddRange(await PadronTestCases.RunAsync(service, async (fixture, ct) => service switch
                 {
                     "padron-a4" => await provider.GetRequiredService<PadronA4Service>().getPersonaAsync(tenant, new NetArcaWs.Contracts.PadronA4.GetPersona { IdPersona = fixture.Id }, ct),

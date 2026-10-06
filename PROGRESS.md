@@ -53,6 +53,16 @@ falló en autenticación WSAA en los once casos, sin validar respuestas de padr�
 El diagnóstico reconoce ahora también el código `alreadyAuthenticated` con un
 prefijo XML válido; esto no determina retrospectivamente el código de esa corrida.
 
+Validación posterior local, autorizada, del 6 de octubre de 2026: **12/12 consultas
+autenticadas de padrón aprobadas** con los fixtures actualizados y el mismo
+`PadronTestCases.RunAsync`/validador de la suite, reutilizando los cuatro TA guardados
+en almacenamiento privado fuera del repositorio. Se reemplazó la CUIT física con
+error AT por `20188192514` y el caso del listado CUIL por `20188027963`, que ARCA
+devuelve actualmente como CUIT. La matriz mantiene tipo e identidad exactos; no se
+modificaron los clientes SOAP. La cobertura autenticada de CUIL real sigue pendiente
+de una identidad pública que efectivamente devuelva CUIL; la cobertura sintética
+se conserva. La suite local sin red aprobó 376 pruebas, con cuatro opt-in omitidas.
+
 El environment GitHub `nuget` contiene
 `NUGET_USER=arsas`; el workflow de release intercambió OIDC correctamente y
 NuGet aceptó e indexó ambos paquetes 0.5.0 en el índice del feed v3; además, el

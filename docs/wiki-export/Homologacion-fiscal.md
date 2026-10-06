@@ -29,8 +29,7 @@ espacios. Se necesita autorización del certificado para **cada servicio**:
 | `wsmtxca` | Monedas de facturación con detalle |
 | `wscdc` | Modalidades de constatación |
 | `wsfecred` | Tipos de retenciones |
-| `padron-a4`, `padron-a10`, `padron-a13` | Tres casos públicos: CUIT física, CUIL física y CUIT jurídica |
-| `padron-a5` | Dos casos públicos: CUIT física y CUIT jurídica (Constancia) |
+| `padron-a4`, `padron-a5`, `padron-a10`, `padron-a13` | Tres casos públicos: CUIT física, caso publicado como CUIL que hoy devuelve CUIT, y CUIT jurídica |
 
 La ruta A5 corresponde a Constancia de inscripción. No se omiten fallos de permiso
 ni respuestas funcionalmente inválidas: la ejecución falla. Las consultas no crean
@@ -44,8 +43,8 @@ consultado el 6 de octubre de 2026:
 
 | Identificador público | Tipo de persona | Tipo de clave |
 |---|---|---|
-| `20002307554` | `FISICA` | `CUIT` |
-| `20203032723` | `FISICA` | `CUIL` |
+| `20188192514` | `FISICA` | `CUIT` |
+| `20188027963` | `FISICA` | `CUIT` (publicado en el grupo CUIL) |
 | `30202020204` | `JURIDICA` | `CUIT` |
 
 Se mantienen en `tests/NetArcaWs.IntegrationTests/PadronTestCases.cs`, exclusivamente
@@ -55,9 +54,21 @@ protegido. Los datos públicos no conceden acceso a los servicios.
 
 El [catálogo oficial](https://www.afip.gob.ar/ws/documentacion/catalogo.asp) enlaza
 ese listado solo para A4. No encontramos un listado equivalente para Constancia,
-A10 o A13: allí se reutilizan como **candidatos pendientes de validación real**,
-sin afirmar que compartan la base de testing. Constancia documenta consultas por
-CUIT; no se exige un caso CUIL positivo sin evidencia que lo respalde.
+A10 o A13. El 6 de octubre de 2026 los tres casos seleccionados pasaron las doce
+consultas locales autenticadas (cuatro servicios), reutilizando tickets privados
+y aplicando el mismo validador de la suite: identidad, tipos, datos mínimos y
+ausencia de errores funcionales. Esto valida esos casos, no una base compartida.
+
+La CUIT física anterior producía un error del servidor al calcular el identificador
+AT en A4/Constancia. Se reemplazó por otra identidad del mismo listado. Los diez
+identificadores publicados como CUIL no proporcionaron una respuesta CUIL válida
+al contrastarlos: las respuestas obtenidas indicaron CUIT; hubo además un caso
+inactivo en A13. Se conserva la procedencia mediante `PublishedKeyType` y la etiqueta
+`listado CUIL`, pero el tipo esperado es el realmente observado, CUIT.
+**La cobertura autenticada de una respuesta CUIL sigue pendiente.** Las pruebas
+sintéticas mantienen la aceptación de CUIL y el rechazo de discrepancias de tipo;
+no se flexibilizó el validador ni se modificaron los clientes SOAP. Una ejecución
+verde de esta matriz no debe presentarse como validación real de CUIL.
 
 Cada respuesta debe contener datos y coincidir exactamente en identificador,
 `tipoPersona` y `tipoClave`. No se infiere el tipo por el prefijo del número.
@@ -127,8 +138,10 @@ la respuesta fiscal. La numeración explícita y la consulta remota protegen los
 reintentos manuales; la concurrencia del workflow no coordina otros consumidores.
 
 El ticket WSAA se reutiliza dentro del mismo proceso. No se conserva entre runs:
-si WSAA responde `coe.alreadyAuthenticated`, esperar el vencimiento del ticket
-anterior o usar un almacén protegido con coordinación antes de repetir. No usar
+si WSAA responde `coe.alreadyAuthenticated`, respetar su período de retención
+antes de solicitar otro. El manual WSAA, sección 10.6, indica 10 minutos en testing
+y 2 en producción, modificables por ARCA sin aviso. Esto es distinto del vencimiento
+del TA: si se conserva, reutilizarlo hasta su `expirationTime`. No usar
 cachés públicos ni artefactos para transferir tickets.
 
 Las pruebas offline simulan autorización, rechazo, errores y resultados inciertos.

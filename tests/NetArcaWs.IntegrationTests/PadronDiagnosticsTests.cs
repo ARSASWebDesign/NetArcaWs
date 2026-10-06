@@ -7,8 +7,8 @@ namespace NetArcaWs.IntegrationTests;
 
 public sealed class PadronDiagnosticsTests
 {
-    private static readonly PadronTestCase FirstA4 = new(20002307554, "FISICA", "CUIT");
-    private static readonly PadronTestCase FirstA5 = new(20002307554, "FISICA", "CUIT");
+    private static readonly PadronTestCase FirstA4 = new(20188192514, "FISICA", "CUIT");
+    private static readonly PadronTestCase FirstA5 = new(20188192514, "FISICA", "CUIT");
 
     [Theory]
     [InlineData("mismatchId", "IdentityMismatch")]

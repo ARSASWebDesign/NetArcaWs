@@ -5,15 +5,15 @@ namespace NetArcaWs.IntegrationTests;
 
 public sealed class PadronTestCasesTests
 {
-    private static readonly PadronTestCase FisicaCuit = new(20002307554, "FISICA", "CUIT");
-    private static readonly PadronTestCase FisicaCuil = new(20203032723, "FISICA", "CUIL");
+    private static readonly PadronTestCase FisicaCuit = new(20188192514, "FISICA", "CUIT");
+    private static readonly PadronTestCase ListedCuil = new(20188027963, "FISICA", "CUIT", "CUIL");
     private static readonly PadronTestCase JuridicaCuit = new(30202020204, "JURIDICA", "CUIT");
 
     [Theory]
     [InlineData("padron-a4", 3)]
     [InlineData("padron-a10", 3)]
     [InlineData("padron-a13", 3)]
-    [InlineData("padron-a5", 2)]
+    [InlineData("padron-a5", 3)]
     public void ForService_returns_official_representative_cases(string service, int count)
     {
         IReadOnlyList<PadronTestCase> cases = PadronTestCases.ForService(service);
@@ -21,14 +21,8 @@ public sealed class PadronTestCasesTests
         cases.Should().HaveCount(count);
         cases.Should().Contain(FisicaCuit);
         cases.Should().Contain(JuridicaCuit);
-        if (service == "padron-a5")
-        {
-            cases.Should().NotContain(FisicaCuil);
-        }
-        else
-        {
-            cases.Should().Contain(FisicaCuil);
-        }
+        cases.Should().Contain(ListedCuil);
+        cases[1].PublishedKeyType.Should().Be("CUIL");
     }
 
     [Fact]
@@ -47,6 +41,28 @@ public sealed class PadronTestCasesTests
     public void Validate_accepts_matching_typed_response(string service)
     {
         PadronTestCases.Validate(FisicaCuit, ResponseFor(service, FisicaCuit)!);
+    }
+
+    [Theory]
+    [InlineData("padron-a4")]
+    [InlineData("padron-a5")]
+    [InlineData("padron-a10")]
+    [InlineData("padron-a13")]
+    public void Validate_accepts_listed_cuil_when_returned_key_type_is_cuit(string service)
+    {
+        PadronTestCases.Validate(ListedCuil, ResponseFor(service, ListedCuil)!);
+    }
+
+    [Theory]
+    [InlineData("padron-a4")]
+    [InlineData("padron-a5")]
+    [InlineData("padron-a10")]
+    [InlineData("padron-a13")]
+    public void Validate_accepts_synthetic_cuil_without_catalog_entry(string service)
+    {
+        PadronTestCase syntheticCuil = new(20123456789, "FISICA", "CUIL");
+
+        PadronTestCases.Validate(syntheticCuil, ResponseFor(service, syntheticCuil)!);
     }
 
     [Theory]
@@ -82,11 +98,11 @@ public sealed class PadronTestCasesTests
     [InlineData("padron-a5")]
     [InlineData("padron-a10")]
     [InlineData("padron-a13")]
-    public void Validate_rejects_mismatched_key_type(string service)
+    public void Validate_rejects_mismatched_key_type_even_when_published_type_matches(string service)
     {
-        PadronTestCase mismatch = FisicaCuit with { KeyType = "CUIL" };
+        PadronTestCase mismatch = ListedCuil with { KeyType = "CUIL" };
 
-        Action act = () => PadronTestCases.Validate(FisicaCuit, ResponseFor(service, mismatch)!);
+        Action act = () => PadronTestCases.Validate(ListedCuil, ResponseFor(service, mismatch)!);
 
         act.Should().Throw<Xunit.Sdk.XunitException>();
     }
@@ -156,7 +172,7 @@ public sealed class PadronTestCasesTests
         failures.Should().Equal("padron-a4 / FISICA / CUIT [Unexpected]");
         reports.Should().Equal(
             "- padron-a4 / FISICA / CUIT: falló [Unexpected].",
-            "- padron-a4 / FISICA / CUIL: aprobado.",
+            "- padron-a4 / FISICA / CUIT / listado CUIL: aprobado.",
             "- padron-a4 / JURIDICA / CUIT: aprobado.");
         string.Join("\n", reports).Should().NotContain("sensitive response body");
     }
