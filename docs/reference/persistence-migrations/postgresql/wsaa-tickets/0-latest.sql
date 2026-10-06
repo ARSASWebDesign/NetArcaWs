@@ -1,6 +1,6 @@
 -- Generated from the versioned NetArcaWs EF Core migrations. Do not edit by hand.
 -- Provider: postgresql; module: wsaa-tickets.
-CREATE TABLE IF NOT EXISTS "__NetArcaWsTicketMigrations" (
+CREATE TABLE IF NOT EXISTS public."__NetArcaWsTicketMigrations" (
     "MigrationId" character varying(150) NOT NULL,
     "ProductVersion" character varying(32) NOT NULL,
     CONSTRAINT "PK___NetArcaWsTicketMigrations" PRIMARY KEY ("MigrationId")
@@ -28,7 +28,7 @@ CREATE TABLE public."NetArcaWsaaTickets" (
 
 CREATE INDEX "IX_NetArcaWsaaTickets_State_UpdatedUtcTicks" ON public."NetArcaWsaaTickets" ("State", "UpdatedUtcTicks");
 
-INSERT INTO "__NetArcaWsTicketMigrations" ("MigrationId", "ProductVersion")
+INSERT INTO public."__NetArcaWsTicketMigrations" ("MigrationId", "ProductVersion")
 VALUES ('20261006000200_InitialWsaaTickets', '10.0.12');
 
 COMMIT;

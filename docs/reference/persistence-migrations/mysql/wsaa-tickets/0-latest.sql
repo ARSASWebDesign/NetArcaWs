@@ -7,8 +7,6 @@ CREATE TABLE IF NOT EXISTS `__NetArcaWsTicketMigrations` (
 ) CHARACTER SET=utf8mb4;
 
 START TRANSACTION;
-ALTER DATABASE CHARACTER SET utf8mb4;
-
 CREATE TABLE `NetArcaWsaaTickets` (
     `KeyHash` varchar(64) CHARACTER SET utf8mb4 NOT NULL,
     `CertificateHash` varchar(64) CHARACTER SET utf8mb4 NOT NULL,

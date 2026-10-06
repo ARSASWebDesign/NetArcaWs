@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
 using NetArcaWs.EntityFrameworkCore;
@@ -123,6 +124,34 @@ public sealed class OfficialMySqlMigrationMetadataTests
                 invoice.GetIndexes().Single(index => index.Properties.Any(property => property.Name == "RemoteHash")).IsUnique.Should().BeTrue();
                 invoice.GetIndexes().Single(index => index.Properties.Any(property => property.Name == "FiscalHash")).IsUnique.Should().BeTrue();
             }
+        }
+    }
+
+    [Fact]
+    public void MySqlAndMariaDb_initial_migrations_change_only_owned_tables_and_keep_utf8mb4()
+    {
+        foreach (INetArcaWsMigrationContextFactory factory in new INetArcaWsMigrationContextFactory[]
+        {
+            MySqlContextFactory(), MariaDbContextFactory()
+        })
+        foreach (NetArcaWsPersistenceModule module in Enum.GetValues<NetArcaWsPersistenceModule>())
+        {
+            using DbContext context = factory.CreateContext(module);
+            IMigrationsAssembly migrations = context.GetService<IMigrationsAssembly>();
+            Migration initial = migrations.CreateMigration(migrations.Migrations.OrderBy(entry => entry.Key, StringComparer.Ordinal).First().Value,
+                context.Database.ProviderName!);
+            IReadOnlyList<MigrationOperation> operations = initial.UpOperations;
+            operations.Should().NotContain(operation => operation is AlterDatabaseOperation);
+            CreateTableOperation[] tables = operations.OfType<CreateTableOperation>().ToArray();
+            tables.Should().NotBeEmpty();
+            tables.All(table => Equals(table.FindAnnotation("MySql:CharSet")?.Value, "utf8mb4")).Should().BeTrue();
+            var stringColumns = tables.SelectMany(table => table.Columns).Where(column => column.ClrType == typeof(string)).ToArray();
+            stringColumns.Should().NotBeEmpty();
+            stringColumns.All(column => Equals(column.FindAnnotation("MySql:CharSet")?.Value, "utf8mb4")).Should().BeTrue();
+
+            string script = context.GetService<IMigrator>().GenerateScript("0", null, MigrationsSqlGenerationOptions.Default);
+            script.ToUpperInvariant().Should().NotContain("ALTER DATABASE");
+            script.Should().Contain("CHARACTER SET utf8mb4");
         }
     }
 

@@ -10,9 +10,6 @@ namespace NetArcaWs.EntityFrameworkCore.Migrations.MySql.Migrations.WsaaTickets
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AlterDatabase()
-                .Annotation("MySql:CharSet", "utf8mb4");
-
             migrationBuilder.CreateTable(
                 name: "NetArcaWsaaTickets",
                 columns: table => new

@@ -1,6 +1,6 @@
 -- Generated from the versioned NetArcaWs EF Core migrations. Do not edit by hand.
 -- Provider: postgresql; module: invoicing.
-CREATE TABLE IF NOT EXISTS "__NetArcaWsInvoiceMigrations" (
+CREATE TABLE IF NOT EXISTS public."__NetArcaWsInvoiceMigrations" (
     "MigrationId" character varying(150) NOT NULL,
     "ProductVersion" character varying(32) NOT NULL,
     CONSTRAINT "PK___NetArcaWsInvoiceMigrations" PRIMARY KEY ("MigrationId")
@@ -76,7 +76,7 @@ CREATE UNIQUE INDEX "UX_NetArcaInvoices_Remote" ON public."NetArcaInvoices" ("Re
 
 CREATE UNIQUE INDEX "IX_NetArcaInvoiceSeriesReservations_TenantHash_KeyHash" ON public."NetArcaInvoiceSeriesReservations" ("TenantHash", "KeyHash");
 
-INSERT INTO "__NetArcaWsInvoiceMigrations" ("MigrationId", "ProductVersion")
+INSERT INTO public."__NetArcaWsInvoiceMigrations" ("MigrationId", "ProductVersion")
 VALUES ('20261006000100_InitialInvoicing', '10.0.12');
 
 COMMIT;

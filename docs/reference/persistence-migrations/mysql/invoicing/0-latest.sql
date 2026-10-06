@@ -7,8 +7,6 @@ CREATE TABLE IF NOT EXISTS `__NetArcaWsInvoiceMigrations` (
 ) CHARACTER SET=utf8mb4;
 
 START TRANSACTION;
-ALTER DATABASE CHARACTER SET utf8mb4;
-
 CREATE TABLE `NetArcaInvoiceRevisions` (
     `TenantHash` varchar(64) CHARACTER SET utf8mb4 NOT NULL,
     `KeyHash` varchar(64) CHARACTER SET utf8mb4 NOT NULL,

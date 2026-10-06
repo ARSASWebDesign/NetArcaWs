@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -85,13 +86,22 @@ public static class PersistenceMigrations
     private static string Generate(string provider, string module, Func<DbContext> createContext)
     {
         using DbContext context = createContext();
+        return GenerateScriptForContext(provider, module, context);
+    }
+
+    internal static string GenerateScriptForContext(string provider, string module, DbContext context)
+    {
         if (context.Database.HasPendingModelChanges())
             throw new InvalidOperationException($"The {provider}/{module} migration snapshot has pending model changes.");
 
         IMigrationsAssembly assembly = context.GetService<IMigrationsAssembly>();
-        if (assembly.Migrations.Count != 1)
-            throw new InvalidOperationException($"The {provider}/{module} baseline must contain exactly one initial migration.");
-        Migration migration = assembly.CreateMigration(assembly.Migrations.Values.Single(), context.Database.ProviderName!);
+        KeyValuePair<string, TypeInfo>[] migrations = assembly.Migrations.OrderBy(entry => entry.Key, StringComparer.Ordinal).ToArray();
+        string initialMigrationId = module == "invoicing"
+            ? "20261006000100_InitialInvoicing"
+            : "20261006000200_InitialWsaaTickets";
+        if (migrations.Length == 0 || !string.Equals(migrations[0].Key, initialMigrationId, StringComparison.Ordinal))
+            throw new InvalidOperationException($"The {provider}/{module} migration chain must start with {initialMigrationId}.");
+        Migration migration = assembly.CreateMigration(migrations[0].Value, context.Database.ProviderName!);
         IReadOnlyList<MigrationOperation> operations = migration.UpOperations;
         int createTables = operations.OfType<CreateTableOperation>().Count();
         string[] expectedTables = module == "invoicing"
@@ -122,9 +132,9 @@ public static class PersistenceMigrations
     private static DbContext MariaDbTickets() => new MariaDbWsaaTicketsMigrationsDbContext(new DbContextOptionsBuilder<MariaDbWsaaTicketsMigrationsDbContext>()
         .UseMySql("Server=localhost;Database=offline", new MariaDbServerVersion(new Version(11, 4, 13)), options => options.MigrationsHistoryTable("__NetArcaWsTicketMigrations")).Options);
     private static DbContext PostgreSqlInvoice() => new PostgreSqlInvoicingMigrationsDbContext(new DbContextOptionsBuilder<PostgreSqlInvoicingMigrationsDbContext>()
-        .UseNpgsql("Host=localhost;Database=offline", options => options.MigrationsHistoryTable("__NetArcaWsInvoiceMigrations")).Options);
+        .UseNpgsql("Host=localhost;Database=offline", options => options.MigrationsHistoryTable("__NetArcaWsInvoiceMigrations", "public")).Options);
     private static DbContext PostgreSqlTickets() => new PostgreSqlWsaaTicketsMigrationsDbContext(new DbContextOptionsBuilder<PostgreSqlWsaaTicketsMigrationsDbContext>()
-        .UseNpgsql("Host=localhost;Database=offline", options => options.MigrationsHistoryTable("__NetArcaWsTicketMigrations")).Options);
+        .UseNpgsql("Host=localhost;Database=offline", options => options.MigrationsHistoryTable("__NetArcaWsTicketMigrations", "public")).Options);
     private static DbContext SqlServerInvoice() => new SqlServerInvoicingMigrationsDbContext(new DbContextOptionsBuilder<SqlServerInvoicingMigrationsDbContext>()
         .UseSqlServer("Server=localhost;Database=offline;Encrypt=True;TrustServerCertificate=True", options => options.MigrationsHistoryTable("__NetArcaWsInvoiceMigrations", "dbo")).Options);
     private static DbContext SqlServerTickets() => new SqlServerWsaaTicketsMigrationsDbContext(new DbContextOptionsBuilder<SqlServerWsaaTicketsMigrationsDbContext>()

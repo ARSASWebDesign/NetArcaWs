@@ -1,5 +1,10 @@
 using NetArcaWs.Build;
 using AwesomeAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Xunit;
 
 namespace NetArcaWs.Build.Tests;
@@ -65,6 +70,73 @@ public sealed class PersistenceMigrationsTests
         }
     }
 
+    [Fact]
+    public void Generates_the_full_zero_to_latest_script_for_a_test_only_two_migration_chain()
+    {
+        using DbContext context = new TwoMigrationSqliteContext(new DbContextOptionsBuilder<TwoMigrationSqliteContext>()
+            .UseSqlite("Data Source=:memory:", options => options.MigrationsAssembly(typeof(TwoMigrationSqliteContext).Assembly.FullName)
+                .MigrationsHistoryTable("__NetArcaWsInvoiceMigrations"))
+            .Options);
+
+        string script = PersistenceMigrations.GenerateScriptForContext("sqlite", "invoicing", context);
+
+        script.Should().Contain("20261006000100_InitialInvoicing")
+            .And.Contain("20261006000300_AddFixtureTable")
+            .And.Contain("CREATE TABLE \"FutureInvoiceAux\"");
+    }
+
+    [Fact]
+    public void PostgreSql_baselines_qualify_history_table_creation_and_migration_insert_in_public()
+    {
+        IReadOnlyDictionary<string, string> scripts = PersistenceMigrations.GenerateScripts();
+
+        scripts["postgresql/invoicing/0-latest.sql"].Should()
+            .Contain("CREATE TABLE IF NOT EXISTS public.\"__NetArcaWsInvoiceMigrations\"")
+            .And.Contain("INSERT INTO public.\"__NetArcaWsInvoiceMigrations\"");
+        scripts["postgresql/wsaa-tickets/0-latest.sql"].Should()
+            .Contain("CREATE TABLE IF NOT EXISTS public.\"__NetArcaWsTicketMigrations\"")
+            .And.Contain("INSERT INTO public.\"__NetArcaWsTicketMigrations\"");
+    }
+
     private static int Count(string text, string value) =>
         text.Split(value, StringSplitOptions.None).Length - 1;
+}
+
+[DbContext(typeof(TwoMigrationSqliteContext))]
+internal sealed class TwoMigrationSqliteSnapshot : ModelSnapshot
+{
+    protected override void BuildModel(ModelBuilder modelBuilder) { }
+}
+
+internal sealed class TwoMigrationSqliteContext(DbContextOptions<TwoMigrationSqliteContext> options) : DbContext(options) { }
+
+[DbContext(typeof(TwoMigrationSqliteContext))]
+[Migration("20261006000100_InitialInvoicing")]
+internal sealed class TestInitialInvoicingMigration : Migration
+{
+    protected override void Up(MigrationBuilder migrationBuilder)
+    {
+        CreateTable(migrationBuilder, "NetArcaInvoices");
+        CreateTable(migrationBuilder, "NetArcaInvoiceRevisions");
+        CreateTable(migrationBuilder, "NetArcaInvoiceSeriesReservations");
+    }
+
+    protected override void Down(MigrationBuilder migrationBuilder) { }
+
+    private static void CreateTable(MigrationBuilder migrationBuilder, string name) => migrationBuilder.CreateTable(
+        name: name,
+        columns: table => new { Id = table.Column<int>(type: "INTEGER", nullable: false) },
+        constraints: table => table.PrimaryKey($"PK_{name}", row => row.Id));
+}
+
+[DbContext(typeof(TwoMigrationSqliteContext))]
+[Migration("20261006000300_AddFixtureTable")]
+internal sealed class TestFutureInvoicingMigration : Migration
+{
+    protected override void Up(MigrationBuilder migrationBuilder) => migrationBuilder.CreateTable(
+        name: "FutureInvoiceAux",
+        columns: table => new { Id = table.Column<int>(type: "INTEGER", nullable: false) },
+        constraints: table => table.PrimaryKey("PK_FutureInvoiceAux", row => row.Id));
+
+    protected override void Down(MigrationBuilder migrationBuilder) => migrationBuilder.DropTable("FutureInvoiceAux");
 }
