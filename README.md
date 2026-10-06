@@ -426,6 +426,12 @@ protocolo y recuperación de `ListPendingAsync` mediante `ResumeAsync`.
 
 ## Homologación
 
+El workflow manual **Homologación WSFE** usa exclusivamente `main` y el entorno
+protegido `homologacion`. Solicita aprobación y ejecuta una consulta de monedas
+autenticada; falla si falta configuración, sin omitir esa prueba. Ver la
+[guía de ejecución y secretos](docs/wiki/Homologacion.md). No emite comprobantes
+ni acredita cobertura fiscal completa.
+
 La suite actual debe volver a validarse junto con las nuevas fachadas SOAP. La
 homologación WSAA continúa siendo opt-in y requiere certificados autorizados;
 no hay credenciales disponibles en el repositorio. Para la prueba WSAA existente,

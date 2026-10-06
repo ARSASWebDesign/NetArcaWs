@@ -42,7 +42,8 @@ public sealed class AuthenticatedHomologationFactAttribute : FactAttribute
     public AuthenticatedHomologationFactAttribute([CallerFilePath] string? sourceFilePath = null, [CallerLineNumber] int sourceLineNumber = 0)
         : base(sourceFilePath, sourceLineNumber)
     {
-        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ARCA_HOMOLOGY_SERVICES")))
+        bool strict = string.Equals(Environment.GetEnvironmentVariable("ARCA_REQUIRE_HOMOLOGY"), "1", StringComparison.Ordinal);
+        if (!strict && Environment.GetEnvironmentVariable("ARCA_HOMOLOGY_SERVICES") is null)
             Skip = "Set ARCA_HOMOLOGY_SERVICES to an explicit comma-separated list of read-only service probes to enable this test.";
     }
 }
@@ -79,7 +80,7 @@ public sealed class ArcaServicesHomologationTests
             "padron-a13" => await new PadronA13Service(transport, tickets).dummyAsync(ArcaEnvironment.Homologation, token),
             _ => throw new ArgumentOutOfRangeException(nameof(serviceName))
         };
-        reply.Should().NotBeNull(serviceName);
+        Assert.True(reply is not null, "The homologation dummy probe should return a response.");
         tickets.Calls.Should().Be(0, "dummy operations are unauthenticated and never request a WSAA ticket");
     }
 
@@ -90,7 +91,8 @@ public sealed class ArcaServicesHomologationTests
         string[] selected = (Environment.GetEnvironmentVariable("ARCA_HOMOLOGY_SERVICES") ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(x => x.ToLowerInvariant()).Distinct().ToArray();
-        if (selected.Length == 0) Assert.Skip("No authenticated homologation services were selected.");
+        if (selected.Length == 0)
+            throw new InvalidOperationException("Set ARCA_HOMOLOGY_SERVICES to at least one supported authenticated read-only lookup.");
         string certificatePath = Environment.GetEnvironmentVariable("WSAA_CERT_PATH")!;
         string keyPath = Environment.GetEnvironmentVariable("WSAA_KEY_PATH")!;
         if (string.IsNullOrWhiteSpace(certificatePath) || string.IsNullOrWhiteSpace(keyPath))
@@ -122,7 +124,20 @@ public sealed class ArcaServicesHomologationTests
                 "padron-a13" => await provider.GetRequiredService<PadronA13Service>().getPersonaAsync(tenant, new NetArcaWs.Contracts.PadronA13.GetPersona { IdPersona = queryCuit }, token),
                 _ => throw new InvalidOperationException($"Unknown ARCA_HOMOLOGY_SERVICES entry '{service}'.")
             };
-            response.Should().NotBeNull(service);
+            Assert.True(response is not null, "The authenticated homologation lookup should return a response.");
+            if (response is FeParamGetTiposMonedasResponse currencyResponse)
+            {
+                MonedaResponse? result = currencyResponse.FeParamGetTiposMonedasResult;
+                Assert.True(result is not null, "The WSFE currency lookup should include a result object.");
+                Assert.True(result!.Errors.Count == 0, "The WSFE currency lookup should return no errors.");
+                Assert.True(result.ResultGet.Count > 0, "The WSFE currency lookup should return at least one currency.");
+                Assert.All(result.ResultGet, currency =>
+                {
+                    Assert.True(currency is not null, "The WSFE currency lookup should not contain null entries.");
+                    Assert.True(!string.IsNullOrWhiteSpace(currency!.Id), "Each returned WSFE currency should include an identifier.");
+                    Assert.True(!string.IsNullOrWhiteSpace(currency.Desc), "Each returned WSFE currency should include a description.");
+                });
+            }
         }
     }
 
