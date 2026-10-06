@@ -118,9 +118,12 @@ public static class WikiMirror
         if (IsWithin(output, path))
             return false;
         var relative = Path.GetRelativePath(root, path);
-        return !relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-            .Any(part => part is ".git" or "artifacts" or "bin" or "obj");
+        return !IsExcluded(relative);
     }
+
+    private static bool IsExcluded(string relative) =>
+        relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Any(part => part is ".git" or ".superpowers" or "artifacts" or "bin" or "obj");
 
     private static IEnumerable<string> EnumerateMarkdown(string root, string output)
     {
@@ -136,7 +139,7 @@ public static class WikiMirror
             foreach (var child in Directory.EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly))
             {
                 var name = Path.GetFileName(child);
-                if (name is ".git" or "artifacts" or "bin" or "obj" || IsWithin(output, child) || IsReparsePoint(child))
+                if (IsExcluded(Path.GetRelativePath(root, child)) || IsWithin(output, child) || IsReparsePoint(child))
                     continue;
                 pending.Push(child);
             }

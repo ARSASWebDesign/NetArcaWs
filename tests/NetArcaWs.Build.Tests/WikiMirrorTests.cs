@@ -132,6 +132,21 @@ public sealed class WikiMirrorTests
     }
 
     [Fact]
+    public void Run_excludes_private_superpowers_markdown_from_pages_and_manifest()
+    {
+        using var workspace = new BuildTestWorkspace();
+        workspace.Write("docs/wiki/Home.md", "# Home\n");
+        workspace.Write(".superpowers/sdd/netarcaws-ef-plan/mysql-review.md", "private review notes\n");
+
+        WikiMirror.Run(workspace.Root);
+
+        string sources = workspace.Read("docs/wiki-export/Fuentes-documentales.md");
+        sources.Should().Contain("docs/wiki/Home.md");
+        sources.Should().NotContain(".superpowers/");
+        workspace.Exists("docs/wiki-export/Documento-mysql-review.md").Should().BeFalse();
+    }
+
+    [Fact]
     public void Run_does_not_mirror_markdown_reached_through_file_or_directory_symlinks()
     {
         using var workspace = new BuildTestWorkspace();
