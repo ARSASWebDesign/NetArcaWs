@@ -6,10 +6,10 @@
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/ARSASWebDesign/NetArcaWs</RepositoryUrl>
     <PackageProjectUrl>https://github.com/ARSASWebDesign/NetArcaWs</PackageProjectUrl>
-    <Description>Optional Entity Framework Core invoice journal for NetArcaWs. Consumers select invoicing services and manage schema migrations explicitly.</Description>
+    <Description>Optional Entity Framework Core invoice journal and encrypted shared WSAA ticket store for NetArcaWs. Consumers select modules and manage schema migrations explicitly.</Description>
     <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageTags>afip;argentina;efcore;entity-framework;invoice-journal</PackageTags>
+    <PackageTags>afip;argentina;efcore;entity-framework;invoice-journal;wsaa;distributed-tickets</PackageTags>
     <IsPackable>true</IsPackable>
   </PropertyGroup>
   <ItemGroup>

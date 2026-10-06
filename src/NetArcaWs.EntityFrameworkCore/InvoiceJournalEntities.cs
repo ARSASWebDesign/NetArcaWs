@@ -78,16 +78,22 @@ public sealed class NetArcaWsModelOptions
 {
     private static readonly ArcaService[] SupportedInvoiceServices = [ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca];
     private readonly ImmutableHashSet<ArcaService> invoiceServices;
+    private readonly ImmutableHashSet<ArcaService> wsaaTicketServices;
 
-    private NetArcaWsModelOptions(IEnumerable<ArcaService> invoiceServices)
+    private NetArcaWsModelOptions(IEnumerable<ArcaService> invoiceServices, IEnumerable<ArcaService> wsaaTicketServices)
     {
         this.invoiceServices = invoiceServices.ToImmutableHashSet();
-        Fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
-            "invoicing:" + string.Join("\n", this.invoiceServices.Order().Select(x => x.ToString())))));
+        this.wsaaTicketServices = wsaaTicketServices.ToImmutableHashSet();
+        string fingerprint = "invoicing:" + string.Join("\n", this.invoiceServices.Order().Select(x => x.ToString()));
+        if (this.wsaaTicketServices.Count > 0)
+            fingerprint += "\nwsaa-tickets:" + string.Join("\n", this.wsaaTicketServices.Order().Select(x => x.ToString()));
+        Fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprint)));
     }
 
     public bool InvoicingEnabled => invoiceServices.Count != 0;
     public IReadOnlySet<ArcaService> InvoicingServices => invoiceServices;
+    public bool WsaaTicketsEnabled => wsaaTicketServices.Count != 0;
+    public IReadOnlySet<ArcaService> WsaaTicketServices => wsaaTicketServices;
     public string Fingerprint { get; }
 
     public static NetArcaWsModelOptions Configure(Action<NetArcaWsModelOptionsBuilder> configure)
@@ -95,12 +101,30 @@ public sealed class NetArcaWsModelOptions
         ArgumentNullException.ThrowIfNull(configure);
         var builder = new NetArcaWsModelOptionsBuilder();
         configure(builder);
-        return new NetArcaWsModelOptions(builder.InvoiceServices);
+        return new NetArcaWsModelOptions(builder.InvoiceServices, builder.WsaaTicketServices);
     }
 
     internal bool SupportsInvoiceService(string service) => invoiceServices.Any(selected =>
         string.Equals(GetTicketServiceName(selected), service, StringComparison.Ordinal));
     internal static IReadOnlyList<ArcaService> SupportedServices => SupportedInvoiceServices;
+
+    internal bool SupportsWsaaTicketService(string service) => wsaaTicketServices.Any(selected =>
+        string.Equals(GetWsaaTicketServiceName(selected), service, StringComparison.Ordinal));
+
+    internal static string GetWsaaTicketServiceName(ArcaService service) => service switch
+    {
+        ArcaService.Wsfev1 => Wsfev1Service.TicketService,
+        ArcaService.Wsfexv1 => Wsfexv1Service.TicketService,
+        ArcaService.Wsmtxca => Wsmtxcav1Service.TicketService,
+        ArcaService.PadronA4 => PadronA4Service.TicketService,
+        ArcaService.PadronA5 => PadronA5Service.TicketService,
+        ArcaService.PadronA10 => PadronA10Service.TicketService,
+        ArcaService.PadronA13 => PadronA13Service.TicketService,
+        ArcaService.Wscdc => WscdcService.TicketService,
+        ArcaService.Wsfecred => WsfecredService.TicketService,
+        ArcaService.Wscpe => WscpeService.TicketService,
+        _ => throw new ArgumentOutOfRangeException(nameof(service), service, "Select an authenticated ARCA service, not WSAA itself.")
+    };
     internal static string GetTicketServiceName(ArcaService service) => service switch
     {
         ArcaService.Wsfev1 => Wsfev1Service.TicketService,
@@ -114,7 +138,9 @@ public sealed class NetArcaWsModelOptions
 public sealed class NetArcaWsModelOptionsBuilder
 {
     private readonly HashSet<ArcaService> invoiceServices = [];
+    private readonly HashSet<ArcaService> wsaaTicketServices = [];
     internal IEnumerable<ArcaService> InvoiceServices => invoiceServices;
+    internal IEnumerable<ArcaService> WsaaTicketServices => wsaaTicketServices;
 
     /// <summary>Enables the shared invoice journal tables for the selected ARCA services.</summary>
     public NetArcaWsModelOptionsBuilder AddInvoicing(params ArcaService[] services)
@@ -126,6 +152,20 @@ public sealed class NetArcaWsModelOptionsBuilder
             if (!Enum.IsDefined(service) || !NetArcaWsModelOptions.SupportedServices.Contains(service))
                 throw new ArgumentException($"Unsupported invoicing service '{service}'. Supported services: {string.Join(", ", NetArcaWsModelOptions.SupportedServices)}.", nameof(services));
             invoiceServices.Add(service);
+        }
+        return this;
+    }
+
+    /// <summary>Enables shared, encrypted WSAA tickets for the explicitly selected authenticated services.</summary>
+    public NetArcaWsModelOptionsBuilder AddWsaaTickets(params ArcaService[] services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        if (services.Length == 0) throw new ArgumentException("Select at least one authenticated ARCA service for shared WSAA tickets.", nameof(services));
+        foreach (ArcaService service in services)
+        {
+            if (!Enum.IsDefined(service) || service == ArcaService.Wsaa)
+                throw new ArgumentException("Select a defined authenticated ARCA service; WSAA itself is not a ticket service.", nameof(services));
+            wsaaTicketServices.Add(service);
         }
         return this;
     }
@@ -159,7 +199,14 @@ public static class NetArcaWsModelBuilderExtensions
         ArgumentNullException.ThrowIfNull(modelBuilder);
         ArgumentNullException.ThrowIfNull(options);
         modelBuilder.HasAnnotation(OptionsAnnotationName, options.Fingerprint);
-        if (!options.InvoicingEnabled) return modelBuilder;
+        if (!options.InvoicingEnabled)
+        {
+            modelBuilder.Ignore<InvoiceJournalEntity>();
+            modelBuilder.Ignore<InvoiceRevisionEntity>();
+            modelBuilder.Ignore<InvoiceSeriesReservationEntity>();
+        }
+        if (options.InvoicingEnabled)
+        {
         modelBuilder.Entity<InvoiceJournalEntity>(entity =>
         {
             entity.ToTable("NetArcaInvoices");
@@ -200,6 +247,30 @@ public static class NetArcaWsModelBuilderExtensions
             entity.Property(x => x.KeyHash).HasMaxLength(64).IsRequired();
             entity.HasIndex(x => new { x.TenantHash, x.KeyHash }).IsUnique();
         });
+        }
+
+        if (!options.WsaaTicketsEnabled)
+        {
+            modelBuilder.Ignore<WsaaTicketEntity>();
+        }
+        else
+        {
+            modelBuilder.Entity<WsaaTicketEntity>(entity =>
+            {
+                entity.ToTable("NetArcaWsaaTickets");
+                entity.HasKey(x => x.KeyHash);
+                entity.Property(x => x.KeyHash).HasMaxLength(64).IsRequired();
+                entity.Property(x => x.CertificateHash).HasMaxLength(64).IsRequired();
+                entity.Property(x => x.Endpoint).HasMaxLength(512).IsRequired();
+                entity.Property(x => x.Service).HasMaxLength(32).IsRequired();
+                entity.Property(x => x.OwnerId).HasMaxLength(36);
+                entity.Property(x => x.KeyId).HasMaxLength(128);
+                entity.Property(x => x.Nonce).IsRequired(false);
+                entity.Property(x => x.Ciphertext).IsRequired(false);
+                entity.Property(x => x.Tag).IsRequired(false);
+                entity.HasIndex(x => new { x.State, x.UpdatedUtcTicks });
+            });
+        }
         return modelBuilder;
     }
 }

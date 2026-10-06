@@ -506,18 +506,22 @@ public sealed class EfInvoiceJournal<TContext> : IInvoiceJournal where TContext 
 
 public static class NetArcaWsEntityFrameworkServiceCollectionExtensions
 {
-    /// <summary>Registers the journal as a singleton backed by an independently-created context per call.</summary>
+    /// <summary>Registers each explicitly selected EF store with an independently-created context per call.</summary>
     /// <remarks>The same model options must be applied with <c>ModelBuilder.AddNetArcaWs</c> in consumer contexts.</remarks>
     public static IServiceCollection AddNetArcaWsEntityFrameworkStores<TContext>(this IServiceCollection services, NetArcaWsModelOptions modelOptions)
         where TContext : DbContext
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(modelOptions);
-        if (!modelOptions.InvoicingEnabled) throw new ArgumentException("Select at least one invoicing service before registering the EF invoice journal.", nameof(modelOptions));
+        if (!modelOptions.InvoicingEnabled && !modelOptions.WsaaTicketsEnabled)
+            throw new ArgumentException("Select at least one EF-backed NetArcaWs capability before registering stores.", nameof(modelOptions));
         services.TryAddSingleton(modelOptions);
         services.TryAddSingleton<TimeProvider>(TimeProvider.System);
-        services.AddSingleton<IInvoiceJournal>(provider => new EfInvoiceJournal<TContext>(
-            provider.GetRequiredService<IDbContextFactory<TContext>>(), modelOptions, provider.GetRequiredService<TimeProvider>()));
+        if (modelOptions.InvoicingEnabled)
+            services.AddSingleton<IInvoiceJournal>(provider => new EfInvoiceJournal<TContext>(
+                provider.GetRequiredService<IDbContextFactory<TContext>>(), modelOptions, provider.GetRequiredService<TimeProvider>()));
+        if (modelOptions.WsaaTicketsEnabled)
+            services.AddWsaaTicketStores<TContext>(modelOptions);
         return services;
     }
 }
