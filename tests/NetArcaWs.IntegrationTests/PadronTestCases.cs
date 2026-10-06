@@ -1,4 +1,6 @@
-using Xunit;
+using NetArcaWs.Transport;
+using NetArcaWs.Wsaa;
+using Xunit.Sdk;
 
 namespace NetArcaWs.IntegrationTests;
 
@@ -28,7 +30,12 @@ internal static class PadronTestCases
 
     public static void Validate(PadronTestCase expected, object response)
     {
-        AuthenticatedLookupValidation.ValidateResponse(response);
+        ArgumentNullException.ThrowIfNull(response);
+        if (response is Contracts.PadronA5.GetPersonaResponse a5 &&
+            (a5.PersonaReturn?.ErrorConstancia?.Error.Count > 0 ||
+             a5.PersonaReturn?.ErrorMonotributo?.Error.Count > 0 ||
+             a5.PersonaReturn?.ErrorRegimenGeneral?.Error.Count > 0))
+            throw new PadronValidationException(PadronFailure.FunctionalError);
         (long? id, string? personType, string? keyType) = response switch
         {
             Contracts.PadronA4.GetPersonaResponse r => (r.PersonaReturn?.Persona?.IdPersona, r.PersonaReturn?.Persona?.TipoPersona, r.PersonaReturn?.Persona?.TipoClave),
@@ -37,10 +44,13 @@ internal static class PadronTestCases
             Contracts.PadronA13.GetPersonaResponse r => (r.PersonaReturn?.Persona?.IdPersona, r.PersonaReturn?.Persona?.TipoPersona, r.PersonaReturn?.Persona?.TipoClave),
             _ => throw new InvalidOperationException("Unsupported Padron response type.")
         };
-        // Boolean assertions keep remote values out of diagnostics.
-        Assert.True(id == expected.Id, "Padron returned a different test identity.");
-        Assert.True(personType == expected.PersonType, "Padron returned an unexpected person type.");
-        Assert.True(keyType == expected.KeyType, "Padron returned an unexpected key type.");
+        if (id is null) throw new PadronValidationException(PadronFailure.MissingPerson);
+        try { AuthenticatedLookupValidation.ValidateResponse(response); }
+        catch (XunitException) { throw new PadronValidationException(PadronFailure.InvalidPersonData); }
+        // Typed categories keep all remote values out of diagnostics.
+        if (id != expected.Id) throw new PadronValidationException(PadronFailure.IdentityMismatch);
+        if (personType != expected.PersonType) throw new PadronValidationException(PadronFailure.PersonTypeMismatch);
+        if (keyType != expected.KeyType) throw new PadronValidationException(PadronFailure.KeyTypeMismatch);
     }
 
     public static async Task<IReadOnlyList<string>> RunAsync(string service,
@@ -52,22 +62,47 @@ internal static class PadronTestCases
         {
             token.ThrowIfCancellationRequested();
             string label = $"{service} / {fixture.PersonType} / {fixture.KeyType}";
-            bool passed;
+            PadronFailure? failure = null;
             try
             {
                 Validate(fixture, await query(fixture, token));
-                passed = true;
             }
-            catch (Exception)
+            catch (Exception exception)
             {
                 token.ThrowIfCancellationRequested();
                 // Do not publish exception text, remote payloads or partial personal records.
-                failures.Add(label);
-                passed = false;
+                failure = Classify(exception);
+                failures.Add($"{label} [{failure}]");
             }
             token.ThrowIfCancellationRequested();
-            await report(passed ? $"- {label}: aprobado." : $"- {label}: falló (consulta o validación; sin datos remotos).", token);
+            await report(failure is null ? $"- {label}: aprobado." : $"- {label}: falló [{failure}].", token);
         }
         return failures.AsReadOnly();
+    }
+
+    // Only fixed labels leave this boundary. Unknown codes/reasons are never interpolated.
+    private static PadronFailure Classify(Exception exception) => exception switch
+    {
+        PadronValidationException validation => validation.Failure,
+        WsaaSoapException { FaultCode: "coe.alreadyAuthenticated" } => PadronFailure.AlreadyAuthenticated,
+        WsaaSoapException => PadronFailure.Authentication,
+        SoapFaultException { Reason: "No existe persona con ese Id" } => PadronFailure.PersonNotFound,
+        SoapFaultException => PadronFailure.SoapFault,
+        HttpRequestException => PadronFailure.Transport,
+        TimeoutException or OperationCanceledException => PadronFailure.Timeout,
+        FormatException or System.Xml.XmlException => PadronFailure.InvalidResponse,
+        _ => PadronFailure.Unexpected
+    };
+
+    private enum PadronFailure
+    {
+        AlreadyAuthenticated, Authentication, PersonNotFound, SoapFault, Transport,
+        Timeout, InvalidResponse, MissingPerson, FunctionalError, InvalidPersonData,
+        IdentityMismatch, PersonTypeMismatch, KeyTypeMismatch, Unexpected
+    }
+
+    private sealed class PadronValidationException(PadronFailure failure) : XunitException(failure.ToString())
+    {
+        public PadronFailure Failure { get; } = failure;
     }
 }

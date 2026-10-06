@@ -66,6 +66,29 @@ la suite falla si hubo cualquier error. No se omiten casos inexistentes ni se
 transforman errores SOAP en resultados aprobados. El resumen informa servicio,
 categoría y resultado, sin nombres, domicilios, XML ni mensajes remotos.
 
+Los fallos incluyen una categoría fija para distinguir la causa sin publicar el
+contenido de la respuesta:
+
+| Categoría | Significado |
+|---|---|
+| `AlreadyAuthenticated` | WSAA rechazó un nuevo login con ese código; no se recuperó el ticket anterior |
+| `Authentication` | Otro error SOAP de WSAA |
+| `PersonNotFound` | El padrón devolvió el mensaje conocido de persona inexistente |
+| `SoapFault` | Otro error SOAP del servicio; no se interpreta como persona inexistente |
+| `Transport`, `Timeout` | Fallo HTTP/conectividad o tiempo agotado |
+| `InvalidResponse` | XML o respuesta incompatibles con el contrato |
+| `MissingPerson` | Falta el nodo de persona o datos generales |
+| `FunctionalError` | Constancia devolvió errores funcionales |
+| `InvalidPersonData` | La persona carece de los datos mínimos exigidos |
+| `IdentityMismatch` | El identificador devuelto difiere del solicitado |
+| `PersonTypeMismatch`, `KeyTypeMismatch` | Difiere el tipo de persona o de clave esperado |
+| `Unexpected` | Fallo no clasificado; requiere investigación adicional |
+
+Solo se emiten estas etiquetas controladas; no se imprimen códigos o mensajes
+arbitrarios del servidor ni valores recibidos. Una categoría señala la primera
+comprobación fallida, no prueba que el resto de los campos sea correcto. La
+cancelación solicitada detiene la suite y no se confunde con un timeout.
+
 Esta matriz cubre `getPersona`; no acredita las demás operaciones ni reglas de cada
 padrón. Las comprobaciones locales usan respuestas sintéticas; la disponibilidad
 real de estos casos se registra por ejecución en la issue de homologación.

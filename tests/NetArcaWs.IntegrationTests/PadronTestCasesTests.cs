@@ -153,9 +153,9 @@ public sealed class PadronTestCasesTests
             CancellationToken.None);
 
         lookups.Should().Be(3);
-        failures.Should().Equal("padron-a4 / FISICA / CUIT");
+        failures.Should().Equal("padron-a4 / FISICA / CUIT [Unexpected]");
         reports.Should().Equal(
-            "- padron-a4 / FISICA / CUIT: falló (consulta o validación; sin datos remotos).",
+            "- padron-a4 / FISICA / CUIT: falló [Unexpected].",
             "- padron-a4 / FISICA / CUIL: aprobado.",
             "- padron-a4 / JURIDICA / CUIT: aprobado.");
         string.Join("\n", reports).Should().NotContain("sensitive response body");
