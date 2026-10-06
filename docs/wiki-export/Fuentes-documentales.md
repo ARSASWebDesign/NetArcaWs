@@ -1,6 +1,6 @@
 # Fuentes de la documentación
 
-Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 47 páginas de contenido y este manifiesto. GitHub muestra un único menú nativo; Home contiene la navegación por temas. Cada página incluye su fuente y reescribe enlaces relativos para navegación de wiki. Los contratos ARCA archivados en el repositorio tienen fecha de snapshot 2026-10-06. La salida refleja el árbol de trabajo. Al publicar, SOURCE_COMMIT en el repositorio wiki registra el SHA de origen. Revisar el mirror antes de publicar.
+Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 48 páginas de contenido y este manifiesto. GitHub muestra un único menú nativo; Home contiene la navegación por temas. Cada página incluye su fuente y reescribe enlaces relativos para navegación de wiki. Los contratos ARCA archivados en el repositorio tienen fecha de snapshot 2026-10-06. La salida refleja el árbol de trabajo. Al publicar, SOURCE_COMMIT en el repositorio wiki registra el SHA de origen. Revisar el mirror antes de publicar.
 
 - `.github/pull_request_template.md` → `Plantilla-de-pull-request`
 - `ARCHITECTURE.md` → `Arquitectura-general`
@@ -40,6 +40,7 @@ Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 47 páginas d
 - `docs/wiki/Health-checks.md` → `Health-checks`
 - `docs/wiki/Herramienta-de-certificados.md` → `Herramienta-de-certificados`
 - `docs/wiki/Home.md` → `Home`
+- `docs/wiki/Homologacion.md` → `Homologacion`
 - `docs/wiki/Inicio-rapido.md` → `Inicio-rapido`
 - `docs/wiki/Migracion-desde-PyAfipWs.md` → `Migracion-desde-PyAfipWs`
 - `docs/wiki/Seguridad-y-publicacion.md` → `Seguridad-y-publicacion`

@@ -46,3 +46,7 @@ PyAfipWs ni homologación fiscal de una instalación.
 La homologación autenticada requiere certificados autorizados por ARCA. Un
 build, un test local, un health check o la publicación de un paquete no prueban
 por sí solos que una factura real será aceptada.
+
+## Homologación
+
+- [Homologación protegida de WSFE](Homologacion.md) — ejecución manual, credenciales y aprobación en GitHub.
