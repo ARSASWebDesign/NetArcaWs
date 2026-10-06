@@ -1,0 +1,24 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directories:
+      - /src/NetArcaWs
+      - /src/NetArcaWs.Tool
+      - /examples/NetArcaWs.Examples
+      - /tools/NetArcaWs.Build
+      - /tests/NetArcaWs.IntegrationTests
+      - /tests/NetArcaWs.Tool.Tests
+      - /tests/NetArcaWs.Build.Tests
+      - /tests/NetArcaWs.UnitTests
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 8
+    commit-message:
+      prefix: deps
+  - package-ecosystem: github-actions
+    directory: /.github/workflows
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci

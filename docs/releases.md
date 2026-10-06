@@ -38,8 +38,10 @@ completaron y verificaron en la ejecución enlazada arriba.
    que el nombre de organización es ese usuario. Puede usarse una variable del
    repositorio si no existe una del environment.
 5. El environment limita despliegues a tags `v*`; la validación del workflow exige
-   además que el commit pertenezca a `main`. Los mantenedores pueden agregar
-   revisores al environment según su proceso de releases.
+   además que el commit pertenezca a `main`. En este proyecto la publicación es
+   automática, sin aprobación manual del environment: la revisión ocurre en la
+   PR y solo los tres administradores autorizados pueden crear tags de release.
+   Los tags no se pueden mover ni eliminar. Ver [protecciones](wiki/Seguridad-y-publicacion.md).
 
 La autenticación usa OIDC con `NuGet/login`; no requiere una API key permanente
 en GitHub. La política otorga una clave temporal al job de publicación. Referencia:
@@ -80,7 +82,7 @@ y [requisitos de firma de autor](https://learn.microsoft.com/en-us/nuget/create-
    indexados en NuGet. El éxito de GitHub Release no demuestra éxito en NuGet.
 
 Los paquetes de la release se construyen una sola vez en el job `build`; el job
-`publish` descarga esos artefactos y comprueba `SHA256SUMS`. Se adjunta también
+`publish` descarga esos artefactos y comprueba `SHA256SUMS`, identidad de versión y commit. No hace checkout, restore ni ejecuta código del repositorio con credenciales de publicación. Se adjunta también
 `BUILD_COMMIT` para identificar el código. Los assets existentes deben coincidir
 byte por byte: el flujo nunca los reemplaza. Se usa Ubuntu 24.04 y restauración
 `--locked-mode` con los lockfiles versionados. Los jobs de PR y forks

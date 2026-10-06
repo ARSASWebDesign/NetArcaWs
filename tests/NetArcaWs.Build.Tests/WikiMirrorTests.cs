@@ -10,7 +10,7 @@ public sealed class WikiMirrorTests
     {
         using var workspace = new BuildTestWorkspace();
         workspace.Write("README.md", "# Project\n\n[guide](docs/wiki/Guide.md#overview) and [[Home]].\n");
-        workspace.Write("docs/wiki/Home.md", "# Home\n\n[project](../../README.md) [external](https://example.test/docs) ![diagram](../../assets/diagram.png)\n");
+        workspace.Write("docs/wiki/Home.md", "# Home\n\n## Navegación\n\n- [Guía](Guide.md)\n- [[Guide]]\n\n[project](../../README.md) [external](https://example.test/docs) ![diagram](../../assets/diagram.png)\n");
         workspace.Write("docs/wiki/Guide.md", "# Guide\n\nA local page.\n");
         workspace.Write("assets/diagram.png", "image fixture");
 
@@ -19,25 +19,55 @@ public sealed class WikiMirrorTests
         workspace.Read("docs/wiki-export/Proyecto.md").Should().Contain("[guide](Guide#overview)");
         workspace.Read("docs/wiki-export/Proyecto.md").Should().Contain("[Home](Home)");
         workspace.Read("docs/wiki-export/Home.md").Should().Contain("[project](Proyecto)");
+        string home = workspace.Read("docs/wiki-export/Home.md");
+        home.Should().Contain("## Navegación");
+        home.Should().Contain("- [Guía](Guide)");
+        home.Should().Contain("- [Guide](Guide)");
+        home.IndexOf("- [Guía](Guide)", StringComparison.Ordinal)
+            .Should().BeLessThan(home.IndexOf("- [Guide](Guide)", StringComparison.Ordinal));
+        workspace.Exists("docs/wiki-export/_Sidebar.md").Should().BeFalse();
         workspace.Read("docs/wiki-export/Home.md").Should().Contain("https://example.test/docs");
         workspace.Read("docs/wiki-export/Home.md").Should().Contain(
             "![diagram](https://github.com/ARSASWebDesign/NetArcaWs/raw/main/assets/diagram.png)");
-        workspace.Read("docs/wiki-export/_Sidebar.md").Should().Contain("[Guide](Guide)");
         workspace.Read("docs/wiki-export/MIRROR-SOURCES.md").Should().Contain("README.md` → `Proyecto");
     }
 
     [Fact]
-    public void Run_uses_custom_sidebar_template_and_preserves_its_order_and_titles()
+    public void Run_uses_curated_home_navigation_and_ignores_legacy_sidebar_template()
     {
         using var workspace = new BuildTestWorkspace();
         workspace.Write("README.md", "# Project\n");
-        workspace.Write("docs/wiki/Home.md", "# Home\n");
-        workspace.Write("docs/wiki-sidebar.txt", "# NetArcaWs\r\n\r\n- [Página principal](Home)\r\n- [Documentación](Proyecto)\r\n");
+        workspace.Write("docs/wiki/Home.md", "# Inicio\n\n## Por tema\n\n- [Documentación](../../README.md)\n- [[Home]]\n");
+        workspace.Write("docs/wiki-sidebar.txt", "# Legacy sidebar\n\n- [Home](Home)\n");
 
         WikiMirror.Run(workspace.Root);
 
-        workspace.Read("docs/wiki-export/_Sidebar.md").Should().Be(
-            "# NetArcaWs\n\n- [Página principal](Home)\n- [Documentación](Proyecto)\n");
+        string home = workspace.Read("docs/wiki-export/Home.md");
+        home.Should().Contain("## Por tema");
+        home.Should().Contain("- [Documentación](Proyecto)");
+        home.Should().Contain("- [Home](Home)");
+        workspace.Exists("docs/wiki-export/_Sidebar.md").Should().BeFalse();
+    }
+
+    [Fact]
+    public void Run_removes_legacy_adr_page_and_writes_its_curated_name()
+    {
+        using var workspace = new BuildTestWorkspace();
+        workspace.Write("docs/adr/0001-safe-invoice-retries.md", "# Safe invoices\n");
+        workspace.Write("docs/wiki-export/ADR-0001-safe-invoice-retries.md", "old page name");
+        workspace.Write("docs/wiki-export/_Sidebar.md", "old generated sidebar");
+        workspace.Write("docs/wiki-export/MIRROR-SOURCES.md", """
+            # Fuentes anteriores
+
+            - `docs/adr/0001-safe-invoice-retries.md` → `ADR-0001-safe-invoice-retries`
+            """);
+
+        WikiMirror.Run(workspace.Root);
+
+        workspace.Exists("docs/wiki-export/ADR-0001-safe-invoice-retries.md").Should().BeFalse();
+        workspace.Read("docs/wiki-export/Decisión-1-Emisión-y-reintentos-seguros.md")
+            .Should().Contain("# Safe invoices");
+        workspace.Exists("docs/wiki-export/_Sidebar.md").Should().BeFalse();
     }
 
     [Fact]

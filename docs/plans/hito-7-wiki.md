@@ -1,8 +1,8 @@
 # Hito 7 final: wiki integral de NetArcaWs
 
-Estado: documentación Markdown local publicada en la wiki el 2026-10-06.
-Quedan la revisión exhaustiva del inventario upstream y los ejemplos por operación;
-la publicación no implica que el port esté completo.
+Estado: documentación del alcance implementado completada el 2026-10-06,
+con inventario upstream trazable y ejemplos tipados para las 81 operaciones.
+La publicación no implica que todo el repositorio Python esté portado.
 
 ## Objetivo y publicación
 
@@ -13,15 +13,15 @@ C# y sus diferencias de comportamiento.
 
 Mantener las fuentes Markdown del wiki en `docs/wiki/` dentro del repositorio
 principal, revisadas junto al código. Se publica una copia en la
-pestaña Wiki de `ARSASWebDesign/NetArcaWs`, con portada, barra lateral y enlaces
+pestaña Wiki de `ARSASWebDesign/NetArcaWs`, con portada, menú nativo de GitHub y enlaces
 entre páginas. Los ADR y contratos técnicos existentes conservarán su historial:
 el wiki incluirá su contenido y procedencia, sin crear dos versiones editadas
 independientemente. Definir y verificar un mecanismo reproducible de publicación
 para que fuentes y wiki correspondan al mismo commit.
 
 El espejo plano local se genera con `dotnet run --project tools/NetArcaWs.Build -- wiki` en
-`docs/wiki-export/`; contiene 29 páginas de contenido más barra lateral y
-manifiesto. Incluye las páginas temáticas y copia README, arquitectura, progreso,
+`docs/wiki-export/`; contiene todas las páginas de contenido y un manifiesto.
+No se genera `_Sidebar.md`: evita duplicar el menú Pages de GitHub. Incluye las páginas temáticas y copia README, arquitectura, progreso,
 ADR, guía de contribución, releases, CLI y referencias, convirtiendo enlaces
 relativos a navegación entre páginas. El manifiesto declara las fuentes, la fecha
 de snapshots de contratos (2026-10-06) y la revisión de origen se registra en `SOURCE_COMMIT` del repositorio wiki.
@@ -33,19 +33,18 @@ la wiki; la publicación utiliza su repositorio Git dedicado.
 - [Repositorio y README de PyAfipWs](https://github.com/reingart/pyafipws).
 - [Wiki original](https://github.com/reingart/pyafipws/wiki).
 - [Manual PyAfipWs](https://www.sistemasagiles.com.ar/trac/wiki/ManualPyAfipWs),
-  enlazado por el README original. Su contenido no pudo recuperarse desde esta
-  consulta directa; también se identificó el [manual HTML del sitio original](https://www.sistemasagiles.com.ar/site/websites/documentacion_herramientas/manualpyafipws.html).
-  Registrar la versión recuperada y revisar ambos puntos de entrada durante el hito.
+  enlazado por el README original. El inventario registra las limitaciones del
+  endpoint Trac y la consulta del [manual HTML original](https://www.sistemasagiles.com.ar/site/websites/documentacion_herramientas/manualpyafipws.html).
 - Documentación, WSDL y manuales vigentes de ARCA enlazados desde los contratos
   de cada módulo, para revisar información histórica del proyecto original.
 - Todos los Markdown, ADR, contratos XML, ejemplos, configuración y guías de
   contribución que existan en NetArcaWs al ejecutar el hito.
 
-Antes de escribir el wiki completo, elaborar un inventario página por página:
+El [inventario completado](../reference/upstream-inventory.md) registra:
 URL/ruta original, revisión o fecha consultada, tema, página destino NetArcaWs,
 estado de adaptación, diferencias y atribución. Revisar también los enlaces a
-manuales de cada servicio. La revisión inicial del índice upstream es del
-2026-10-06 y no constituye ese inventario exhaustivo.
+manuales de cada servicio. La revisión de 2026-10-06 cubre las 16 páginas wiki, las 14 rutas documentales
+o de texto y los 48 módulos Python de raíz identificados en las revisiones fijadas.
 
 El upstream cubre más servicios y herramientas que los hitos 1 a 5. El inventario
 no debe excluirlos silenciosamente: identificar todos los temas encontrados y
@@ -87,19 +86,19 @@ como punto de partida; la estructura de operación .NET y sus extras son propios
 
 ## Criterios de cierre
 
-- [ ] Inventario exhaustivo de documentación upstream y local con cada entrada resuelta.
+- [x] Inventario exhaustivo de documentación upstream y local con cada entrada resuelta.
 - [x] Toda la documentación local incorporada al wiki, incluidos ADR y referencias.
-- [ ] Cada servicio y operación implementada tiene guía, parámetros, ejemplo y manejo de errores.
-- [ ] Cada tema upstream sin implementación equivalente está identificado, sin promesas de soporte.
-- [ ] Todos los extras listados en el README tienen su página y estado verificable.
-- [ ] Ejemplos C# compilados; ejemplos de credenciales ficticios y sin secretos reales.
+- [x] Cada servicio y operación implementada tiene guía, parámetros, ejemplo y manejo de errores.
+- [x] Cada tema upstream sin implementación equivalente está identificado, sin promesas de soporte.
+- [x] Todos los extras listados en el README tienen su página y estado verificable.
+- [x] Ejemplos C# compilados; ejemplos de credenciales ficticios y sin secretos reales.
 - [x] Homologación real distinguida de tests simulados y de comprobaciones de infraestructura.
-- [ ] Enlaces internos/externos, navegación, portada y barra lateral revisados.
-- [ ] Información fiscal/operativa contrastada con fuentes oficiales vigentes, con fecha de revisión.
-- [ ] Procedencia, autores y licencia del material adaptado registrados; verificar la licencia documental antes de copiar textos.
+- [x] Enlaces internos/externos, navegación, portada y menú único revisados.
+- [x] Información fiscal/operativa contrastada con fuentes oficiales vigentes, con fecha de revisión.
+- [x] Procedencia, autores y licencia del material adaptado registrados; verificar la licencia documental antes de copiar textos.
 - [x] Publicación reproducible validada: fuentes `docs/wiki/` y wiki publicado corresponden a una revisión identificada.
 - [x] README enlaza el wiki publicado y conserva inicio rápido, extras y límites actuales.
-- [ ] Checklist y matriz de compatibilidad actualizados; revisión final antes de declarar completo este hito.
+- [x] Checklist y matriz de compatibilidad actualizados; revisión final antes de declarar completo este hito.
 
 Este hito permanece al final del plan. Si aparecen módulos adicionales necesarios
 para completar el port, sus hitos de implementación deben preceder al cierre del
@@ -113,14 +112,29 @@ wiki integral.
 2. Clonar `git@github.com:ARSASWebDesign/NetArcaWs.wiki.git` en una carpeta
    externa al repositorio principal. Actualizar su rama antes de cada publicación.
 3. Copiar los Markdown de `docs/wiki-export/` a la raíz del checkout wiki.
+   Retirar únicamente páginas antiguas administradas por el manifiesto que se
+   renombraron y `_Sidebar.md` (ya no se genera); conservar contenido ajeno.
    Revisar conflictos con páginas editadas manualmente; conservar páginas ajenas
    al mirror. No reemplazar el historial ni usar push forzado.
 4. Guardar el SHA completo de `git rev-parse HEAD` del repositorio principal en
    el archivo `SOURCE_COMMIT` de la wiki. Confirmar el cambio en la wiki indicando
    ese SHA en el mensaje y hacer push a su rama predeterminada.
 5. Verificar el HEAD remoto y comparar cada archivo publicado con el mirror.
-   La barra lateral y el manifiesto enumeran las páginas y sus fuentes originales.
+   Home y el menú nativo permiten navegar; el manifiesto enumera las fuentes originales.
 
 El manifiesto permite reproducir el contenido de una revisión concreta del
 repositorio principal; `SOURCE_COMMIT` pertenece exclusivamente al checkout wiki
 para evitar referencias circulares en los commits del repositorio principal.
+
+## Evidencia y límites del cierre
+
+Las referencias en `docs/reference/operations/` se regeneran con el comando
+`operations` de `NetArcaWs.Build`. El proyecto de ejemplos integra la solución y
+compila los 81 adaptadores tipados y ejemplos de guías. Los adaptadores reciben
+requests validados por la aplicación: no son facturas universales listas para
+producción ni reemplazan las reglas del manual ARCA. Los tests verifican
+operaciones, raíces, DTOs, actions y reproducción determinista del catálogo.
+El inventario distingue equivalencia, adaptación parcial y ausencia de port;
+la ausencia documentada no se marca como implementación. Las fuentes oficiales
+y discrepancias entre versiones de PDF/índice constan en
+[procedencia de contratos](../reference/contracts/sources.md).

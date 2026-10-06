@@ -20,7 +20,7 @@ segundo plano. El host que consume `IHealthCheck` decide frecuencia y alertas.
 WSFE/FEX envían su `Dummy` vacío con namespace y SOAPAction del WSDL. Padrón usa
 su `dummy` sin token/sign; MTXCA tiene `dummyRequest` sin partes y SOAPAction del
 binding publicado. Los contratos por operación, namespace, respuesta y fuentes
-están en [healthchecks-contracts.md](Referencia-healthchecks-contracts).
+están en [healthchecks-contracts.md](Contratos-de-health-checks).
 Los WSDL pueden cambiar: al actualizar fixtures, comprobar contrato desplegado y
 manual oficial.
 

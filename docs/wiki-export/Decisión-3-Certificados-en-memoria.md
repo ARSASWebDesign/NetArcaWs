@@ -5,7 +5,7 @@
 - Estado: Aceptado e implementado para WSAA y las fachadas autenticadas actuales;
   suite local verificada y homologación autenticada pendiente de certificados
 - Fecha: 2026-10-06
-- Complementa: [ADR 0002: contexto multitenant](ADR-0002-arca-tenant-context)
+- Complementa: [ADR 0002: contexto multitenant](Decisi%C3%B3n-2-Contexto-multitenant)
 
 ## Contexto
 

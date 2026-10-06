@@ -158,5 +158,5 @@ su contrato de factura electrónica con detalle y CAE/CAEA, no el ciclo completo
 de Factura de Crédito Electrónica MiPyME.
 
 La suite Release y los contratos locales están verificados; no inferir aceptación
-fiscal autenticada a partir de estas pruebas. Ver [ADR 0001](ADR-0001-safe-invoice-retries)
+fiscal autenticada a partir de estas pruebas. Ver [ADR 0001](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros)
 para las decisiones, los límites y la evolución pendiente.

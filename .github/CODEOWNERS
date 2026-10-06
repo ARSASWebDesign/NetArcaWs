@@ -1,0 +1,12 @@
+# Default maintainers for all paths.
+* @hlopez94 @RARosas @davidaragon08
+
+# Security-sensitive configuration and automation.
+/.github/ @hlopez94 @RARosas @davidaragon08
+/tools/ @hlopez94 @RARosas @davidaragon08
+/scripts/ @hlopez94 @RARosas @davidaragon08
+/src/ @hlopez94 @RARosas @davidaragon08
+/tests/ @hlopez94 @RARosas @davidaragon08
+**/packages.lock.json @hlopez94 @RARosas @davidaragon08
+/Directory.Build.props @hlopez94 @RARosas @davidaragon08
+/global.json @hlopez94 @RARosas @davidaragon08

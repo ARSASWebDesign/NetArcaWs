@@ -1,58 +1,45 @@
 # NetArcaWs
 
-NetArcaWs es una biblioteca C# para integrar servicios web de ARCA desde .NET
-10. Deriva de PyAfipWs y conserva sus avisos de copyright y licencia. La
-documentación distingue funciones implementadas, documentación de contratos y
-trabajo todavía pendiente; no implica paridad con todo el proyecto Python.
+NetArcaWs es una biblioteca .NET para integrar servicios web de ARCA desde
+aplicaciones C#. Consulta [los servicios implementados](Servicios-implementados.md)
+para conocer el alcance de esta biblioteca y el
+[catálogo oficial de servicios web ARCA](https://ftp.afip.gob.ar/ws/documentacion/catalogo.asp)
+para verificar los servicios publicados por el organismo. Esta wiki describe
+el uso y los límites del código disponible; no implica paridad completa con
+PyAfipWs ni homologación fiscal de una instalación.
 
-## Guías
+## Empezar
 
-- [[Inicio rápido]] — requisitos, paquetes y primera autenticación.
-- [[WSAA y certificados]] — TRA, firma, TA, PEM/PFX y operación.
-- [[Contexto multitenant]] — identidad confiable, ambiente y límites del caché.
-- [[Health checks]] — probes opt-in sin certificado.
-- [[Herramienta de certificados]] — comandos locales `netarcaws`.
-- [[Transporte SOAP]] — envío común SOAP 1.1 y límites.
-- [[Cálculos decimales]] — utilitarios aritméticos y límites fiscales.
-- [[Arquitectura y reintentos]] — aislamiento, manejo seguro de fallas fiscales y ADR.
-- [[Diario fiscal]] — persistencia SQLite local y coordinación de estados inciertos.
-- [[Servicios y cobertura]] — estado de WSFEv1, WSFEXv1, WSMTXCA, Padrón y upstream.
-- [[Desarrollo y contribución]] — build, pruebas, empaquetado y pull requests.
+- [Inicio rápido](Inicio-rapido.md) — requisitos, paquetes y primera autenticación.
+- [Servicios implementados](Servicios-implementados.md) — qué hace cada cliente, cómo integrarlo y dónde consultar operaciones y manuales ARCA.
+- [Funcionalidades adicionales](Funcionalidades-adicionales.md) — multitenancy, certificados, health checks, CLI, emisión durable, cálculos, herramientas y publicación.
+- [Diagnóstico y glosario](Diagnostico-y-glosario.md) — errores, límites y términos habituales.
+- [Migración desde PyAfipWs](Migracion-desde-PyAfipWs.md) — equivalencias parciales y funciones que requieren una solución propia.
 
-## Estado
+## Guías por tema
 
-La versión actual implementa autenticación WSAA, certificados en memoria,
-contexto tenant, health checks, CLI, transporte SOAP, cálculo decimal,
-diario/orquestación fiscal y fachadas tipadas para 81 operaciones de WSFEv1,
-WSFEXv1, WSMTXCA y Padrón. Hitos 2–6 y su suite están verificados. La build
-Release terminó con 0 warnings/errores; la suite tuvo 223 casos (220 aprobados,
-3 omitidos), se validaron 81 QName/actions y 166 tipos raíz XML en round-trip.
-22 tipos de contrato conservaron campos `DateTime`. Ver [[Servicios y
-cobertura]] para límites y estado real de QA. La cobertura documental de PyAfipWs
-no significa que los otros módulos estén disponibles en .NET.
+- [WSAA y certificados](WSAA-y-certificados.md) — autenticación, tickets y material criptográfico en memoria.
+- [Contexto multitenant](Contexto-multitenant.md) — cómo seleccionar CUIT, certificado y entorno por operación.
+- [Emisión durable y reconciliación](Diario-fiscal.md) — diario, claves de idempotencia y tratamiento de resultados inciertos.
+- [Arquitectura y reintentos](Arquitectura-y-reintentos.md) — límites del transporte y política para fallas fiscales.
+- [Transporte SOAP](Transporte-SOAP.md) — serialización, límites, faults y cancelación.
+- [Health checks](Health-checks.md) — probes opt-in de disponibilidad sin credenciales fiscales.
+- [Cálculos decimales](Calculos-decimales.md) — utilitarios aritméticos y límites fiscales.
+- [Herramienta de certificados](Herramienta-de-certificados.md) — generación local de CSR e inspección de certificados.
+- [Desarrollo y contribución](Desarrollo-y-contribucion.md) — build, validaciones y pull requests.
+- [Releases y publicación NuGet](../releases.md) — empaquetado y publicación.
 
-NuGet aceptó e indexó `NetArcaWs` y `NetArcaWs.Tool` 0.5.0 mediante Trusted
-Publishing OIDC; consultar [[Publicar versiones]].
+- [Seguridad y publicación](Seguridad-y-publicacion.md) — protecciones, revisión y respuesta a incidentes.
 
-En QA real, una corrida de 9 casos respondió los siete probes `Dummy` el
-2026-10-06 y omitió las pruebas autenticadas por falta de certificados; no es una
-validación fiscal de negocio. Esta wiki publica toda la documentación Markdown
-local; el Hito 7 conserva pendientes de revisión exhaustiva del material upstream
-y de ejemplos por operación. La revisión publicada figura en `SOURCE_COMMIT`
-del repositorio Git de la wiki.
+## Referencias
 
-## Fuentes y decisiones
+- [Inventario de PyAfipWs](../reference/upstream-inventory.md) — fuentes investigadas y alcance que sigue fuera del port.
+- [Contratos SOAP de health checks](../reference/healthchecks-contracts.md) — endpoints y bindings de probes.
+- [Contratos de producción](../reference/contracts/sources.md) — procedencia y hashes de WSDL.
+- [Catálogo de operaciones por servicio](../reference/operations/wsfev1.md) — detalle de WSFEv1; ver también los vínculos de cada servicio en [Servicios implementados](Servicios-implementados.md).
+- [Ejemplos compilables de integración](../../examples/NetArcaWs.Examples/GuideExamples.cs) — snippets de las guías, sin llamadas de red al construirlos.
+- [Arquitectura](../../ARCHITECTURE.md) y [progreso del proyecto](../../PROGRESS.md) — decisiones técnicas y estado del trabajo.
 
-- [README del repositorio](../../README.md) — visión general y ejemplos de API.
-- [Arquitectura](../../ARCHITECTURE.md) — comportamiento y límites técnicos.
-- [Progreso](../../PROGRESS.md) — hitos y verificaciones locales.
-- [Plan de cierre de hitos 2–7](../plans/remaining-milestones.md) — entregables.
-- [ADR 0001: reintentos seguros](../adr/0001-safe-invoice-retries.md).
-- [ADR 0002: contexto tenant](../adr/0002-arca-tenant-context.md).
-- [ADR 0003: certificados en memoria](../adr/0003-in-memory-certificates.md).
-- [ADR 0004: contratos SOAP](../adr/0004-public-soap-contracts.md).
-- [Contratos de health checks](../reference/healthchecks-contracts.md).
-
-Las fuentes oficiales y upstream se enlazan en cada guía. La fecha de consulta
-y versión de los manuales debe mantenerse junto a los contratos y los casos de
-prueba.
+La homologación autenticada requiere certificados autorizados por ARCA. Un
+build, un test local, un health check o la publicación de un paquete no prueban
+por sí solos que una factura real será aceptada.

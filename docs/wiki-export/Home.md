@@ -2,58 +2,46 @@
 
 # NetArcaWs
 
-NetArcaWs es una biblioteca C# para integrar servicios web de ARCA desde .NET
-10. Deriva de PyAfipWs y conserva sus avisos de copyright y licencia. La
-documentación distingue funciones implementadas, documentación de contratos y
-trabajo todavía pendiente; no implica paridad con todo el proyecto Python.
+NetArcaWs es una biblioteca .NET para integrar servicios web de ARCA desde
+aplicaciones C#. Consulta [los servicios implementados](Servicios-implementados)
+para conocer el alcance de esta biblioteca y el
+[catálogo oficial de servicios web ARCA](https://ftp.afip.gob.ar/ws/documentacion/catalogo.asp)
+para verificar los servicios publicados por el organismo. Esta wiki describe
+el uso y los límites del código disponible; no implica paridad completa con
+PyAfipWs ni homologación fiscal de una instalación.
 
-## Guías
+## Empezar
 
 - [Inicio rápido](Inicio-rapido) — requisitos, paquetes y primera autenticación.
-- [WSAA y certificados](WSAA-y-certificados) — TRA, firma, TA, PEM/PFX y operación.
-- [Contexto multitenant](Contexto-multitenant) — identidad confiable, ambiente y límites del caché.
-- [Health checks](Health-checks) — probes opt-in sin certificado.
-- [Herramienta de certificados](Herramienta-de-certificados) — comandos locales `netarcaws`.
-- [Transporte SOAP](Transporte-SOAP) — envío común SOAP 1.1 y límites.
+- [Servicios implementados](Servicios-implementados) — qué hace cada cliente, cómo integrarlo y dónde consultar operaciones y manuales ARCA.
+- [Funcionalidades adicionales](Funcionalidades-adicionales) — multitenancy, certificados, health checks, CLI, emisión durable, cálculos, herramientas y publicación.
+- [Diagnóstico y glosario](Diagnostico-y-glosario) — errores, límites y términos habituales.
+- [Migración desde PyAfipWs](Migracion-desde-PyAfipWs) — equivalencias parciales y funciones que requieren una solución propia.
+
+## Guías por tema
+
+- [WSAA y certificados](WSAA-y-certificados) — autenticación, tickets y material criptográfico en memoria.
+- [Contexto multitenant](Contexto-multitenant) — cómo seleccionar CUIT, certificado y entorno por operación.
+- [Emisión durable y reconciliación](Diario-fiscal) — diario, claves de idempotencia y tratamiento de resultados inciertos.
+- [Arquitectura y reintentos](Arquitectura-y-reintentos) — límites del transporte y política para fallas fiscales.
+- [Transporte SOAP](Transporte-SOAP) — serialización, límites, faults y cancelación.
+- [Health checks](Health-checks) — probes opt-in de disponibilidad sin credenciales fiscales.
 - [Cálculos decimales](Calculos-decimales) — utilitarios aritméticos y límites fiscales.
-- [Arquitectura y reintentos](Arquitectura-y-reintentos) — aislamiento, manejo seguro de fallas fiscales y ADR.
-- [Diario fiscal](Diario-fiscal) — persistencia SQLite local y coordinación de estados inciertos.
-- [Servicios y cobertura](Servicios-y-cobertura) — estado de WSFEv1, WSFEXv1, WSMTXCA, Padrón y upstream.
-- [Desarrollo y contribución](Desarrollo-y-contribucion) — build, pruebas, empaquetado y pull requests.
+- [Herramienta de certificados](Herramienta-de-certificados) — generación local de CSR e inspección de certificados.
+- [Desarrollo y contribución](Desarrollo-y-contribucion) — build, validaciones y pull requests.
+- [Releases y publicación NuGet](Publicar-versiones) — empaquetado y publicación.
 
-## Estado
+- [Seguridad y publicación](Seguridad-y-publicacion) — protecciones, revisión y respuesta a incidentes.
 
-La versión actual implementa autenticación WSAA, certificados en memoria,
-contexto tenant, health checks, CLI, transporte SOAP, cálculo decimal,
-diario/orquestación fiscal y fachadas tipadas para 81 operaciones de WSFEv1,
-WSFEXv1, WSMTXCA y Padrón. Hitos 2–6 y su suite están verificados. La build
-Release terminó con 0 warnings/errores; la suite tuvo 223 casos (220 aprobados,
-3 omitidos), se validaron 81 QName/actions y 166 tipos raíz XML en round-trip.
-22 tipos de contrato conservaron campos `DateTime`. Ver [Servicios y cobertura](Servicios-y-cobertura) para límites y estado real de QA. La cobertura documental de PyAfipWs
-no significa que los otros módulos estén disponibles en .NET.
+## Referencias
 
-NuGet aceptó e indexó `NetArcaWs` y `NetArcaWs.Tool` 0.5.0 mediante Trusted
-Publishing OIDC; consultar [Publicar versiones](Publicar-versiones).
+- [Inventario de PyAfipWs](Inventario-del-proyecto-original) — fuentes investigadas y alcance que sigue fuera del port.
+- [Contratos SOAP de health checks](Contratos-de-health-checks) — endpoints y bindings de probes.
+- [Contratos de producción](Procedencia-de-contratos-SOAP) — procedencia y hashes de WSDL.
+- [Catálogo de operaciones por servicio](WSFEv1-Referencia-de-operaciones) — detalle de WSFEv1; ver también los vínculos de cada servicio en [Servicios implementados](Servicios-implementados).
+- [Ejemplos compilables de integración](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/examples/NetArcaWs.Examples/GuideExamples.cs) — snippets de las guías, sin llamadas de red al construirlos.
+- [Arquitectura](Arquitectura-general) y [progreso del proyecto](Estado-del-proyecto) — decisiones técnicas y estado del trabajo.
 
-En QA real, una corrida de 9 casos respondió los siete probes `Dummy` el
-2026-10-06 y omitió las pruebas autenticadas por falta de certificados; no es una
-validación fiscal de negocio. Esta wiki publica toda la documentación Markdown
-local; el Hito 7 conserva pendientes de revisión exhaustiva del material upstream
-y de ejemplos por operación. La revisión publicada figura en `SOURCE_COMMIT`
-del repositorio Git de la wiki.
-
-## Fuentes y decisiones
-
-- [README del repositorio](Proyecto) — visión general y ejemplos de API.
-- [Arquitectura](Arquitectura-general) — comportamiento y límites técnicos.
-- [Progreso](Estado-del-proyecto) — hitos y verificaciones locales.
-- [Plan de cierre de hitos 2–7](Plan-remaining-milestones) — entregables.
-- [ADR 0001: reintentos seguros](ADR-0001-safe-invoice-retries).
-- [ADR 0002: contexto tenant](ADR-0002-arca-tenant-context).
-- [ADR 0003: certificados en memoria](ADR-0003-in-memory-certificates).
-- [ADR 0004: contratos SOAP](ADR-0004-public-soap-contracts).
-- [Contratos de health checks](Referencia-healthchecks-contracts).
-
-Las fuentes oficiales y upstream se enlazan en cada guía. La fecha de consulta
-y versión de los manuales debe mantenerse junto a los contratos y los casos de
-prueba.
+La homologación autenticada requiere certificados autorizados por ARCA. Un
+build, un test local, un health check o la publicación de un paquete no prueban
+por sí solos que una factura real será aceptada.

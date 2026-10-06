@@ -58,7 +58,7 @@ no cambia la representación SOAP. No se usa WCF: las fachadas usan
 son la fuente reproducible para la generación, no una afirmación de compatibilidad
 con todos los cambios futuros del servicio.
 
-La build Release y la suite de Hitos 2–5 se verificaron: 223 casos, 220 aprobados
+La build Release y la suite de Hitos 2–5 se verificaron: 225 casos, 222 aprobados
 y 3 omitidos. Los 81 QName/SOAPAction se compararon con sus WSDL y 166 tipos
 raíz XML pasaron round-trip. Los 22 tipos de contrato con campos `DateTime`
 (`xs:date`/`xs:dateTime`) conservaron sus valores. En QA real hubo 9 casos:
@@ -68,7 +68,7 @@ certificados; la homologación fiscal autenticada sigue pendiente.
 WSMTXCA modela el web service de factura electrónica con detalle y sus
 operaciones CAE/CAEA. No cubre por equivalencia todo el ciclo de Factura de
 Crédito Electrónica MiPyME; los contratos y reglas adicionales quedan fuera de
-esta afirmación. Ver el [ADR de contratos](ADR-0004-public-soap-contracts)
+esta afirmación. Ver el [ADR de contratos](Decisi%C3%B3n-4-Contratos-SOAP-p%C3%BAblicos)
 y la [matriz de operaciones](Servicios-y-cobertura).
 
 `SoapTransport` limita la serialización del request y la lectura de response a
@@ -143,7 +143,7 @@ infraestructura por servicio/ambiente y no usan contexto ni certificados ni
 verifican permiso fiscal del tenant.
 
 `SafeInvoiceService` mantiene la clave fiscal global definida en
-[ADR 0001](ADR-0001-safe-invoice-retries): ambiente, CUIT emisora, punto
+[ADR 0001](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros): ambiente, CUIT emisora, punto
 de venta, tipo y número. No se debe agregar tenant como parte de esa
 unicidad. Dos tenants que operan la misma CUIT no pueden registrar dos veces el
 mismo comprobante; el límite por tenant controla acceso y visibilidad, no duplica
@@ -176,7 +176,7 @@ Cripto, debido al límite de threads del entorno.
 
 La suite validada comprobó CMS y CSR con primitivas independientes de
 verificación, simuló HTTP/SOAP y controló el reloj. La suite Release final pasó
-198/223 casos (3 omitidos); build con 0 warnings y 0 errors. Los Dummies reales
+198/225 casos (3 omitidos); build con 0 warnings y 0 errors. Los Dummies reales
 en QA comprobaron disponibilidad, no autorización de negocio. La suite de
 homologación autenticada requiere certificados autorizados; compilar y pasar
 tests no demuestra aceptación fiscal. El inventario y las diferencias con Python están documentados en
@@ -219,7 +219,7 @@ validación de contratos de esos flujos pasaron; el transporte común no reinten
 inciertos se reconcilian sin reenvío. Corregir un rechazo confirmado genera una
 revisión auditable que queda preparada hasta que la aplicación invoque
 explícitamente `ResumeAsync`. Aplican las reglas del
-[ADR 0001](ADR-0001-safe-invoice-retries); una prueba de diario no prueba
+[ADR 0001](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros); una prueba de diario no prueba
 la garantía del ciclo fiscal completo.
 
 ## Herramienta de certificados
@@ -246,8 +246,8 @@ comprobar también su ejecución fuera de la solución.
 
 ## Documentación de decisiones y publicación
 
-El [ADR 0003](ADR-0003-in-memory-certificates) formaliza el contrato de
+El [ADR 0003](Decisi%C3%B3n-3-Certificados-en-memoria) formaliza el contrato de
 certificados en memoria y complementa el contexto multitenant del ADR 0002.
-El [hito final del wiki](Plan-hito-7-wiki) consolidará toda la
+El [hito final del wiki](Plan-de-documentaci%C3%B3n-y-wiki) consolidará toda la
 documentación y las decisiones, con trazabilidad hacia las fuentes de PyAfipWs
 y una matriz explícita de compatibilidad y extras de NetArcaWs.

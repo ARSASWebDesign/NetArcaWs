@@ -64,7 +64,7 @@ proveedor pudo haber autorizado el comprobante aunque la respuesta no haya
 llegado. No se debe asignar un número nuevo ni volver a emitir con otro payload.
 NetArcaWs no aplica retry general a operaciones SOAP de escritura.
 
-[ADR 0001](ADR-0001-safe-invoice-retries) documenta la operación de emisión
+[ADR 0001](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros) documenta la operación de emisión
 durable implementada: payload tipado e inmutable, restricción de identidad fiscal,
 estado `Unknown`, reconciliación específica del servicio y revisión manual si la
 evidencia no alcanza. El ADR distingue comportamientos distintos: WSFE consulta
@@ -82,9 +82,9 @@ sigue pendiente de certificados autorizados.
 
 ## Decisiones relacionadas
 
-- [ADR 0001 — reintentos seguros y diario fiscal](ADR-0001-safe-invoice-retries)
-- [ADR 0002 — autorización/identidad tenant](ADR-0002-arca-tenant-context)
-- [ADR 0003 — certificados y rotación en memoria](ADR-0003-in-memory-certificates)
-- [ADR 0004 — contratos SOAP fieles a WSDL](ADR-0004-public-soap-contracts)
+- [ADR 0001 — reintentos seguros y diario fiscal](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros)
+- [ADR 0002 — autorización/identidad tenant](Decisi%C3%B3n-2-Contexto-multitenant)
+- [ADR 0003 — certificados y rotación en memoria](Decisi%C3%B3n-3-Certificados-en-memoria)
+- [ADR 0004 — contratos SOAP fieles a WSDL](Decisi%C3%B3n-4-Contratos-SOAP-p%C3%BAblicos)
 - [Arquitectura actual](Arquitectura-general)
-- [Plan de hitos restantes](Plan-remaining-milestones)
+- [Plan de hitos restantes](Plan-de-servicios-y-documentaci%C3%B3n)

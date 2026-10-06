@@ -164,9 +164,9 @@ pasos se debe inferir de `ListPendingAsync` ni habilitar por un retry HTTP.
 ## Fuentes oficiales consultadas
 
 La evidencia de contratos desplegados y manuales se registra en
-[`healthchecks-contracts.md`](Referencia-healthchecks-contracts),
+[`healthchecks-contracts.md`](Contratos-de-health-checks),
 [`docs/reference/contracts`](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/contracts) y
-[ADR 0004](ADR-0004-public-soap-contracts). Revalidar las versiones al implementar
+[ADR 0004](Decisi%C3%B3n-4-Contratos-SOAP-p%C3%BAblicos). Revalidar las versiones al implementar
 cada cambio. No se afirma homologación de emisión sin una ejecución real con
 credenciales autorizadas.
 

@@ -83,9 +83,9 @@ se agregarán aparte y no deben ocultar las operaciones de bajo nivel.
 
 - [`docs/reference/contracts`](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/contracts) — snapshots de producción
   y homologación revisados; la copia WSMTXCA homol. es inválida para generación.
-- [`docs/reference/healthchecks-contracts.md`](Referencia-healthchecks-contracts)
+- [`docs/reference/healthchecks-contracts.md`](Contratos-de-health-checks)
   — hosts, service IDs y contratos Dummy.
-- [`docs/plans/remaining-milestones.md`](Plan-remaining-milestones) —
+- [`docs/plans/remaining-milestones.md`](Plan-de-servicios-y-documentaci%C3%B3n) —
   inventario por operación y límites de la cobertura verificada.
 - [ARCA, web services de factura electrónica](https://arca.gob.ar/fe/ayuda/webservice.asp)
 - [ARCA, catálogo de servicios web](https://ftp.afip.gob.ar/ws/documentacion/catalogo.asp)

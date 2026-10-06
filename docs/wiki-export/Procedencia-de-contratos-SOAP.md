@@ -21,3 +21,20 @@ Los snapshots se descargaron el 2026-10-06 desde los WSDL públicos indicados. S
 Para los otros servicios, las operaciones y los tipos embebidos de los WSDL QA/producción capturados coincidieron en la comparación de los snapshots; los clientes seleccionan endpoints por ambiente. Padrón A5 migró el host de servicio a `arca.gob.ar`: el snapshot del WSDL de producción todavía anuncia `aws.afip.gov.ar`. El endpoint runtime usa el alias `.arca.gob.ar` de producción y `.afip.gov.ar` de QA, que se verificaron disponibles el 2026-10-06; las URL de contrato anteriores conservan la evidencia descargada. A10/A13 usan HTTPS en runtime según sus manuales aunque el WSDL capturado anuncia esquema HTTP.
 
 Regeneración: `scripts/generate-contracts.sh`. El script instala `dotnet-xscgen` versión `3.0.1240` en un directorio temporal, conserva namespaces QName al extraer el XSD inline y emite los DTO/wrappers. Revisar y actualizar hashes/snapshots antes de cambiar una versión de contrato.
+
+## Manuales consultados el 2026-10-06
+
+Se contrastaron los contratos con el [índice oficial de facturación](https://arca.gob.ar/fe/ayuda/webservice.asp)
+y se descargaron sus tres manuales. El número publicado en el índice no siempre
+coincide con la portada del PDF recibido; se conserva esa diferencia explícita.
+
+| Servicio | Documento recibido | SHA-256 del PDF |
+|---|---|---|
+| WSFEv1 | [FE v4.7, revisión 2026-09-01](https://arca.gob.ar/ws/documentacion/manuales/manual-desarrollador-ARCA-COMPG.pdf), 203 páginas | `11dd8e4c5dc409d9e05a88a0043cfe43ee1577e887dbc94ed765ee2c053a6aed` |
+| WSFEXv1 | [URL rotulada V3.1.1](https://arca.gob.ar/ws/documentacion/manuales/WSFEX-Manualparaeldesarrollador_V3.1.1_ARCA.pdf), pero portada **3.1.0 de 2025-08-18**, 59 páginas | `5c526eea2f298f5c2235c6ff2c481ff74dcd694ad74eee035877dd3a60b103d4` |
+| WSMTXCA | [Manual 0.25.8](https://arca.gob.ar/fe/ayuda/documentos/wsmtxca-RG-2904.pdf), 380 páginas | `8dbb73ea4c8d201a73c62e19759bb440801c168f04365261d9b207cf1a1eaaf4` |
+
+Las referencias de [servicios implementados](Servicios-implementados)
+incluyen los manuales de Padrón y WSAA. Las tablas por operación se generan desde
+los WSDL; las reglas de negocio, restricciones de acceso y validaciones por
+código requieren consultar el manual y homologar con credenciales propias.

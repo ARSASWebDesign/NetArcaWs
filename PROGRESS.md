@@ -2,6 +2,7 @@
 
 - [x] Automatizaciones de wiki, contratos y releases migradas a `NetArcaWs.Build` (.NET 10), sin scripts Python.
 
+- [x] Seguridad: revisión CODEOWNER/CI, análisis CodeQL y dependencias, protección de secretos, tags inmutables y publicación automática OIDC aislada del código de compilación.
 - [x] Plantillas de issues/PR y guía CONTRIBUTING para forks.
 - [x] Workflow de releases de biblioteca y tool con ensayo manual sin publicación.
 - [x] Configurar Trusted Publishing y publicar `NetArcaWs` y `NetArcaWs.Tool` 0.5.0 en NuGet.
@@ -21,10 +22,10 @@
 - [x] Hito 5: Padrón A4 (2), Constancia/ruta A5 (5), A10 (2), A13 (4) — contratos, fachada y suite verificados.
 - [x] Hito 6: README, arquitectura, ADR y guías integrales actualizados; suite local Release verificada.
 - [x] Publicar en la wiki toda la documentación Markdown local, con navegación y revisión de origen identificada.
-- [ ] Hito 7 (final): completar la revisión exhaustiva upstream y las guías/ejemplos por operación; [criterios de cierre](docs/plans/hito-7-wiki.md).
+- [x] Hito 7 (final): inventario upstream, catálogo por servicios y extras, referencias y ejemplos compilables de las 81 operaciones; [criterios de cierre](docs/plans/hito-7-wiki.md).
 
 La build Release terminó con 0 warnings y 0 errors. La suite completa tuvo
-223 casos: 220 aprobados y 3 omitidos. Se verificaron los QName y SOAPAction de
+225 casos: 222 aprobados y 3 omitidos. Se verificaron los QName y SOAPAction de
 81 operaciones contra WSDL y 166 tipos raíz XML en round-trip. Los 22 tipos de
 contrato con campos `DateTime` (`xs:date`/`xs:dateTime`) conservaron sus valores.
 
@@ -40,9 +41,10 @@ pendientes de certificados autorizados. El environment GitHub `nuget` contiene
 NuGet aceptó e indexó ambos paquetes 0.5.0 en el índice del feed v3; además, el
 Tool público se instaló desde una caché aislada y `--help` terminó con código 0.
 La [release v0.5.0](https://github.com/ARSASWebDesign/NetArcaWs/releases/tag/v0.5.0)
-está publicada. El mirror wiki local contiene 29 páginas de contenido, barra
-lateral y manifiesto, publicados en la [wiki](https://github.com/ARSASWebDesign/NetArcaWs/wiki).
-El Hito 7 queda abierto por la revisión documental exhaustiva restante.
+está publicada. El mirror wiki incluye el inventario de fuentes originales,
+referencias por operación, guías y manifiesto, publicados en la
+[wiki](https://github.com/ARSASWebDesign/NetArcaWs/wiki). La portada organiza
+servicios y extras; se mantiene solo el menú nativo de páginas de GitHub.
 La caché de tickets es local al proceso; compartir certificados entre réplicas no agrega caché distribuida.
 Este estado no equivale al 100% del port del repositorio original.
 

@@ -9,6 +9,9 @@ try
 
     switch (args)
     {
+        case ["operations"]:
+            OperationDocumentation.Run(root);
+            break;
         case ["wiki"]:
             WikiMirror.Run(root);
             break;
@@ -31,7 +34,7 @@ try
             await ReleaseAssets.RunAsync(repository, tag, Path.GetFullPath(directory));
             break;
         default:
-            Console.Error.WriteLine("Commands: wiki | contracts --xscgen PATH | release-version | release-assets OWNER/REPO TAG DIRECTORY");
+            Console.Error.WriteLine("Commands: operations | wiki | contracts --xscgen PATH | release-version | release-assets OWNER/REPO TAG DIRECTORY");
             return 2;
     }
     return 0;

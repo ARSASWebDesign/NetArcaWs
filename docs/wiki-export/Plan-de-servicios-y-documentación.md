@@ -35,7 +35,7 @@ histórica), A10 y A13, además de WSAA ya cubierto. El árbol upstream y sus
 helpers sirven para entender modelos y flujos, pero no limitan el contrato ni
 prevalecen sobre manual/WSDL actual. Los XML de homologación/producción
 descargados el 2026-10-06 y los manuales enlazados en
-[`healthchecks-contracts.md`](Referencia-healthchecks-contracts) constituyen
+[`healthchecks-contracts.md`](Contratos-de-health-checks) constituyen
 la base versionada; validar nuevamente el WSDL desplegado y el manual vigente
 antes de fijar cada DTO/action o release.
 
@@ -140,7 +140,7 @@ calculador fiscal.
    total, neto, exento, no gravado, tributos e IVA; monedas/cotización, concepto y
    fechas del comprobante/servicio. No recalcular silenciosamente lo enviado;
    validar importes con aritmética decimal y redondeo explícito y versionado.
-4. Aplicar [ADR 0001](ADR-0001-safe-invoice-retries) antes de habilitar
+4. Aplicar [ADR 0001](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros) antes de habilitar
    emisión de alto nivel: identidad fiscal durable, hash del payload canónico,
    estados `Prepared`/`Submitting`/`Unknown`/`Reconciling`/terminales, consultas
    exactas y ausencia verificable. Consultar `FECompUltimoAutorizado` no
@@ -362,7 +362,7 @@ La lista anterior es semilla, no inventario exhaustivo. El cierre requiere recor
 tests, ejemplos, instaladores, formatos y links de soporte. Cada entrada tendrá
 fuente, revisión/fecha, tema, destino wiki, estado de adaptación y atribución.
 Resumir con redacción original; no copiar páginas enteras. Ver
-[alcance y checklist original](Plan-hito-7-wiki).
+[alcance y checklist original](Plan-de-documentaci%C3%B3n-y-wiki).
 
 ## Fuentes de investigación
 
@@ -389,10 +389,10 @@ Resumir con redacción original; no copiar páginas enteras. Ver
   contrato base ni fixture para generación. El WSDL de producción MTXCA es la
   base completa de sus 27 operaciones y namespace `...wsmtxca.afip.gov.ar...`;
   validar la homologación nuevamente antes de release.
-- [ARCA: contratos de health checks y WSDL consultados](Referencia-healthchecks-contracts),
-  [reintentos seguros](ADR-0001-safe-invoice-retries),
-  [contexto tenant](ADR-0002-arca-tenant-context) y
-  [certificados en memoria](ADR-0003-in-memory-certificates).
+- [ARCA: contratos de health checks y WSDL consultados](Contratos-de-health-checks),
+  [reintentos seguros](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros),
+  [contexto tenant](Decisi%C3%B3n-2-Contexto-multitenant) y
+  [certificados en memoria](Decisi%C3%B3n-3-Certificados-en-memoria).
 
 Antes de fijar requisitos/códigos fiscales por versión, volver a descargar los
 manuales y actualizar fecha, WSDL y fixtures. La rama `main` upstream es mutable;

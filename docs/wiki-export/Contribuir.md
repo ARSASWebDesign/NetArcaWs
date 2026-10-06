@@ -4,9 +4,9 @@
 
 Gracias por ayudar con el proyecto. Antes de proponer un cambio, revisa el
 [README](Proyecto), el [progreso y alcance por hitos](Estado-del-proyecto), la
-[arquitectura](Arquitectura-general) y los ADR de `docs/adr/`. Los clientes de
-negocio de WSFEv1, WSFEXv1, WSMTXCA y Padrón siguen pendientes; una propuesta o
-un issue no representa un compromiso de implementación.
+[arquitectura](Arquitectura-general) y los ADR de `docs/adr/`. La matriz de cobertura
+distingue clientes disponibles de funcionalidades pendientes; un issue no
+representa un compromiso de implementación.
 
 ## Preparar una rama desde un fork
 
@@ -64,6 +64,7 @@ El desarrollo, CI y las releases no requieren Python. La herramienta interna
 `tools/NetArcaWs.Build` usa .NET 10 y no se publica como paquete NuGet:
 
 ```sh
+dotnet run --project tools/NetArcaWs.Build -- operations
 dotnet run --project tools/NetArcaWs.Build -- wiki
 dotnet run --project tools/NetArcaWs.Build -- release-version
 dotnet tool install dotnet-xscgen --tool-path artifacts/xscgen --version 3.0.1240
@@ -74,11 +75,22 @@ En Windows, usar `artifacts/xscgen/xscgen.exe`. El wrapper opcional
 `scripts/generate-contracts.sh` realiza la instalación temporal y ejecuta el
 mismo generador .NET. Revisar los cambios de contratos antes de confirmarlos.
 La wiki se genera desde los Markdown versionados; el procedimiento para
-publicarla y registrar su revisión está en [el plan de la wiki](Plan-hito-7-wiki).
-La organización manual de la barra lateral se conserva en `docs/wiki-sidebar.txt`.
+publicarla y registrar su revisión está en [el plan de la wiki](Plan-de-documentaci%C3%B3n-y-wiki).
+La portada `docs/wiki/Home.md` mantiene la navegación temática; GitHub aporta el único menú de páginas. No se genera un segundo `_Sidebar.md`.
 El comando interno `release-assets OWNER/REPO TAG DIRECTORY` requiere GitHub CLI
 autenticado y verifica los hashes de assets existentes antes de adjuntar los
 faltantes; no reemplaza archivos ya publicados.
+
+## Revisión obligatoria y seguridad
+
+Los cambios a `main` requieren una PR, aprobación de un CODEOWNER distinta del
+último autor de push, conversaciones resueltas y CI/análisis de seguridad
+aprobados sobre la rama actualizada. Los CODEOWNERS son `hlopez94`, `RARosas` y
+`davidaragon08`; una nueva modificación invalida aprobaciones anteriores.
+Los workflows de contribuyentes externos requieren autorización de ejecución
+de un mantenedor y no reciben secretos de publicación. Reporta vulnerabilidades
+por el [canal privado](Seguridad-del-proyecto), nunca en un issue público.
+Ver [protecciones del repositorio](Seguridad-y-publicacion).
 
 ## Issues y pull requests
 

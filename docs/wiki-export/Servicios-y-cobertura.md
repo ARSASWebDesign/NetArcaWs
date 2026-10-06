@@ -39,78 +39,36 @@ de cada método contra WSDL y 166 tipos raíz XML en round-trip en la suite; 22
 tipos de contrato conservaron sus campos `DateTime`. Una
 corrida real de QA respondió los siete probes `Dummy`; las dos pruebas
 autenticadas se omitieron por falta de certificados. Esto no acredita
-autorización fiscal. Hitos 2–6 se cerraron con build/suite local; Hito 7 sigue
-abierto por su revisión documental exhaustiva; la wiki remota ya está publicada. El
-[plan de hitos 2–7](Plan-remaining-milestones) define las operaciones,
+autorización fiscal. Hitos 2–6 se verificaron con build/suite local. La documentación incluye un
+inventario upstream y referencias de todas las operaciones; su alcance no
+amplía automáticamente la cobertura funcional. El
+[plan de hitos 2–7](Plan-de-servicios-y-documentaci%C3%B3n) define las operaciones,
 datos fiscales, cobertura de contratos y pruebas de cierre por servicio.
 
 ## Mapa del upstream investigado
 
-PyAfipWs ofrece más que los módulos incluidos en el port. La revisión inicial del
-README/wiki y fuentes `wsfev1.py`, `wsfexv1.py`, `wsmtx.py`, `ws_sr_padron.py`
-se realizó el 2026-10-06. La rama `main` del upstream es mutable; registrar el
-hash exacto al cerrar una matriz exhaustiva.
+PyAfipWs ofrece más que los módulos incluidos en el port. La revisión del
+2026-10-06 fija las revisiones Git del repositorio y wiki originales en el
+inventario enlazado debajo.
 
-### Clientes y operaciones de interés
+### Referencias organizadas por servicio
 
-- `wsfev1.py`: armado de comprobantes; solicitud de CAE y consulta/último
-  autorizado; CAEA (solicitar, consultar, informar, sin movimiento); solicitudes
-  masivas `X`; búsqueda de parámetros; `Dummy`; helpers de lote, campos, parse y
-  compatibilidad. El WSDL consultado expone 22 operaciones SOAP: `FECAESolicitar`,
-  `FECompTotXRequest`, `FEDummy`, `FECompUltimoAutorizado`, `FECompConsultar`,
-  `FECAEARegInformativo`, `FECAEASolicitar`, `FECAEASinMovimientoConsultar`,
-  `FECAEASinMovimientoInformar`, `FECAEAConsultar`, `FEParamGetCotizacion`,
-  `FEParamGetTiposTributos`, `FEParamGetTiposMonedas`, `FEParamGetTiposIva`,
-  `FEParamGetTiposOpcional`, `FEParamGetTiposConcepto`, `FEParamGetPtosVenta`,
-  `FEParamGetTiposCbte`, `FEParamGetCondicionIvaReceptor`, `FEParamGetTiposDoc`,
-  `FEParamGetTiposPaises`, `FEParamGetActividades`.
-- `wsfexv1.py`: facturas de exportación y detalle; permisos, comprobantes
-  asociados y actividades; `Authorize`/`GetCMP`, último ID y comprobante; listas
-  de parámetros de exportación; `Dummy` y helpers. El WSDL consultado incluye
-  19 operations: `FEXAuthorize`, `FEXGetCMP`, `FEXGetPARAM_Cbte_Tipo`,
-  `FEXGetPARAM_Tipo_Expo`, `FEXGetPARAM_Incoterms`, `FEXGetPARAM_Idiomas`,
-  `FEXGetPARAM_UMed`, `FEXGetPARAM_DST_pais`, `FEXGetPARAM_DST_CUIT`,
-  `FEXGetPARAM_MON`, `FEXGetPARAM_MON_CON_COTIZACION`, `FEXGetLast_CMP`,
-  `FEXDummy`, `FEXGetPARAM_Ctz`, `FEXGetLast_ID`, `FEXGetPARAM_PtoVenta`,
-  `FEXCheck_Permiso`, `FEXGetPARAM_Opcionales`, `FEXGetPARAM_Actividades`.
-- `wsmtx.py`: WSMTXCA con detalle/codificación de productos, IVA e ítems; CAE,
-  ajuste IVA, CAEA e informes; consulta exacta y por tipo; catálogos y `Dummy`.
-  El agregador upstream dice que neto/IVA deben venir calculados; una calculadora
-  .NET sería extensión propia y requiere especificación separada. El WSDL actual
-  incluye 27 operaciones: `dummy`, `autorizarComprobante`, `solicitarCAEA`,
-  `informarComprobanteCAEA`, `consultarUltimoComprobanteAutorizado`,
-  `consultarComprobante`, `consultarTiposComprobante`, `consultarTiposDocumento`,
-  `consultarAlicuotasIVA`, `consultarCondicionesIVA`,
-  `consultarCondicionesIVAReceptor`, `consultarMonedas`,
-  `consultarCotizacionMoneda`, `consultarUnidadesMedida`, `consultarPuntosVenta`,
-  `consultarPuntosVentaCAE`, `consultarPuntosVentaCAEA`,
-  `informarCAEANoUtilizado`, `consultarTiposTributo`,
-  `informarCAEANoUtilizadoPtoVta`, `consultarCAEA`,
-  `consultarPtosVtaCAEANoInformados`, `consultarCAEAEntreFechas`,
-  `autorizarAjusteIVA`, `informarAjusteIVACAEA`, `consultarTiposDatosAdicionales`,
-  `consultarActividadesVigentes`.
-- `ws_sr_padron.py`: consultas A4 y Constancia A5 histórica. A5 hereda A4 pero
-  devuelve distintas secciones. El módulo no contiene A10/A13 en la revisión;
-  esos servicios se documentan desde sus manuales oficiales. Los WSDLs revisados
-  declaran A4 `dummy/getPersona`, A5/Constancia `dummy`, `getPersona`,
-  `getPersona_v2`, `getPersonaList`, `getPersonaList_v2`; A10 `dummy/getPersona`;
-  A13 `dummy`, `getIdPersonaListByDocumento`, `getPersona`, `getPersonaV2`. Los
-  actions del binding son vacíos. Confirmar host/HTTPS del WSDL concreto; A10
-  histórico anuncia HTTP en el WSDL aunque el manual exige HTTPS.
+| Servicio | Operaciones y ejemplos | API del proyecto original |
+|---|---|---|
+| WSFEv1 | [Referencia completa](WSFEv1-Referencia-de-operaciones) | `wsfev1.py` |
+| WSFEXv1 | [Referencia completa](WSFEXv1-Referencia-de-operaciones) | `wsfexv1.py` |
+| WSMTXCA | [Referencia completa](WSMTXCA-Referencia-de-operaciones) | `wsmtx.py` |
+| Padrón A4 | [Referencia completa](Padr%C3%B3n-A4-Referencia-de-operaciones) | `ws_sr_padron.py` |
+| Constancia / A5 | [Referencia completa](Padr%C3%B3n-A5-Referencia-de-operaciones) | `ws_sr_padron.py` |
+| Padrón A10 | [Referencia completa](Padr%C3%B3n-A10-Referencia-de-operaciones) | Sin equivalente en ese módulo upstream |
+| Padrón A13 | [Referencia completa](Padr%C3%B3n-A13-Referencia-de-operaciones) | Sin equivalente en ese módulo upstream |
 
-El índice upstream también enumera WSAA, WSBFE, WSCTG, WSDIGDEP, WSCOC, WSLPG,
-WSLTV, WSLUM, WSLSP, WSCDC, COT de ARBA, trazabilidad ANMAT/RENPRE/SENASA y
-formatos/controles fiscales. Otros archivos del repositorio incluyen WSCPE,
-WSFE Crédito, SIRE, liquidaciones y servicios adicionales; se requiere un
-inventario de árbol, ejemplos y tests antes de considerar esa cobertura
-exhaustiva.
-
-El wiki upstream describe asimismo PyRece/PyFactura, salida PDF, TXT/CSV/DBF/
-XML/JSON, wrappers COM/OCX/DLL, instaladores y conexiones a ERP como OpenERP y
-Tryton. Son recursos y flujos existentes en el ecosistema Python, no funciones
-de este paquete .NET. La generación de CSR, la CLI, los Dummies y el caché
-también existen en PyAfipWs; NetArcaWs cambia su implementación, no reclama que
-esas capacidades sean exclusivas del port.
+El [inventario del proyecto original](Inventario-del-proyecto-original)
+registra cada módulo y entrada documental investigada, con revisiones fijadas,
+correspondencia .NET y ausencia explícita cuando no está portado. Incluye PDF,
+formatos de intercambio, COM, aplicaciones y otros servicios que no forman parte
+del alcance implementado. La [guía de migración](Migracion-desde-PyAfipWs)
+explica las diferencias de uso y datos.
 
 ## Fuentes
 
@@ -121,7 +79,7 @@ esas capacidades sean exclusivas del port.
   [`wsmtx.py`](https://github.com/reingart/pyafipws/blob/main/wsmtx.py),
   [`ws_sr_padron.py`](https://github.com/reingart/pyafipws/blob/main/ws_sr_padron.py)
 - [Manuales de servicios de factura electrónica de ARCA](https://arca.gob.ar/fe/ayuda/webservice.asp)
-- [Contratos de health checks y endpoints del repositorio](Referencia-healthchecks-contracts)
+- [Contratos de health checks y endpoints del repositorio](Contratos-de-health-checks)
 - Snapshots XML por protocolo en [`docs/reference/contracts`](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/contracts).
   El WSDL de homologación MTXCA guardado allí es un documento truncado y no se
   usa para generar tipos; la copia de producción es la fuente completa para

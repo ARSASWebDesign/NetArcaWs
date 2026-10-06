@@ -12,7 +12,7 @@ roundtrips de serialización fueron verificados. Esto no afirma paridad funciona
 completa con el repositorio Python ni homologación de operaciones autenticadas.
 
 Verificación registrada el 2026-10-06: build Release con 0 warnings/errores;
-223 casos de suite, 220 aprobados y 3 omitidos. Se comprobaron QName y
+225 casos de suite, 222 aprobados y 3 omitidos. Se comprobaron QName y
 SOAPAction de las 81 operaciones contra sus WSDL y 166 tipos raíz XML en
 round-trip. Los 22 tipos de contrato con campos `DateTime` (`xs:date` y
 `xs:dateTime`) conservaron sus valores. En QA real respondieron los siete
@@ -26,7 +26,7 @@ Estas extensiones describen la API y arquitectura de NetArcaWs. No implican
 paridad completa ni que Python carezca de certificados, CSR, caché, CLI, Dummy o tests:
 son capacidades también presentes en el proyecto de origen. Las diferencias se
 contrastan con el [upstream](https://github.com/reingart/pyafipws) y la
-[matriz del port](Plan-hito-1).
+[matriz del port](Plan-de-autenticaci%C3%B3n-WSAA).
 
 | Extra o adaptación .NET | Estado y alcance |
 | --- | --- |
@@ -43,12 +43,13 @@ contrastan con el [upstream](https://github.com/reingart/pyafipws) y la
 | Arquitectura trazable | ADR de certificados en memoria y multitenancy; límites y equivalencias documentados |
 | Diario fiscal y coordinación durable | `SafeInvoiceService` + `IInvoiceJournal` / `InvoiceCoordinator` ofrecen autorización unitaria y reconciliación exacta en WSFE/WSFEX/WSMTXCA; implementación y suite local verificadas. SQLite sirve a procesos de un host, no NFS ni multi-host; sin worker ni reenvío de estados inciertos |
 | Clientes SOAP por contrato ARCA | 81 fachadas tipadas verificadas por QName/action y roundtrips; sin WCF. La autorización fiscal real requiere certificados y se valida aparte |
-| Wiki integral del repositorio | [Wiki publicada](https://github.com/ARSASWebDesign/NetArcaWs/wiki); revisión exhaustiva del inventario upstream pendiente |
+| Seguridad de contribuciones y releases | Revisión CODEOWNER, CI/CodeQL/dependencias, tags protegidos y publicación automática con OIDC; [controles y límites](Seguridad-y-publicacion) |
+| Wiki integral del repositorio | [Wiki publicada](https://github.com/ARSASWebDesign/NetArcaWs/wiki); catálogo por servicio, referencia de las 81 operaciones, ejemplos compilables e inventario upstream trazable |
 
-Ver las decisiones de [multitenancy](ADR-0002-arca-tenant-context),
-[certificados en memoria](ADR-0003-in-memory-certificates) y
-[reintentos seguros](ADR-0001-safe-invoice-retries) y
-[contratos SOAP públicos](ADR-0004-public-soap-contracts).
+Ver las decisiones de [multitenancy](Decisi%C3%B3n-2-Contexto-multitenant),
+[certificados en memoria](Decisi%C3%B3n-3-Certificados-en-memoria) y
+[reintentos seguros](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros) y
+[contratos SOAP públicos](Decisi%C3%B3n-4-Contratos-SOAP-p%C3%BAblicos).
 
 ## Contratos SOAP ARCA disponibles
 
@@ -113,12 +114,15 @@ ni valida todas las reglas fiscales del servicio.
 ## Documentación y wiki final
 
 La [wiki del proyecto](https://github.com/ARSASWebDesign/NetArcaWs/wiki) reúne
-29 páginas de contenido, barra lateral y manifiesto de fuentes: guías .NET,
+guías por servicio y funcionalidad, referencias de operaciones y manifiesto de fuentes:
 README, arquitectura, ADR, contribuciones, releases, CLI, contratos y planes.
 El mirror `docs/wiki-export/` se genera desde la documentación versionada con
-enlaces internos convertidos. La revisión exhaustiva del inventario upstream y
-los ejemplos por operación siguen en el [plan del wiki](Plan-hito-7-wiki);
-la publicación no implica paridad completa con PyAfipWs. La
+enlaces internos convertidos y un único menú nativo de GitHub. El
+[inventario upstream](Inventario-del-proyecto-original) identifica equivalencias
+y módulos todavía no portados; los [ejemplos compilables](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/examples/NetArcaWs.Examples/GuideExamples.cs)
+y las referencias de operaciones cubren el alcance implementado. Ver
+[criterios documentales](Plan-de-documentaci%C3%B3n-y-wiki). La publicación no implica
+paridad completa con PyAfipWs. La
 cuenta NuGet `arsas`, el environment GitHub `nuget` y la política de Trusted
 Publishing están configurados. El workflow intercambió OIDC y NuGet aceptó e
 indexó ambos paquetes 0.5.0 en el índice v3; la [release](https://github.com/ARSASWebDesign/NetArcaWs/releases/tag/v0.5.0)
@@ -262,7 +266,7 @@ health checks comprueban disponibilidad por servicio/ambiente; no reciben
 certificados ni contexto tenant y no verifican autorización fiscal.
 
 El contrato y los límites de este flujo se detallan en el
-[ADR de contexto multitenant](ADR-0002-arca-tenant-context).
+[ADR de contexto multitenant](Decisi%C3%B3n-2-Contexto-multitenant).
 
 El certificado debe estar emitido y autorizado por ARCA para el entorno y
 servicio elegidos. Un certificado autofirmado sirve para tests unitarios, pero
@@ -440,7 +444,7 @@ real hasta ejecutar esa prueba con credenciales autorizadas.
 ## Alcance y licencia
 
 Ver [ARCHITECTURE.md](Arquitectura-general) y la
-[matriz de equivalencias y progreso](Plan-hito-1).
+[matriz de equivalencias y progreso](Plan-de-autenticaci%C3%B3n-WSAA).
 Los wrappers COM, CLI Python, debug con secretos y caché de archivos no se
 replican: se reemplazan por APIs C#, excepciones, DI e IMemoryCache.
 

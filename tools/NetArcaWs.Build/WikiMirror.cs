@@ -45,7 +45,7 @@ public static class WikiMirror
                         continue;
 
                     var sourcePath = Path.GetFullPath(Path.Combine(repositoryRoot, sourceRelative.Replace('/', Path.DirectorySeparatorChar)));
-                    if (!IsWithin(repositoryRoot, sourcePath) || !string.Equals(PageName(repositoryRoot, sourcePath), pageName, StringComparison.Ordinal))
+                    if (!IsWithin(repositoryRoot, sourcePath) || !(string.Equals(PageName(repositoryRoot, sourcePath), pageName, StringComparison.Ordinal) || string.Equals(LegacyPageName(repositoryRoot, sourcePath), pageName, StringComparison.Ordinal)))
                         continue;
 
                     var oldPage = Path.GetFullPath(Path.Combine(output, pageName + ".md"));
@@ -72,24 +72,12 @@ public static class WikiMirror
             File.WriteAllText(destination, content, new UTF8Encoding(false));
         }
 
-        var sidebar = new List<string> { "# Pages", "", "- [Inicio](Home)" };
-        sidebar.AddRange(names.Values.Distinct(StringComparer.Ordinal).OrderBy(name => name, StringComparer.Ordinal)
-            .Where(name => name != "Home")
-            .Select(name => $"- [{name}]({Quote(name, "-_.")})"));
-        var sidebarPath = Path.Combine(output, "_Sidebar.md");
-        EnsureNotReparsePoint(sidebarPath);
-        var sidebarTemplate = Path.Combine(repositoryRoot, "docs", "wiki-sidebar.txt");
-        EnsureNotReparsePoint(sidebarTemplate);
-        File.WriteAllText(sidebarPath, File.Exists(sidebarTemplate)
-            ? File.ReadAllText(sidebarTemplate, Encoding.UTF8).Replace("\r\n", "\n").TrimEnd() + "\n"
-            : string.Join('\n', sidebar) + "\n", new UTF8Encoding(false));
-
         var manifestBody = new StringBuilder()
             .AppendLine("# Fuentes del mirror local")
             .AppendLine()
             .Append("Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: ")
             .Append(names.Count)
-            .Append(" páginas de contenido, más `_Sidebar.md` y este manifiesto. Cada página incluye ")
+            .Append(" páginas de contenido y este manifiesto. GitHub muestra un único menú nativo; Home contiene la navegación por temas. Cada página incluye ")
             .Append("su fuente y reescribe enlaces relativos para navegación de wiki. Los ")
             .Append("contratos ARCA archivados en el repositorio tienen fecha de snapshot ")
             .Append("2026-10-06. La salida refleja el árbol de trabajo. Al publicar, ")
@@ -102,7 +90,6 @@ public static class WikiMirror
         File.WriteAllText(newManifest, manifestBody.ToString().Replace("\r\n", "\n"), new UTF8Encoding(false));
 
         var knownPages = names.Values.ToHashSet(StringComparer.Ordinal);
-        knownPages.Add("_Sidebar");
         knownPages.Add("MIRROR-SOURCES");
         var broken = new List<string>();
         foreach (var generated in Directory.EnumerateFiles(output, "*.md", SearchOption.TopDirectoryOnly).Where(path => !IsReparsePoint(path)))
@@ -154,7 +141,31 @@ public static class WikiMirror
         }
     }
 
-    private static string PageName(string root, string source)
+    private static string PageName(string root, string source) => RelativeUnix(root, source) switch
+    {
+        "docs/reference/contracts/sources.md" => "Procedencia-de-contratos-SOAP",
+        "SECURITY.md" => "Seguridad-del-proyecto",
+        ".github/pull_request_template.md" => "Plantilla-de-pull-request",
+        "docs/adr/0001-safe-invoice-retries.md" => "Decisión-1-Emisión-y-reintentos-seguros",
+        "docs/adr/0002-arca-tenant-context.md" => "Decisión-2-Contexto-multitenant",
+        "docs/adr/0003-in-memory-certificates.md" => "Decisión-3-Certificados-en-memoria",
+        "docs/adr/0004-public-soap-contracts.md" => "Decisión-4-Contratos-SOAP-públicos",
+        "docs/plans/hito-1.md" => "Plan-de-autenticación-WSAA",
+        "docs/plans/hito-7-wiki.md" => "Plan-de-documentación-y-wiki",
+        "docs/plans/remaining-milestones.md" => "Plan-de-servicios-y-documentación",
+        "docs/reference/upstream-inventory.md" => "Inventario-del-proyecto-original",
+        "docs/reference/healthchecks-contracts.md" => "Contratos-de-health-checks",
+        "docs/reference/operations/wsfev1.md" => "WSFEv1-Referencia-de-operaciones",
+        "docs/reference/operations/wsfexv1.md" => "WSFEXv1-Referencia-de-operaciones",
+        "docs/reference/operations/wsmtxca.md" => "WSMTXCA-Referencia-de-operaciones",
+        "docs/reference/operations/padrona4.md" => "Padrón-A4-Referencia-de-operaciones",
+        "docs/reference/operations/padrona5.md" => "Padrón-A5-Referencia-de-operaciones",
+        "docs/reference/operations/padrona10.md" => "Padrón-A10-Referencia-de-operaciones",
+        "docs/reference/operations/padrona13.md" => "Padrón-A13-Referencia-de-operaciones",
+        _ => LegacyPageName(root, source)
+    };
+
+    private static string LegacyPageName(string root, string source)
     {
         var relative = RelativeUnix(root, source);
         var stem = Path.GetFileNameWithoutExtension(source);

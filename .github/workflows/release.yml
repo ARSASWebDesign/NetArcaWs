@@ -19,6 +19,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       version: ${{ steps.version.outputs.version }}
+      commit: ${{ steps.source.outputs.commit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -27,6 +28,9 @@ jobs:
           persist-credentials: false
       - name: Require a commit from main
         run: git merge-base --is-ancestor HEAD origin/main
+      - name: Record source commit
+        id: source
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           global-json-file: global.json
@@ -52,7 +56,7 @@ jobs:
           test "$(artifacts/tool-smoke/netarcaws --version)" = "netarcaws $PACKAGE_VERSION"
           git rev-parse HEAD > artifacts/BUILD_COMMIT
           cd artifacts
-          sha256sum ./*.nupkg > SHA256SUMS
+          sha256sum -- "NetArcaWs.$PACKAGE_VERSION.nupkg" "NetArcaWs.Tool.$PACKAGE_VERSION.nupkg" > SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nuget-${{ steps.version.outputs.version }}
@@ -73,26 +77,73 @@ jobs:
       contents: write
       id-token: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ github.event.release.tag_name }}
-          persist-credentials: false
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
-        with:
-          global-json-file: global.json
-      - run: dotnet restore tools/NetArcaWs.Build/NetArcaWs.Build.csproj --locked-mode
+      - name: Validate release identity
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+          BUILD_VERSION: ${{ needs.build.outputs.version }}
+          BUILD_COMMIT: ${{ needs.build.outputs.commit }}
+        run: |
+          set -euo pipefail
+          semver='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9a-z-]+(\.[0-9a-z-]+)*)?$'
+          commit='^[0-9a-f]{40}$'
+          [[ "$BUILD_VERSION" =~ $semver ]] || { echo "Invalid package version from build job" >&2; exit 1; }
+          [[ "$RELEASE_TAG" == "v$BUILD_VERSION" ]] || { echo "Release tag and package version do not match" >&2; exit 1; }
+          [[ "$BUILD_COMMIT" =~ $commit ]] || { echo "Invalid source commit from build job" >&2; exit 1; }
+          if [[ "$RELEASE_PRERELEASE" == true ]]; then
+            [[ "$BUILD_VERSION" == *-* ]] || { echo "Prerelease flag does not match package version" >&2; exit 1; }
+          else
+            [[ "$BUILD_VERSION" != *-* ]] || { echo "Prerelease version is not marked as a prerelease" >&2; exit 1; }
+          fi
+          printf 'version=%s\ncommit=%s\n' "$BUILD_VERSION" "$BUILD_COMMIT" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: nuget-${{ needs.build.outputs.version }}
+          name: nuget-${{ steps.release.outputs.version }}
           path: artifacts
-      - name: Verify checksums
+      - name: Verify build artifacts
         working-directory: artifacts
-        run: sha256sum --check SHA256SUMS
-      - name: Attach packages to GitHub release
+        env:
+          PACKAGE_VERSION: ${{ steps.release.outputs.version }}
+          BUILD_COMMIT: ${{ steps.release.outputs.commit }}
+        run: |
+          set -euo pipefail
+          library="NetArcaWs.$PACKAGE_VERSION.nupkg"
+          tool="NetArcaWs.Tool.$PACKAGE_VERSION.nupkg"
+          test -f "$library"
+          test -f "$tool"
+          test "$(find . -maxdepth 1 -type f -name '*.nupkg' | wc -l | tr -d ' ')" = 2
+          test "$(cat BUILD_COMMIT)" = "$BUILD_COMMIT"
+          awk -v library="$library" -v tool="$tool" 'NF == 2 && $1 ~ /^[0-9a-f]{64}$/ && ($2 == library || $2 == tool || $2 == "./" library || $2 == "./" tool) { sub(/^\.\//, "", $2); seen[$2] = 1; count++ } END { exit !(NR == 2 && count == 2 && seen[library] && seen[tool]) }' SHA256SUMS
+          sha256sum --check SHA256SUMS
+      - name: Attach missing release assets
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: dotnet run --project tools/NetArcaWs.Build --configuration Release --no-restore -- release-assets ARSASWebDesign/NetArcaWs "$RELEASE_TAG" artifacts
+          PACKAGE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          expected=("NetArcaWs.$PACKAGE_VERSION.nupkg" "NetArcaWs.Tool.$PACKAGE_VERSION.nupkg" SHA256SUMS BUILD_COMMIT)
+          assets="$(gh release view "$RELEASE_TAG" --repo ARSASWebDesign/NetArcaWs --json assets --jq '.assets[].name')"
+          missing=()
+          for asset in "${expected[@]}"; do
+            if printf '%s\n' "$assets" | grep -Fxq -- "$asset"; then
+              temporary="$(mktemp -d)"
+              gh release download "$RELEASE_TAG" --repo ARSASWebDesign/NetArcaWs --pattern "$asset" --dir "$temporary"
+              local_hash="$(sha256sum "artifacts/$asset" | cut -d ' ' -f 1)"
+              remote_hash="$(sha256sum "$temporary/$asset" | cut -d ' ' -f 1)"
+              rm -rf "$temporary"
+              if [[ "$local_hash" != "$remote_hash" ]]; then
+                echo "Existing release asset differs: $asset. Do not replace published artifacts; create a new version." >&2
+                exit 1
+              fi
+            else
+              missing+=("artifacts/$asset")
+            fi
+          done
+          if ((${#missing[@]})); then
+            gh release upload "$RELEASE_TAG" --repo ARSASWebDesign/NetArcaWs "${missing[@]}"
+          fi
       - name: Require NuGet account setup
         env:
           NUGET_USER: ${{ vars.NUGET_USER }}

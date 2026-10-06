@@ -80,7 +80,7 @@ No usan `ArcaTenantContext` ni certificados y no verifican autorización fiscal.
 Un resultado saludable no prueba que la CUIT de un tenant esté habilitada.
 
 El diario durable de facturación futura debe respetar la identidad fiscal definida
-en [ADR 0001](ADR-0001-safe-invoice-retries):
+en [ADR 0001](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros):
 `(ambiente, CUIT emisora, punto de venta, tipo, número)`. No se agrega `tenantId` a
 esa restricción de unicidad. Si una CUIT actúa en dos tenants internos, el mismo
 comprobante sigue siendo una única identidad fiscal; el tenant restringe acceso y
@@ -89,13 +89,13 @@ autorización por tenant y la consistencia contable.
 
 ## Origen de certificados y documentación
 
-El [ADR 0003](ADR-0003-in-memory-certificates) define la carga PEM/PFX desde
+El [ADR 0003](Decisi%C3%B3n-3-Certificados-en-memoria) define la carga PEM/PFX desde
 variables, vaults o bases de datos, ownership y rotación. El contexto multitenant
 recibe ese material y no exige archivos. Compartirlo entre instancias no crea una
 caché distribuida de TA.
 
 Esta decisión y su adopción en todos los clientes de negocio deberán integrarse
-en el [wiki integral del hito final](Plan-hito-7-wiki), junto con ejemplos
+en el [wiki integral del hito final](Plan-de-documentaci%C3%B3n-y-wiki), junto con ejemplos
 por tenant y límites explícitos de cada servicio.
 
 ## Consecuencias

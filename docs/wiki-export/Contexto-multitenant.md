@@ -34,12 +34,12 @@ El contexto no comprueba permisos fiscales ni reemplaza la autorización de la
 aplicación. El diario fiscal disponible usa `tenantId` para separar operaciones
 e idempotencia, pero la unicidad fiscal sigue siendo
 `(ambiente, CUIT emisora, punto de venta, tipo, número)` según
-[ADR 0001](ADR-0001-safe-invoice-retries). Dos tenants internos
+[ADR 0001](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros). Dos tenants internos
 que representan una misma CUIT no deben registrar dos veces el mismo comprobante.
 
 Los wrappers tipados WSFEv1/WSFEXv1/WSMTXCA y Padrón reciben el contexto en las
 llamadas autenticadas; la integración se verificó con la suite y contratos
 archivados. No se ejecutaron operaciones autenticadas reales por falta de
 certificados autorizados. Los health checks son por servicio y ambiente: no
-reciben certificado ni contexto y no prueban autorización fiscal. Detalle: [ADR 0002](ADR-0002-arca-tenant-context) y
-[ADR 0003](ADR-0003-in-memory-certificates).
+reciben certificado ni contexto y no prueban autorización fiscal. Detalle: [ADR 0002](Decisi%C3%B3n-2-Contexto-multitenant) y
+[ADR 0003](Decisi%C3%B3n-3-Certificados-en-memoria).
