@@ -1,0 +1,37 @@
+name: Validación pública de servicios
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validacion-publica
+  cancel-in-progress: false
+
+jobs:
+  public-probes:
+    if: github.repository == 'ARSASWebDesign/NetArcaWs' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+      - run: dotnet restore tests/NetArcaWs.IntegrationTests/NetArcaWs.IntegrationTests.csproj --locked-mode
+      - id: build
+        run: dotnet build tests/NetArcaWs.IntegrationTests/NetArcaWs.IntegrationTests.csproj --configuration Release --no-restore
+      - name: Validate public infrastructure health
+        env:
+          ARCA_RUN_HOMOLOGY: '1'
+        run: dotnet test --project tests/NetArcaWs.IntegrationTests/NetArcaWs.IntegrationTests.csproj --configuration Release --no-build --no-restore --filter-method '*Public_health_probe*'
+      - name: Validate public SOAP client responses
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          ARCA_RUN_HOMOLOGY: '1'
+        run: dotnet test --project tests/NetArcaWs.IntegrationTests/NetArcaWs.IntegrationTests.csproj --configuration Release --no-build --no-restore --filter-method '*Each_service_answers*'

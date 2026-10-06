@@ -59,6 +59,37 @@ public sealed class ArcaTenantContextTests
     }
 
     [Fact]
+    public async Task Tenant_authentication_does_not_cache_a_malformed_response_or_poison_another_tenant()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        int attempt = 0;
+        var handler = new RecordingHttpMessageHandler((_, _) => Task.FromResult(
+            Interlocked.Increment(ref attempt) == 1
+                ? RecordingHttpMessageHandler.Response(HttpStatusCode.OK, "not xml")
+                : TicketResponse(now)));
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        WsaaCertificateContent certificate = CreateContent("tenant-error-recovery");
+        var service = new WsaaService(
+            new TestHttpClientFactory(handler),
+            cache,
+            Options.Create(new WsaaOptions()),
+            new AdjustableTimeProvider(now));
+        var firstTenant = new ArcaTenantContext("tenant-error-a", TenantCuit, ArcaEnvironment.Homologation, certificate);
+        var secondTenant = new ArcaTenantContext("tenant-error-b", TenantCuit, ArcaEnvironment.Homologation, certificate);
+
+        Func<Task> failedAuthentication = () => service.AuthenticateForTenantAsync("wsfe", firstTenant, cancellationToken);
+        await failedAuthentication.Should().ThrowAsync<FormatException>();
+
+        WsaaTicket recovered = await service.AuthenticateForTenantAsync("wsfe", firstTenant, cancellationToken);
+        WsaaTicket otherTenant = await service.AuthenticateForTenantAsync("wsfe", secondTenant, cancellationToken);
+
+        recovered.Token.Should().Be("test-token");
+        otherTenant.Token.Should().Be("test-token");
+        handler.RequestCount.Should().Be(3, "the malformed response is not cached and the second tenant gets its own ticket request");
+    }
+
+    [Fact]
     public async Task Tenant_and_non_tenant_authentication_do_not_share_cached_tickets()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;

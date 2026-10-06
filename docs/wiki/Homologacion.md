@@ -1,5 +1,39 @@
 # Homologación protegida de WSFE
 
+## Validación sin certificados ni gestiones ante ARCA
+
+El workflow manual **Validación pública de servicios** ejecuta desde `main`
+21 comprobaciones de homologación: diez operaciones Dummy de los clientes SOAP
+y once health checks (los diez servicios más el WSDL de WSAA). No recibe secretos,
+no solicita tickets y no emite comprobantes. Los diez health checks de servicios
+exigen componentes en estado `OK`; el de WSAA verifica su WSDL y la operación
+`loginCms`. Obtener simplemente una respuesta HTTP no basta.
+
+Incluye WSFE, WSFEX, WSMTXCA, WSCDC, WSFECred, WSCPE y Padrón A4,
+Constancia de inscripción (ruta histórica A5), A10 y A13.
+Las dos familias de pruebas se ejecutan aunque falle la primera, para facilitar
+el diagnóstico. Una caída externa hace fallar esta validación manual, sin
+bloquear la CI habitual por disponibilidad de ARCA.
+
+Para reproducirlas localmente después de compilar en Release:
+
+```sh
+ARCA_RUN_HOMOLOGY=1 dotnet test --project tests/NetArcaWs.IntegrationTests/NetArcaWs.IntegrationTests.csproj --configuration Release --no-build --no-restore --filter-method '*Public_health_probe*'
+ARCA_RUN_HOMOLOGY=1 dotnet test --project tests/NetArcaWs.IntegrationTests/NetArcaWs.IntegrationTests.csproj --configuration Release --no-build --no-restore --filter-method '*Each_service_answers*'
+```
+
+Las pruebas locales adicionales utilizan certificados sintéticos, respuestas SOAP
+simuladas y SQLite temporal. Verifican contratos de las 183 operaciones, aislamiento
+de credenciales y tickets, errores de transporte, redondeos y recuperación fiscal
+sin reenvío automático. La CLI admite inspección de certificados PEM y DER.
+
+Estos controles prueban infraestructura y comportamiento local. No demuestran
+autorización del certificado, aceptación fiscal ni reglas de negocio del servidor.
+Las pruebas autenticadas y los escenarios de emisión continúan en la
+[issue #12](https://github.com/ARSASWebDesign/NetArcaWs/issues/12).
+
+## Ejecución autenticada
+
 El flujo permite ahora `consultas` y `emision`. La selección de servicios, el
 descubrimiento de puntos de venta, la numeración explícita y las condiciones del
 ensayo están detallados en [Pruebas fiscales en homologación](Homologacion-fiscal.md).
