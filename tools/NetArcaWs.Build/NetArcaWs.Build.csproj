@@ -11,5 +11,10 @@
     <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.MySql/NetArcaWs.EntityFrameworkCore.MySql.csproj" />
     <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.PostgreSql/NetArcaWs.EntityFrameworkCore.PostgreSql.csproj" />
     <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.SqlServer/NetArcaWs.EntityFrameworkCore.SqlServer.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.Migrations.MySql/NetArcaWs.EntityFrameworkCore.Migrations.MySql.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer.csproj" />
   </ItemGroup>
 </Project>

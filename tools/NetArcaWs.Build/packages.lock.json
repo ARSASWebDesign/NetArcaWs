@@ -530,6 +530,41 @@
           "NetArcaWs": "[0.5.0, )"
         }
       },
+      "netarcaws.entityframeworkcore.migrations.mariadb": {
+        "type": "Project",
+        "dependencies": {
+          "Microting.EntityFrameworkCore.MySql": "[10.0.12, )",
+          "NetArcaWs.EntityFrameworkCore": "[0.5.0, )"
+        }
+      },
+      "netarcaws.entityframeworkcore.migrations.mysql": {
+        "type": "Project",
+        "dependencies": {
+          "Microting.EntityFrameworkCore.MySql": "[10.0.12, )",
+          "NetArcaWs.EntityFrameworkCore": "[0.5.0, )"
+        }
+      },
+      "netarcaws.entityframeworkcore.migrations.postgresql": {
+        "type": "Project",
+        "dependencies": {
+          "NetArcaWs.EntityFrameworkCore": "[0.5.0, )",
+          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )"
+        }
+      },
+      "netarcaws.entityframeworkcore.migrations.sqlite": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.EntityFrameworkCore.Sqlite": "[10.0.12, )",
+          "NetArcaWs.EntityFrameworkCore": "[0.5.0, )"
+        }
+      },
+      "netarcaws.entityframeworkcore.migrations.sqlserver": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.EntityFrameworkCore.SqlServer": "[10.0.12, )",
+          "NetArcaWs.EntityFrameworkCore": "[0.5.0, )"
+        }
+      },
       "netarcaws.entityframeworkcore.mysql": {
         "type": "Project",
         "dependencies": {

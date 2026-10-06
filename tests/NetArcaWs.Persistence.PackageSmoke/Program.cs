@@ -2,9 +2,17 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using NetArcaWs.EntityFrameworkCore;
+using NetArcaWs.EntityFrameworkCore.Migrations;
+using NetArcaWs.EntityFrameworkCore.Migrations.MariaDb;
+using NetArcaWs.EntityFrameworkCore.Migrations.MySql;
+using NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql;
+using NetArcaWs.EntityFrameworkCore.Migrations.Sqlite;
+using NetArcaWs.EntityFrameworkCore.Migrations.SqlServer;
 using NetArcaWs.EntityFrameworkCore.MySql;
 using NetArcaWs.EntityFrameworkCore.PostgreSql;
 using NetArcaWs.EntityFrameworkCore.SqlServer;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using NetArcaWs.HealthChecks;
 using NetArcaWs.Invoicing;
 using NetArcaWs.Transport;
@@ -21,9 +29,15 @@ services.AddNetArcaWs();
 services.AddSingleton<IWsaaTicketProtector>(new AesGcmWsaaTicketProtector("smoke", new Dictionary<string, byte[]> { ["smoke"] = key }));
 services.AddNetArcaWsEntityFrameworkStores<ArcaWsDbContext>(selection);
 await using ServiceProvider provider = services.BuildServiceProvider();
+string sqliteConnectionString = $"Data Source={sqlitePath}";
+var migrationServices = new ServiceCollection();
+migrationServices.AddNetArcaWsSqliteMigrations(sqliteConnectionString, selection);
+await using ServiceProvider migrationProvider = migrationServices.BuildServiceProvider();
+NetArcaWsMigrationStatus migrationStatus = await migrationProvider.GetRequiredService<INetArcaWsMigrator>().ApplyAsync();
+if (migrationStatus.Modules.Count != 2 || migrationStatus.Modules.Any(module => module.State != NetArcaWsMigrationState.Current))
+    throw new InvalidOperationException("The installed SQLite migration package did not apply both selected modules.");
 await using (ArcaWsDbContext context = await provider.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>().CreateDbContextAsync())
 {
-    await context.Database.EnsureCreatedAsync();
     string[] expectedTables = ["NetArcaInvoices", "NetArcaInvoiceRevisions", "NetArcaInvoiceSeriesReservations", "NetArcaWsaaTickets"];
     string[] actualTables = context.Model.GetEntityTypes().Select(entity => entity.GetTableName()).OfType<string>().ToArray();
     if (!expectedTables.All(actualTables.Contains)) throw new InvalidOperationException("Selected persistence tables were not included in the EF model.");
@@ -55,6 +69,8 @@ _ = mysqlProvider.GetRequiredService<IArcaTicketProvider>();
 await using ArcaWsDbContext mysqlContext = await mysqlProvider.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>().CreateDbContextAsync();
 _ = mysqlContext.Model;
 
+await VerifyMigrationPackageAsync(new MySqlMigrationContextFactory("Server=localhost;Database=unused", new MySqlServerVersion(new Version(8, 4, 11))), NetArcaWsPersistenceModule.Invoicing);
+
 var postgreSqlServices = new ServiceCollection();
 postgreSqlServices.AddNetArcaWs();
 postgreSqlServices.AddSingleton<IWsaaTicketProtector>(new AesGcmWsaaTicketProtector("smoke", new Dictionary<string, byte[]> { ["smoke"] = key }));
@@ -64,6 +80,10 @@ _ = postgreSqlProvider.GetRequiredService<IInvoiceJournal>();
 _ = postgreSqlProvider.GetRequiredService<IArcaTicketProvider>();
 await using ArcaWsDbContext postgreSqlContext = await postgreSqlProvider.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>().CreateDbContextAsync();
 _ = postgreSqlContext.Model;
+
+await VerifyMigrationPackageAsync(new MariaDbMigrationContextFactory("Server=localhost;Database=unused", new MariaDbServerVersion(new Version(11, 4, 13))), NetArcaWsPersistenceModule.WsaaTickets);
+await VerifyMigrationPackageAsync(new PostgreSqlMigrationContextFactory("Host=localhost;Database=unused"), NetArcaWsPersistenceModule.Invoicing);
+await VerifyMigrationPackageAsync(new SqlServerMigrationContextFactory("Server=localhost;Database=unused;Encrypt=True;TrustServerCertificate=True"), NetArcaWsPersistenceModule.WsaaTickets);
 
 var sqlServerServices = new ServiceCollection();
 sqlServerServices.AddNetArcaWs();
@@ -78,3 +98,14 @@ _ = sqlServerContext.Model;
 SqliteConnection.ClearAllPools();
 File.Delete(sqlitePath);
 Console.WriteLine("Optional persistence package consumer smoke passed; no database server or ARCA endpoint was contacted.");
+
+static async Task VerifyMigrationPackageAsync(INetArcaWsMigrationContextFactory factory, NetArcaWsPersistenceModule module)
+{
+    await using DbContext context = factory.CreateContext(module);
+    string[] migrationIds = context.Database.GetMigrations().ToArray();
+    if (migrationIds.Length != 1) throw new InvalidOperationException($"The installed {factory.Provider} migration package did not expose its initial migration.");
+    string script = context.GetService<IMigrator>().GenerateScript("0", null, MigrationsSqlGenerationOptions.Default);
+    string expectedTable = module == NetArcaWsPersistenceModule.Invoicing ? "NetArcaInvoices" : "NetArcaWsaaTickets";
+    if (!script.Contains(migrationIds[0], StringComparison.Ordinal) || !script.Contains(expectedTable, StringComparison.Ordinal))
+        throw new InvalidOperationException($"The installed {factory.Provider} migration package could not generate its offline SQL.");
+}

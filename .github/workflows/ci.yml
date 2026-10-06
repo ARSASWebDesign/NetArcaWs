@@ -26,12 +26,18 @@ jobs:
       - run: dotnet build NetArcaWs.slnx --configuration Release --no-restore
       - run: dotnet test --solution NetArcaWs.slnx --configuration Release --no-build --no-restore
       - run: dotnet run --project tools/NetArcaWs.Build --configuration Release --no-build --no-restore -- persistence-schema --check
+      - run: dotnet run --project tools/NetArcaWs.Build --configuration Release --no-build --no-restore -- persistence-migrations --check
       - run: dotnet pack src/NetArcaWs/NetArcaWs.csproj --configuration Release --no-build --no-restore --output artifacts
       - run: dotnet pack src/NetArcaWs.Tool/NetArcaWs.Tool.csproj --configuration Release --no-build --no-restore --output artifacts
       - run: dotnet pack src/NetArcaWs.EntityFrameworkCore/NetArcaWs.EntityFrameworkCore.csproj --configuration Release --no-build --no-restore --output artifacts
       - run: dotnet pack src/NetArcaWs.EntityFrameworkCore.MySql/NetArcaWs.EntityFrameworkCore.MySql.csproj --configuration Release --no-build --no-restore --output artifacts
       - run: dotnet pack src/NetArcaWs.EntityFrameworkCore.PostgreSql/NetArcaWs.EntityFrameworkCore.PostgreSql.csproj --configuration Release --no-build --no-restore --output artifacts
       - run: dotnet pack src/NetArcaWs.EntityFrameworkCore.SqlServer/NetArcaWs.EntityFrameworkCore.SqlServer.csproj --configuration Release --no-build --no-restore --output artifacts
+      - run: dotnet pack src/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite.csproj --configuration Release --no-build --no-restore --output artifacts
+      - run: dotnet pack src/NetArcaWs.EntityFrameworkCore.Migrations.MySql/NetArcaWs.EntityFrameworkCore.Migrations.MySql.csproj --configuration Release --no-build --no-restore --output artifacts
+      - run: dotnet pack src/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb.csproj --configuration Release --no-build --no-restore --output artifacts
+      - run: dotnet pack src/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql.csproj --configuration Release --no-build --no-restore --output artifacts
+      - run: dotnet pack src/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer.csproj --configuration Release --no-build --no-restore --output artifacts
       - name: Smoke test local tool package
         env:
           PACKAGE_VERSION: ${{ steps.version.outputs.version }}
@@ -100,3 +106,66 @@ jobs:
           dotnet build tests/NetArcaWs.Persistence.Server.Tests/NetArcaWs.Persistence.Server.Tests.csproj --configuration Release --no-restore
           NETARCA_PERSISTENCE_DB="Host=127.0.0.1;Port=54329;Database=netarcaws;Username=netarcaws;Password=$pg_password;Timeout=15;Command Timeout=30" NETARCA_PERSISTENCE_DB_KIND=postgresql NETARCA_PERSISTENCE_DB_VERSION=17.6 dotnet test tests/NetArcaWs.Persistence.Server.Tests/NetArcaWs.Persistence.Server.Tests.csproj --configuration Release --no-build --no-restore
           NETARCA_PERSISTENCE_DB="Server=127.0.0.1,14339;Database=master;User Id=sa;Password=$sql_password;Encrypt=True;TrustServerCertificate=True;Connect Timeout=15" NETARCA_PERSISTENCE_DB_KIND=sqlserver NETARCA_PERSISTENCE_DB_VERSION="$sql_version" dotnet test tests/NetArcaWs.Persistence.Server.Tests/NetArcaWs.Persistence.Server.Tests.csproj --configuration Release --no-build --no-restore
+
+  persistence-mysql-engines:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - kind: mysql
+            version: 8.4.11
+            image: mysql:8.4.11@sha256:6ea90827b1100f8f2ae306a539f86d2c264a26ed435a2a9f75551dd5c3aeb242
+            name: netarcaws-ci-mysql
+          - kind: mariadb
+            version: 11.4.13
+            image: mariadb:11.4.13@sha256:1292844148b311e4ed4300022a996d39083f415a963e970cf47cad1b3b18e3a6
+            name: netarcaws-ci-mariadb
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+      - name: Run real MySQL or MariaDB persistence suite
+        shell: bash
+        env:
+          ENGINE_KIND: ${{ matrix.kind }}
+          ENGINE_VERSION: ${{ matrix.version }}
+          ENGINE_IMAGE: ${{ matrix.image }}
+          ENGINE_NAME: ${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = x86_64
+          state_dir="$(mktemp -d "$RUNNER_TEMP/netarcaws-${ENGINE_KIND}.XXXXXX")"
+          chmod 700 "$state_dir"
+          engine_password="Aa1!$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')"
+          echo "::add-mask::$engine_password"
+          if [[ "$ENGINE_KIND" == mysql ]]; then
+            printf 'MYSQL_ROOT_PASSWORD=%s\nMYSQL_ROOT_HOST=%%\n' "$engine_password" > "$state_dir/engine.env"
+          else
+            printf 'MARIADB_ROOT_PASSWORD=%s\nMARIADB_ROOT_HOST=%%\n' "$engine_password" > "$state_dir/engine.env"
+          fi
+          chmod 600 "$state_dir/engine.env"
+          cleanup() {
+            docker rm -f "$ENGINE_NAME" >/dev/null 2>&1 || true
+            rm -rf "$state_dir"
+          }
+          trap cleanup EXIT
+          docker run --detach --platform linux/amd64 --name "$ENGINE_NAME" --env-file "$state_dir/engine.env" --publish 127.0.0.1:3307:3306 "$ENGINE_IMAGE" >/dev/null
+          for attempt in $(seq 1 90); do
+            if [[ "$ENGINE_KIND" == mysql ]] && docker exec "$ENGINE_NAME" sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqladmin ping -h 127.0.0.1 -uroot --silent' >/dev/null 2>&1; then break; fi
+            if [[ "$ENGINE_KIND" == mariadb ]] && docker exec "$ENGINE_NAME" sh -c 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb-admin ping -h 127.0.0.1 -uroot --silent' >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          if [[ "$ENGINE_KIND" == mysql ]]; then
+            docker exec "$ENGINE_NAME" sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqladmin ping -h 127.0.0.1 -uroot --silent'
+          else
+            docker exec "$ENGINE_NAME" sh -c 'MYSQL_PWD="$MARIADB_ROOT_PASSWORD" mariadb-admin ping -h 127.0.0.1 -uroot --silent'
+          fi
+          connection="Server=127.0.0.1;Port=3307;Database=mysql;User ID=root;Password=$engine_password;Connection Timeout=15"
+          dotnet restore NetArcaWs.slnx --locked-mode
+          dotnet build tests/NetArcaWs.EntityFrameworkCore.MySql.Tests/NetArcaWs.EntityFrameworkCore.MySql.Tests.csproj --configuration Release --no-restore
+          NETARCA_PERSISTENCE_DB="$connection" NETARCA_PERSISTENCE_DB_KIND="$ENGINE_KIND" NETARCA_PERSISTENCE_DB_VERSION="$ENGINE_VERSION" dotnet test tests/NetArcaWs.EntityFrameworkCore.MySql.Tests/NetArcaWs.EntityFrameworkCore.MySql.Tests.csproj --configuration Release --no-build --no-restore
