@@ -9,7 +9,8 @@
 - [x] Workflow de releases de biblioteca y tool con ensayo manual sin publicación.
 - [x] Configurar Trusted Publishing y publicar `NetArcaWs` y `NetArcaWs.Tool` 0.5.0 en NuGet.
 - [x] Confirmar la indexación de ambos paquetes 0.5.0 en el feed NuGet.
-- [x] Hito 1: WSAA nativo, NuGet LGPL-3.0-or-later, xUnit y FluentAssertions.
+- [x] Hito 1: WSAA nativo, NuGet LGPL-3.0-or-later y xUnit; aserciones migradas a AwesomeAssertions 9.6.0 (Apache-2.0).
+- [x] Dependencias de pruebas: reemplazar FluentAssertions, actualizar lockfiles y avisos de licencia, y configurar bloqueo de nuevas incorporaciones en dependency review. Build y pack verificados; 222 tests aprobados y 3 de homologación omitidos.
 - [x] CLI .NET tool: cert-dev, cert-prod, cert-info, paquete y suite propia.
 - [x] Certificados PEM/PFX en memoria desde configuración, vault o base de datos.
 - [x] Contexto multitenant y aislamiento de caché WSAA por tenant/CUIT/entorno/servicio/certificado.

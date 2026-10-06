@@ -4,7 +4,7 @@ using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Xml.Linq;
-using FluentAssertions;
+using AwesomeAssertions;
 using NetArcaWs.Cryptography;
 using NetArcaWs.HealthChecks;
 using NetArcaWs.Multitenancy;

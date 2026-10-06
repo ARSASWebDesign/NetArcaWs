@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using NetArcaWs.Invoicing;
 using NetArcaWs.Tests.TestSupport;
 using Xunit;

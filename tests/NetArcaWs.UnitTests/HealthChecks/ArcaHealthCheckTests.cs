@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Xml.Linq;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using NetArcaWs.HealthChecks;
 using Xunit;

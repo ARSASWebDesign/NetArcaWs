@@ -10,7 +10,7 @@ dotnet pack src/NetArcaWs/NetArcaWs.csproj --configuration Release --no-build --
 dotnet pack src/NetArcaWs.Tool/NetArcaWs.Tool.csproj --configuration Release --no-build --no-restore --output artifacts
 ```
 
-Los proyectos de pruebas usan xUnit v3, FluentAssertions y
+Los proyectos de pruebas usan xUnit v3, AwesomeAssertions y
 Microsoft.Testing.Platform. Las pruebas unitarias usan datos sintéticos. La
 prueba de homologación requiere variables de entorno con credenciales válidas;
 sin ellas se omite. No guardar credenciales en fixtures, logs o commits y no

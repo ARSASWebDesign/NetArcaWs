@@ -41,7 +41,7 @@ dotnet build NetArcaWs.slnx --configuration Release --no-restore
 dotnet test --solution NetArcaWs.slnx --configuration Release --no-build --no-restore
 ```
 
-Las pruebas usan xUnit v3, FluentAssertions y Microsoft.Testing.Platform. La
+Las pruebas usan xUnit v3, AwesomeAssertions y Microsoft.Testing.Platform. La
 prueba de homologación se omite si no se proporcionaron sus variables de
 entorno; no agregues credenciales ni certificados al repositorio. Para
 comprobar el empaquetado local sin publicar:
@@ -55,6 +55,19 @@ No hace falta publicar paquetes ni solicitar permisos o secretos de publicación
 para desarrollar, probar o revisar un cambio. Los chequeos de CI compilan,
 ejecutan las pruebas, empaquetan los proyectos y hacen una instalación de prueba
 local de la herramienta.
+
+### Licencias de dependencias
+
+Revisa la licencia de cada dependencia nueva y de cada actualización, incluidas
+las herramientas de desarrollo. Las pruebas usan AwesomeAssertions 9.6.0
+(Apache-2.0), aislado mediante `PrivateAssets="all"`. No agregues
+FluentAssertions: desde v8 tiene condiciones comerciales diferentes, y la
+revisión de dependencias bloquea su incorporación. La versión 7.2.1 utilizada
+anteriormente también era Apache-2.0. Consulta los
+[avisos de terceros](THIRD-PARTY-NOTICES.md) para el detalle y las fuentes.
+
+Las actualizaciones automáticas son propuestas de revisión; no garantizan que
+una nueva versión conserve la licencia anterior.
 
 ## Herramientas de mantenimiento .NET
 

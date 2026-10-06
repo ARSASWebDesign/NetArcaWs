@@ -1,7 +1,7 @@
 using System.Net;
 using System.Xml.Linq;
 using System.Xml.Serialization;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Options;
 using NetArcaWs.Tests.TestSupport;
 using NetArcaWs.Transport;

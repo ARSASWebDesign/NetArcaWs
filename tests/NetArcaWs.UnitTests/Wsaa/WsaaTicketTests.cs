@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using NetArcaWs.Tests.TestSupport;
 using NetArcaWs.Wsaa;
 using Xunit;

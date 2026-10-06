@@ -39,7 +39,7 @@ contrastan con el [upstream](https://github.com/reingart/pyafipws) y la
 | Health checks integrables en ASP.NET Core | `IHealthCheck`, registro opt-in por WS/entorno, timeout, tags y estado de componentes; sin certificados ni login |
 | Herramienta instalable con `dotnet tool` | `cert-dev`, `cert-prod`, `cert-info`; manifiesto local o instalación global, contraseña por variable de entorno y protección contra sobrescrituras |
 | Manejo de recursos y errores | Certificados importados liberados por operación, claves PFX efímeras donde se soportan, XML sin DTD, límites configurables de 4 MiB para request/response y timeout de lectura; secretos ocultos en `ToString` |
-| Validación propia del port | xUnit/FluentAssertions, SOAP simulado, pruebas de firmas y aislamiento concurrente entre tenants, suite separada de homologación y CI de build/test/pack/instalación de la CLI |
+| Validación propia del port | xUnit/AwesomeAssertions, SOAP simulado, pruebas de firmas y aislamiento concurrente entre tenants, suite separada de homologación y CI de build/test/pack/instalación de la CLI |
 | Arquitectura trazable | ADR de certificados en memoria y multitenancy; límites y equivalencias documentados |
 | Diario fiscal y coordinación durable | `SafeInvoiceService` + `IInvoiceJournal` / `InvoiceCoordinator` ofrecen autorización unitaria y reconciliación exacta en WSFE/WSFEX/WSMTXCA; implementación y suite local verificadas. SQLite sirve a procesos de un host, no NFS ni multi-host; sin worker ni reenvío de estados inciertos |
 | Clientes SOAP por contrato ARCA | 81 fachadas tipadas verificadas por QName/action y roundtrips; sin WCF. La autorización fiscal real requiere certificados y se valida aparte |
@@ -142,7 +142,7 @@ dotnet test --solution NetArcaWs.slnx --configuration Release --no-restore
 dotnet pack src/NetArcaWs/NetArcaWs.csproj --configuration Release --no-build --output artifacts
 ```
 
-Los tests usan xUnit v3 y FluentAssertions 7.2.1, con Microsoft.Testing.Platform.
+Los tests usan xUnit v3 y AwesomeAssertions 9.6.0, con Microsoft.Testing.Platform.
 Las pruebas unitarias no se conectan a ARCA. El paquete compilado localmente
 puede instalarse desde una carpeta NuGet:
 

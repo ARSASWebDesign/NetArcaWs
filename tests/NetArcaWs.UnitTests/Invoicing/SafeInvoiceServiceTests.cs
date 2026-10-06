@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using System.Security.Cryptography.X509Certificates;
 using System.Collections;
 using System.Reflection;
