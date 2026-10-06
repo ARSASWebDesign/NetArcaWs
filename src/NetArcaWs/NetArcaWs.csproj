@@ -29,6 +29,9 @@
     <None Include="../../THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="/" />
     <None Include="../../ARCHITECTURE.md" Pack="true" PackagePath="/" />
     <None Include="../../docs/certificates-cli.md" Pack="true" PackagePath="docs/" />
+    <None Include="../../docs/plans/hito-7-wiki.md" Pack="true" PackagePath="docs/plans/" />
+    <None Include="../../PROGRESS.md" Pack="true" PackagePath="/" />
+    <None Include="../../docs/adr/0003-in-memory-certificates.md" Pack="true" PackagePath="docs/adr/" />
     <None Include="../../docs/plans/hito-1.md" Pack="true" PackagePath="docs/plans/" />
     <None Include="../../docs/reference/wsaa-homologation.wsdl" Pack="true" PackagePath="docs/reference/" />
     <None Include="../../docs/reference/healthchecks-contracts.md" Pack="true" PackagePath="docs/reference/" />

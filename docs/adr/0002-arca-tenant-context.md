@@ -82,6 +82,17 @@ comprobante sigue siendo una única identidad fiscal; el tenant restringe acceso
 visibilidad, no permite duplicar su registro. Esto mantiene separadas la
 autorización por tenant y la consistencia contable.
 
+## Origen de certificados y documentación
+
+El [ADR 0003](0003-in-memory-certificates.md) define la carga PEM/PFX desde
+variables, vaults o bases de datos, ownership y rotación. El contexto multitenant
+recibe ese material y no exige archivos. Compartirlo entre instancias no crea una
+caché distribuida de TA.
+
+Esta decisión y su adopción en todos los clientes de negocio deberán integrarse
+en el [wiki integral del hito final](../plans/hito-7-wiki.md), junto con ejemplos
+por tenant y límites explícitos de cada servicio.
+
 ## Consecuencias
 
 - Una sola instancia de `WsaaService` puede atender ambientes y credenciales

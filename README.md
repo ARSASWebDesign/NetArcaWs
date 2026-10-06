@@ -6,6 +6,45 @@ opt-in. Las operaciones de negocio de WSFEv1, WSFEXv1, WSMTXCA y Padrón siguen
 pendientes. No es todavía un port del
 repositorio Python completo ni se ha publicado este paquete en nuget.org.
 
+## Extras y adaptaciones propias respecto de PyAfipWs
+
+Estas extensiones describen la API y arquitectura de NetArcaWs. No implican
+paridad completa ni que Python carezca de certificados, CSR, caché, CLI, Dummy o tests:
+son capacidades también presentes en el proyecto de origen. Las diferencias se
+contrastan con el [upstream](https://github.com/reingart/pyafipws) y la
+[matriz del port](docs/plans/hito-1.md).
+
+| Extra o adaptación .NET | Estado y alcance |
+| --- | --- |
+| Biblioteca .NET 10 y empaquetado NuGet | Implementado; sin runtime Python ni wrappers COM. Paquetes locales; aún no publicados en nuget.org |
+| Criptografía nativa de .NET | CMS/TRA, RSA y CSR con `System.Security.Cryptography.Pkcs` y `System.Formats.Asn1`; sin procesos OpenSSL ni BouncyCastle |
+| API asíncrona e inyección de dependencias | `Task`, `CancellationToken`, `IHttpClientFactory`, opciones y `TimeProvider`; SOAP con `HttpClient` y `XmlSerializer` |
+| Certificados como contenido | `WsaaCertificateContent`: PEM, PFX/P12 en bytes o Base64, configuración o parámetro por operación; apto para secretos obtenidos de vault/BD por la aplicación |
+| Contexto multitenant explícito | `ArcaTenantContext`: tenant, CUIT representada, entorno y certificado; autenticación WSAA y caché aisladas; adopción en los demás clientes pendiente |
+| Caché compartida dentro del proceso | `IMemoryCache`, vencimiento real del TA y coordinación de logins concurrentes; rotación separada por huella; no es caché distribuida |
+| Health checks integrables en ASP.NET Core | `IHealthCheck`, registro opt-in por WS/entorno, timeout, tags y estado de componentes; sin certificados ni login |
+| Herramienta instalable con `dotnet tool` | `cert-dev`, `cert-prod`, `cert-info`; manifiesto local o instalación global, contraseña por variable de entorno y protección contra sobrescrituras |
+| Manejo de recursos y errores | Certificados importados liberados por operación, claves PFX efímeras donde se soportan, XML sin DTD, límites de respuesta y timeout de lectura; secretos ocultos en `ToString` |
+| Validación propia del port | xUnit/FluentAssertions, SOAP simulado, pruebas de firmas y aislamiento concurrente entre tenants, suite separada de homologación y CI de build/test/pack/instalación de la CLI |
+| Arquitectura trazable | ADR de certificados en memoria y multitenancy; límites y equivalencias documentados |
+| Prevención durable de facturas duplicadas | **Diseñada, pendiente de implementar** en los clientes de facturación; no hay retry automático de emisión |
+| Wiki integral del repositorio | **Hito final pendiente**: adaptación de toda la documentación upstream más todas las extensiones de NetArcaWs |
+
+Ver las decisiones de [multitenancy](docs/adr/0002-arca-tenant-context.md),
+[certificados en memoria](docs/adr/0003-in-memory-certificates.md) y
+[reintentos seguros](docs/adr/0001-safe-invoice-retries.md).
+
+## Documentación y wiki final
+
+El [checklist](PROGRESS.md) incorpora el **Hito 7 final**: publicar toda la
+documentación en el wiki de este repositorio, con fuentes versionadas y una
+matriz de cobertura basada en el manual y el wiki de PyAfipWs. Incluirá tanto
+los flujos equivalentes adaptados a C# como todos los extras anteriores.
+El wiki todavía no está publicado. El [plan del wiki](docs/plans/hito-7-wiki.md)
+detalla el inventario, el contenido obligatorio y los criterios de cierre.
+Mientras tanto, las guías están en este README, [ARCHITECTURE.md](ARCHITECTURE.md)
+y `docs/`.
+
 ## Compilar, probar y empaquetar
 
 Requiere SDK .NET 10.0.401 (global.json). Desde este directorio:

@@ -194,3 +194,11 @@ administrados conservan la limitación de borrado de memoria descrita arriba.
 La suite `NetArcaWs.Tool.Tests` valida comandos, CSR, claves, concurrencia,
 permisos, cancelación y errores. CI empaqueta e instala la herramienta para
 comprobar también su ejecución fuera de la solución.
+
+## Documentación de decisiones y publicación
+
+El [ADR 0003](docs/adr/0003-in-memory-certificates.md) formaliza el contrato de
+certificados en memoria y complementa el contexto multitenant del ADR 0002.
+El [hito final del wiki](docs/plans/hito-7-wiki.md) consolidará toda la
+documentación y las decisiones, con trazabilidad hacia las fuentes de PyAfipWs
+y una matriz explícita de compatibilidad y extras de NetArcaWs.

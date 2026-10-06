@@ -14,6 +14,7 @@
 - [ ] Hito 4: WSMTXCA y pruebas; precisar alcance oficial del servicio.
 - [ ] Hito 5: Padrón A4/A5/A10/A13 y pruebas.
 - [ ] Hito 6: README y arquitectura integrales de todos los módulos.
+- [ ] Hito 7 (final): publicar TODA la documentación en el wiki del repositorio, basada en PyAfipWs y ampliada con los extras de NetArcaWs; [alcance y criterios de cierre](docs/plans/hito-7-wiki.md).
 
 La documentación del Hito 1 ya está disponible en README.md y ARCHITECTURE.md.
 El detalle de compatibilidad y verificación está en docs/plans/hito-1.md.
@@ -21,3 +22,7 @@ Pruebas locales con health checks, CLI, certificados en memoria y multitenancy: 
 La CLI tiene 31 pruebas. Los paquetes 0.4.0 se compilan para .NET 10.
 La caché de tickets es local al proceso; compartir certificados entre réplicas no agrega caché distribuida.
 Este estado no equivale al 100% del port del repositorio original.
+
+Decisiones: [contexto multitenant](docs/adr/0002-arca-tenant-context.md) y
+[certificados en memoria](docs/adr/0003-in-memory-certificates.md).
+El wiki integral está planificado; todavía no se publicó.
