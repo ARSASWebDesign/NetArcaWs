@@ -1,7 +1,12 @@
 # Homologación protegida de WSFE
 
-El workflow **Homologación WSFE** se inicia manualmente desde **Actions →
-Homologación WSFE → Run workflow**, seleccionando `main`. No se ejecuta al abrir
+El flujo permite ahora `consultas` y `emision`. La selección de servicios, el
+descubrimiento de puntos de venta, la numeración explícita y las condiciones del
+ensayo están detallados en [Pruebas fiscales en homologación](Homologacion-fiscal.md).
+El modo predeterminado continúa siendo de solo lectura.
+
+El workflow **Homologación ARCA** se inicia manualmente desde **Actions →
+Homologación ARCA → Run workflow**, seleccionando `main`. No se ejecuta al abrir
 una PR ni al publicar una release. Usa el entorno GitHub `homologacion`, cuya
 política debe permitir únicamente la rama `main` y exigir aprobación manual.
 La autoaprobación está permitida para que quien hizo el push pueda iniciar y
@@ -20,15 +25,15 @@ Completar estos **secretos del entorno**, nunca archivos del repositorio:
 | `WSAA_KEY_PASSWORD` | Contraseña de esa clave; puede quedar vacía si la clave no está cifrada |
 | `ARCA_CUIT` | CUIT representada de 11 dígitos, autorizada para el servicio |
 
-Variables del mismo entorno:
+Variable del mismo entorno:
 
 | Nombre | Valor de esta primera etapa |
 |---|---|
 | `WSAA_SERVICE` | `wsfe` |
-| `ARCA_HOMOLOGY_SERVICES` | `wsfe` |
 
-`ARCA_QUERY_CUIT` se reserva para futuras consultas de Padrón; no se necesita
-ni se entrega a este workflow. Autorizar el alias/certificado para `wsfe` en
+La selección `services` del formulario reemplaza la variable de entorno
+`ARCA_HOMOLOGY_SERVICES`. El secreto `ARCA_QUERY_CUIT` se usa cuando se selecciona
+una consulta de Padrón. Autorizar el alias/certificado para cada servicio en
 WSASS antes de la ejecución. Un certificado emitido no implica habilitación
 para todos los servicios.
 
@@ -36,14 +41,13 @@ para todos los servicios.
 
 Tras la aprobación, un runner hospedado Ubuntu compila el proyecto sin recibir
 el certificado. El paso de prueba materializa los PEM en una carpeta temporal
-con permisos privados y ejecuta únicamente la consulta autenticada
-`FEParamGetTiposMonedas`. El cliente obtiene el ticket WSAA necesario dentro
-de ese mismo proceso. Comprueba un resultado presente, sin errores funcionales,
-y una lista no vacía de monedas con identificador y descripción.
+con permisos privados y ejecuta el escenario seleccionado. El cliente obtiene
+el ticket WSAA necesario dentro de ese mismo proceso y lo reutiliza en sus
+consultas. Los catálogos y respuestas se comprueban con validaciones funcionales.
 
-La prueba no autoriza comprobantes ni realiza operaciones productivas. Esto
-valida el circuito autenticado de consulta WSFE, no la homologación de emisión,
-CAEA, otros servicios o todas las reglas fiscales.
+El modo `consultas` no autoriza comprobantes. El modo `emision` autoriza una
+factura de prueba B o C exclusivamente en homologación y la consulta después.
+Ningún modo realiza operaciones productivas ni acredita todas las reglas fiscales.
 
 Se exige `ARCA_REQUIRE_HOMOLOGY=1`: si faltan selección o credenciales, el trabajo
 falla en lugar de omitir la prueba. La CI normal continúa usando pruebas locales

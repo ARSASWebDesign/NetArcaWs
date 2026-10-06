@@ -53,3 +53,4 @@ por sí solos que una factura real será aceptada.
 ## Homologación
 
 - [Homologación protegida de WSFE](Homologacion) — ejecución manual, credenciales y aprobación en GitHub.
+- [Pruebas fiscales en homologación](Homologacion-fiscal) — consultas autenticadas, numeración y emisión controlada de facturas B y C de prueba.

@@ -1,7 +1,37 @@
-name: Homologación WSFE
+name: Homologación ARCA
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Modo de homologación
+        type: choice
+        required: true
+        default: consultas
+        options:
+          - consultas
+          - emision
+      services:
+        description: Servicios de consulta separados por comas (sin espacios)
+        type: string
+        required: true
+        default: wsfe
+      point_of_sale:
+        description: Punto de venta requerido para emisión
+        type: string
+        required: false
+      voucher_type:
+        description: Tipo de comprobante para emisión
+        type: choice
+        required: true
+        default: '11'
+        options:
+          - '6'
+          - '11'
+      voucher_number:
+        description: Número explícito requerido para emisión
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -11,7 +41,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  wsfe:
+  homologacion:
     if: github.repository == 'ARSASWebDesign/NetArcaWs' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -28,12 +58,17 @@ jobs:
         run: |
           dotnet restore tests/NetArcaWs.IntegrationTests/NetArcaWs.IntegrationTests.csproj --locked-mode
           dotnet build tests/NetArcaWs.IntegrationTests/NetArcaWs.IntegrationTests.csproj --configuration Release --no-restore
-      - name: Authenticate and query WSFE homologation
+      - name: Authenticate and run homologation scenarios
         env:
           HOMO_CERTIFICATE_PEM: ${{ secrets.WSAA_CERTIFICATE_PEM }}
           HOMO_PRIVATE_KEY_PEM: ${{ secrets.WSAA_PRIVATE_KEY_PEM }}
           WSAA_KEY_PASSWORD: ${{ secrets.WSAA_KEY_PASSWORD }}
           ARCA_CUIT: ${{ secrets.ARCA_CUIT }}
           WSAA_SERVICE: ${{ vars.WSAA_SERVICE }}
-          ARCA_HOMOLOGY_SERVICES: ${{ vars.ARCA_HOMOLOGY_SERVICES }}
+          ARCA_HOMOLOGY_MODE: ${{ inputs.mode }}
+          ARCA_HOMOLOGY_SERVICES: ${{ inputs.services }}
+          ARCA_HOMOLOGY_POINT_OF_SALE: ${{ inputs.point_of_sale }}
+          ARCA_HOMOLOGY_VOUCHER_TYPE: ${{ inputs.voucher_type }}
+          ARCA_HOMOLOGY_VOUCHER_NUMBER: ${{ inputs.voucher_number }}
+          ARCA_QUERY_CUIT: ${{ (contains(format(',{0},', inputs.services), ',padron-a4,') || contains(format(',{0},', inputs.services), ',padron-a5,') || contains(format(',{0},', inputs.services), ',padron-a10,') || contains(format(',{0},', inputs.services), ',padron-a13,')) && secrets.ARCA_QUERY_CUIT || '' }}
         run: bash scripts/run-homologacion.sh

@@ -28,6 +28,26 @@ public sealed class HomologationScriptTests
         AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
     }
 
+    [Fact]
+    public void Run_rejects_emision_outside_the_protected_manual_context()
+    {
+        EnsureBashAvailable();
+        using var workspace = new BuildTestWorkspace();
+        var fixture = CreateFixture(workspace);
+        fixture.Environment["ARCA_HOMOLOGY_MODE"] = "emision";
+        fixture.Environment["ARCA_HOMOLOGY_POINT_OF_SALE"] = "1";
+        fixture.Environment["ARCA_HOMOLOGY_VOUCHER_TYPE"] = "11";
+        fixture.Environment["ARCA_HOMOLOGY_VOUCHER_NUMBER"] = "1";
+        fixture.Environment["GITHUB_REF"] = "refs/heads/release";
+
+        ProcessResult result = RunScript(workspace, fixture.Environment);
+
+        result.ExitCode.Should().NotBe(0);
+        result.StandardError.Should().Contain("Homologación requiere una ejecución manual desde main del repositorio oficial.");
+        File.Exists(fixture.Capture("args")).Should().BeFalse();
+        AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
+    }
+
     [Theory]
     [InlineData("HOMO_CERTIFICATE_PEM")]
     [InlineData("HOMO_PRIVATE_KEY_PEM")]
@@ -49,19 +69,186 @@ public sealed class HomologationScriptTests
     }
 
     [Theory]
-    [InlineData("WSAA_SERVICE")]
-    [InlineData("ARCA_HOMOLOGY_SERVICES")]
-    public void Run_rejects_service_selection_other_than_wsfe(string name)
+    [InlineData("wsfex,unknown")]
+    [InlineData("")]
+    public void Run_rejects_unknown_or_empty_consulta_service_selection(string services)
     {
         EnsureBashAvailable();
         using var workspace = new BuildTestWorkspace();
         var fixture = CreateFixture(workspace);
-        fixture.Environment[name] = "wsfex";
+        fixture.Environment["ARCA_HOMOLOGY_SERVICES"] = services;
 
         ProcessResult result = RunScript(workspace, fixture.Environment);
 
         result.ExitCode.Should().NotBe(0);
-        result.StandardError.Should().Contain("Este flujo solo admite WSAA_SERVICE=wsfe y ARCA_HOMOLOGY_SERVICES=wsfe.");
+        result.StandardError.Should().Contain("ARCA_HOMOLOGY_SERVICES");
+        File.Exists(fixture.Capture("args")).Should().BeFalse();
+        AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
+    }
+
+    [Theory]
+    [InlineData("wsfe")]
+    [InlineData("wsfe,wsfex")]
+    [InlineData("wsfe,wsfex,wsmtxca,wscdc,wsfecred,padron-a4,padron-a5,padron-a10,padron-a13")]
+    public void Run_forwards_supported_consulta_services(string services)
+    {
+        EnsureBashAvailable();
+        using var workspace = new BuildTestWorkspace();
+        var fixture = CreateFixture(workspace);
+        fixture.Environment["ARCA_HOMOLOGY_SERVICES"] = services;
+
+        ProcessResult result = RunScript(workspace, fixture.Environment);
+
+        result.ExitCode.Should().Be(0);
+        File.ReadAllText(fixture.Capture("service")).Should().Be(services);
+        File.ReadAllText(fixture.Capture("query-cuit")).Should().Be(services.Contains("padron-", StringComparison.Ordinal) ? "20123456789" : "");
+        AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
+    }
+
+    [Fact]
+    public void Run_defaults_to_consultas_and_forwards_the_default_voucher_type()
+    {
+        EnsureBashAvailable();
+        using var workspace = new BuildTestWorkspace();
+        var fixture = CreateFixture(workspace);
+        fixture.Environment.Remove("ARCA_HOMOLOGY_MODE");
+        fixture.Environment.Remove("ARCA_HOMOLOGY_POINT_OF_SALE");
+        fixture.Environment.Remove("ARCA_HOMOLOGY_VOUCHER_TYPE");
+        fixture.Environment.Remove("ARCA_HOMOLOGY_VOUCHER_NUMBER");
+
+        ProcessResult result = RunScript(workspace, fixture.Environment);
+
+        result.ExitCode.Should().Be(0);
+        File.ReadAllText(fixture.Capture("mode")).Should().Be("consultas");
+        File.ReadAllText(fixture.Capture("point-of-sale")).Should().BeEmpty();
+        File.ReadAllText(fixture.Capture("voucher-type")).Should().Be("11");
+        File.ReadAllText(fixture.Capture("voucher-number")).Should().BeEmpty();
+        File.ReadAllText(fixture.Capture("query-cuit")).Should().BeEmpty();
+        AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
+    }
+
+    [Fact]
+    public void Run_forwards_valid_emision_selection_to_the_filtered_test()
+    {
+        EnsureBashAvailable();
+        using var workspace = new BuildTestWorkspace();
+        var fixture = CreateFixture(workspace);
+        fixture.Environment["ARCA_HOMOLOGY_MODE"] = "emision";
+        fixture.Environment["ARCA_HOMOLOGY_POINT_OF_SALE"] = "12";
+        fixture.Environment["ARCA_HOMOLOGY_VOUCHER_TYPE"] = "6";
+        fixture.Environment["ARCA_HOMOLOGY_VOUCHER_NUMBER"] = "98765";
+
+        ProcessResult result = RunScript(workspace, fixture.Environment);
+
+        result.ExitCode.Should().Be(0);
+        File.ReadAllText(fixture.Capture("mode")).Should().Be("emision");
+        File.ReadAllText(fixture.Capture("point-of-sale")).Should().Be("12");
+        File.ReadAllText(fixture.Capture("voucher-type")).Should().Be("6");
+        File.ReadAllText(fixture.Capture("voucher-number")).Should().Be("98765");
+        File.ReadAllText(fixture.Capture("args")).Should().Contain("*Explicitly_enabled_authenticated_scenarios_run_against_homologation*");
+        AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
+    }
+
+    [Theory]
+    [InlineData("ARCA_HOMOLOGY_MODE", "unknown")]
+    [InlineData("ARCA_HOMOLOGY_SERVICES", "wsfe,wsfex")]
+    [InlineData("ARCA_HOMOLOGY_POINT_OF_SALE", "0")]
+    [InlineData("ARCA_HOMOLOGY_POINT_OF_SALE", "100000")]
+    [InlineData("ARCA_HOMOLOGY_POINT_OF_SALE", "abc")]
+    [InlineData("ARCA_HOMOLOGY_VOUCHER_TYPE", "1")]
+    [InlineData("ARCA_HOMOLOGY_VOUCHER_NUMBER", "0")]
+    [InlineData("ARCA_HOMOLOGY_VOUCHER_NUMBER", "100000000")]
+    [InlineData("ARCA_HOMOLOGY_VOUCHER_NUMBER", "abc")]
+    public void Run_rejects_invalid_emision_parameters_before_credentials_are_materialized(string name, string value)
+    {
+        EnsureBashAvailable();
+        using var workspace = new BuildTestWorkspace();
+        var fixture = CreateFixture(workspace);
+        fixture.Environment["ARCA_HOMOLOGY_MODE"] = "emision";
+        fixture.Environment["ARCA_HOMOLOGY_POINT_OF_SALE"] = "1";
+        fixture.Environment["ARCA_HOMOLOGY_VOUCHER_TYPE"] = "11";
+        fixture.Environment["ARCA_HOMOLOGY_VOUCHER_NUMBER"] = "1";
+        fixture.Environment["ARCA_HOMOLOGY_SERVICES"] = "wsfe";
+        fixture.Environment[name] = value;
+
+        ProcessResult result = RunScript(workspace, fixture.Environment);
+
+        result.ExitCode.Should().NotBe(0);
+        File.Exists(fixture.Capture("args")).Should().BeFalse();
+        AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
+    }
+
+    [Theory]
+    [InlineData("ARCA_HOMOLOGY_POINT_OF_SALE")]
+    [InlineData("ARCA_HOMOLOGY_VOUCHER_NUMBER")]
+    public void Run_rejects_missing_required_emision_parameters(string name)
+    {
+        EnsureBashAvailable();
+        using var workspace = new BuildTestWorkspace();
+        var fixture = CreateFixture(workspace);
+        fixture.Environment["ARCA_HOMOLOGY_MODE"] = "emision";
+        fixture.Environment["ARCA_HOMOLOGY_POINT_OF_SALE"] = "1";
+        fixture.Environment["ARCA_HOMOLOGY_VOUCHER_TYPE"] = "11";
+        fixture.Environment["ARCA_HOMOLOGY_VOUCHER_NUMBER"] = "1";
+        fixture.Environment.Remove(name);
+
+        ProcessResult result = RunScript(workspace, fixture.Environment);
+
+        result.ExitCode.Should().NotBe(0);
+        File.Exists(fixture.Capture("args")).Should().BeFalse();
+        AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
+    }
+
+    [Fact]
+    public void Run_requires_query_cuit_for_padron_services()
+    {
+        EnsureBashAvailable();
+        using var workspace = new BuildTestWorkspace();
+        var fixture = CreateFixture(workspace);
+        fixture.Environment["ARCA_HOMOLOGY_SERVICES"] = "padron-a4";
+        fixture.Environment.Remove("ARCA_QUERY_CUIT");
+
+        ProcessResult result = RunScript(workspace, fixture.Environment);
+
+        result.ExitCode.Should().NotBe(0);
+        result.StandardError.Should().Contain("ARCA_QUERY_CUIT es obligatorio para servicios de padrón y debe contener 11 dígitos.");
+        File.Exists(fixture.Capture("args")).Should().BeFalse();
+        AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
+    }
+
+    [Fact]
+    public void Run_rejects_a_malformed_query_cuit_for_padron_services()
+    {
+        EnsureBashAvailable();
+        using var workspace = new BuildTestWorkspace();
+        var fixture = CreateFixture(workspace);
+        fixture.Environment["ARCA_HOMOLOGY_SERVICES"] = "padron-a13";
+        fixture.Environment["ARCA_QUERY_CUIT"] = "123";
+
+        ProcessResult result = RunScript(workspace, fixture.Environment);
+
+        result.ExitCode.Should().NotBe(0);
+        result.StandardError.Should().Contain("ARCA_QUERY_CUIT es obligatorio para servicios de padrón y debe contener 11 dígitos.");
+        File.Exists(fixture.Capture("args")).Should().BeFalse();
+        AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
+    }
+
+    [Fact]
+    public void Run_rejects_emision_when_any_service_other_than_wsfe_is_selected()
+    {
+        EnsureBashAvailable();
+        using var workspace = new BuildTestWorkspace();
+        var fixture = CreateFixture(workspace);
+        fixture.Environment["ARCA_HOMOLOGY_MODE"] = "emision";
+        fixture.Environment["ARCA_HOMOLOGY_POINT_OF_SALE"] = "1";
+        fixture.Environment["ARCA_HOMOLOGY_VOUCHER_TYPE"] = "11";
+        fixture.Environment["ARCA_HOMOLOGY_VOUCHER_NUMBER"] = "1";
+        fixture.Environment["ARCA_HOMOLOGY_SERVICES"] = "wsfe,wsfex";
+
+        ProcessResult result = RunScript(workspace, fixture.Environment);
+
+        result.ExitCode.Should().NotBe(0);
+        result.StandardError.Should().Contain("La emisión solo admite ARCA_HOMOLOGY_SERVICES=wsfe.");
         File.Exists(fixture.Capture("args")).Should().BeFalse();
         AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
     }
@@ -80,7 +267,7 @@ public sealed class HomologationScriptTests
         arguments.Should().Contain("--project");
         arguments.Should().Contain("tests/NetArcaWs.IntegrationTests/NetArcaWs.IntegrationTests.csproj");
         arguments.Should().Contain("--filter-method");
-        arguments.Should().Contain("*Explicitly_enabled_authenticated_read_only_lookups_run_against_homologation*");
+        arguments.Should().Contain("*Explicitly_enabled_authenticated_scenarios_run_against_homologation*");
         arguments.Should().Contain("--no-build");
         arguments.Should().Contain("--no-restore");
         File.ReadAllText(fixture.Capture("require-homology")).Should().Be("1");
@@ -92,6 +279,9 @@ public sealed class HomologationScriptTests
         File.ReadAllText(fixture.Capture("directory-mode")).Trim().Should().Be("700");
         File.ReadAllText(fixture.Capture("service")).Should().Be("wsfe");
         File.ReadAllText(fixture.Capture("wsaa-service")).Should().Be("wsfe");
+        File.ReadAllText(fixture.Capture("mode")).Should().Be("consultas");
+        File.ReadAllText(fixture.Capture("voucher-type")).Should().Be("11");
+        File.ReadAllText(fixture.Capture("query-cuit")).Should().BeEmpty();
         AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
     }
 
@@ -139,6 +329,7 @@ public sealed class HomologationScriptTests
             ["RUNNER_TEMP"] = runnerTemp,
             ["WSAA_SERVICE"] = "wsfe",
             ["ARCA_HOMOLOGY_SERVICES"] = "wsfe",
+            ["ARCA_QUERY_CUIT"] = "20123456789",
             ["PATH"] = dotnetDirectory + Path.PathSeparator + inheritedPath,
             ["CAPTURE_DIR"] = captureDirectory
         };
@@ -203,6 +394,11 @@ public sealed class HomologationScriptTests
         printf '%s' "$ARCA_REQUIRE_HOMOLOGY" > "$CAPTURE_DIR/require-homology"
         printf '%s' "$ARCA_HOMOLOGY_SERVICES" > "$CAPTURE_DIR/service"
         printf '%s' "$WSAA_SERVICE" > "$CAPTURE_DIR/wsaa-service"
+        printf '%s' "${ARCA_HOMOLOGY_MODE:-}" > "$CAPTURE_DIR/mode"
+        printf '%s' "${ARCA_HOMOLOGY_POINT_OF_SALE:-}" > "$CAPTURE_DIR/point-of-sale"
+        printf '%s' "${ARCA_HOMOLOGY_VOUCHER_TYPE:-}" > "$CAPTURE_DIR/voucher-type"
+        printf '%s' "${ARCA_HOMOLOGY_VOUCHER_NUMBER:-}" > "$CAPTURE_DIR/voucher-number"
+        printf '%s' "${ARCA_QUERY_CUIT:-}" > "$CAPTURE_DIR/query-cuit"
         cat "$WSAA_CERT_PATH" > "$CAPTURE_DIR/cert-content"
         cat "$WSAA_KEY_PATH" > "$CAPTURE_DIR/key-content"
         printf '%s' "$(if [[ -z "${HOMO_CERTIFICATE_PEM+x}" && -z "${HOMO_PRIVATE_KEY_PEM+x}" ]]; then printf true; else printf false; fi)" > "$CAPTURE_DIR/homologation-secret-unset"

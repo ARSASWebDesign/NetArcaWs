@@ -13,6 +13,8 @@ using NetArcaWs.Contracts.WsfexV1;
 using NetArcaWs.Contracts.Wsmtxca;
 using NetArcaWs.Contracts.Wscdc;
 using NetArcaWs.Contracts.WsfeCred;
+using NetArcaWs.Invoicing;
+using System.Globalization;
 using Xunit;
 
 namespace NetArcaWs.IntegrationTests;
@@ -88,13 +90,32 @@ public sealed class ArcaServicesHomologationTests
 
     [AuthenticatedHomologationFact]
     [Trait("Category", "Integration")]
-    public async Task Explicitly_enabled_authenticated_read_only_lookups_run_against_homologation()
+    public async Task Explicitly_enabled_authenticated_scenarios_run_against_homologation()
     {
         string[] selected = (Environment.GetEnvironmentVariable("ARCA_HOMOLOGY_SERVICES") ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(x => x.ToLowerInvariant()).Distinct().ToArray();
         if (selected.Length == 0)
             throw new InvalidOperationException("Set ARCA_HOMOLOGY_SERVICES to at least one supported authenticated read-only lookup.");
+        string mode = Environment.GetEnvironmentVariable("ARCA_HOMOLOGY_MODE") ?? "consultas";
+        if (mode is not ("consultas" or "emision"))
+            throw new InvalidOperationException("ARCA_HOMOLOGY_MODE must be consultas or emision.");
+        string[] supported = ["wsfe", "wsfex", "wsmtxca", "wscdc", "wsfecred", "padron-a4", "padron-a5", "padron-a10", "padron-a13"];
+        if (selected.Any(service => !supported.Contains(service, StringComparer.Ordinal)))
+            throw new InvalidOperationException("An unsupported homologation service was selected.");
+        int pointOfSale = 0, voucherType = 0;
+        long voucherNumber = 0;
+        if (mode == "emision" || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ARCA_HOMOLOGY_POINT_OF_SALE")))
+        {
+            if (selected.Length != 1 || selected[0] != "wsfe")
+                throw new InvalidOperationException("Numbering and issuance are supported exclusively for WSFE homologation.");
+            pointOfSale = (int)ReadPositiveSetting("ARCA_HOMOLOGY_POINT_OF_SALE", 99999);
+            voucherType = (int)ReadPositiveSetting("ARCA_HOMOLOGY_VOUCHER_TYPE", 11);
+            if (voucherType is not (6 or 11))
+                throw new InvalidOperationException("Only ordinary B and C invoices are supported by this scenario.");
+            if (mode == "emision")
+                voucherNumber = ReadPositiveSetting("ARCA_HOMOLOGY_VOUCHER_NUMBER", 99999999);
+        }
         string certificatePath = Environment.GetEnvironmentVariable("WSAA_CERT_PATH")!;
         string keyPath = Environment.GetEnvironmentVariable("WSAA_KEY_PATH")!;
         if (string.IsNullOrWhiteSpace(certificatePath) || string.IsNullOrWhiteSpace(keyPath))
@@ -109,13 +130,32 @@ public sealed class ArcaServicesHomologationTests
         var tenant = new ArcaTenantContext("homologation-contract-test", cuit, ArcaEnvironment.Homologation, content);
         var services = new ServiceCollection();
         services.AddNetArcaWs(options => options.Endpoint = WsaaOptions.HomologationEndpoint);
+        using var workspace = new FiscalWorkspace();
+        if (mode == "emision")
+            services.AddNetArcaWsSqliteInvoicing(Path.Combine(workspace.Path, "journal.db"));
         using ServiceProvider provider = services.BuildServiceProvider();
         CancellationToken token = TestContext.Current.CancellationToken;
         foreach (string service in selected)
         {
+            if (service == "wsfe")
+            {
+                var client = provider.GetRequiredService<IWsfev1Service>();
+                var points = await AuthenticatedLookupValidation.ValidateWsfeAsync(client, tenant, token);
+                var pointLines = points.Take(20).Select(point =>
+                    $"- Punto {point.Nro}: CAE={(point.EmisionTipo == "CAE" ? "sí" : "no")}; bloqueado={(point.Bloqueado == "N" ? "no" : "sí")}");
+                await ReportAsync($"### WSFE: consultas aprobadas\nPuntos devueltos: {points.Count} (hasta 20 listados).\n" + string.Join('\n', pointLines), token);
+                if (mode == "consultas" && pointOfSale > 0)
+                {
+                    var last = (await client.FECompUltimoAutorizadoAsync(tenant,
+                        new FeCompUltimoAutorizado { PtoVta = pointOfSale, CbteTipo = voucherType }, token)).FeCompUltimoAutorizadoResult;
+                    Assert.True(last is not null && last.Errors.Count == 0 && last.PtoVta == pointOfSale && last.CbteTipo == voucherType && last.CbteNro >= 0,
+                        "WSFE did not confirm the selected numbering series.");
+                    await ReportAsync($"Punto {pointOfSale}, tipo {voucherType}: último autorizado {last!.CbteNro}; siguiente candidato {(long)last.CbteNro + 1}. La numeración se verificará nuevamente antes de emitir.", token);
+                }
+                continue;
+            }
             object response = service switch
             {
-                "wsfe" => await provider.GetRequiredService<Wsfev1Service>().FEParamGetTiposMonedasAsync(tenant, new FeParamGetTiposMonedas(), token),
                 "wsfex" => await provider.GetRequiredService<Wsfexv1Service>().FEXGetPARAM_MONAsync(tenant, new FexGetParamMon(), token),
                 "wsmtxca" => await provider.GetRequiredService<Wsmtxcav1Service>().consultarMonedasAsync(tenant, new ConsultarMonedasRequestType(), token),
                 "wscdc" => await provider.GetRequiredService<WscdcService>().ComprobantesModalidadConsultarAsync(tenant, new ComprobantesModalidadConsultar(), token),
@@ -126,21 +166,55 @@ public sealed class ArcaServicesHomologationTests
                 "padron-a13" => await provider.GetRequiredService<PadronA13Service>().getPersonaAsync(tenant, new NetArcaWs.Contracts.PadronA13.GetPersona { IdPersona = queryCuit }, token),
                 _ => throw new InvalidOperationException($"Unknown ARCA_HOMOLOGY_SERVICES entry '{service}'.")
             };
-            Assert.True(response is not null, "The authenticated homologation lookup should return a response.");
-            if (response is FeParamGetTiposMonedasResponse currencyResponse)
+            AuthenticatedLookupValidation.ValidateResponse(response);
+            if (service.StartsWith("padron-", StringComparison.Ordinal))
             {
-                MonedaResponse? result = currencyResponse.FeParamGetTiposMonedasResult;
-                Assert.True(result is not null, "The WSFE currency lookup should include a result object.");
-                Assert.True(result!.Errors.Count == 0, "The WSFE currency lookup should return no errors.");
-                Assert.True(result.ResultGet.Count > 0, "The WSFE currency lookup should return at least one currency.");
-                Assert.All(result.ResultGet, currency =>
+                long? returnedId = response switch
                 {
-                    Assert.True(currency is not null, "The WSFE currency lookup should not contain null entries.");
-                    Assert.True(!string.IsNullOrWhiteSpace(currency!.Id), "Each returned WSFE currency should include an identifier.");
-                    Assert.True(!string.IsNullOrWhiteSpace(currency.Desc), "Each returned WSFE currency should include a description.");
-                });
+                    NetArcaWs.Contracts.PadronA4.GetPersonaResponse r => r.PersonaReturn?.Persona?.IdPersona,
+                    NetArcaWs.Contracts.PadronA5.GetPersonaResponse r => r.PersonaReturn?.DatosGenerales?.IdPersona,
+                    NetArcaWs.Contracts.PadronA10.GetPersonaResponse r => r.PersonaReturn?.Persona?.IdPersona,
+                    NetArcaWs.Contracts.PadronA13.GetPersonaResponse r => r.PersonaReturn?.Persona?.IdPersona,
+                    _ => null
+                };
+                Assert.True(returnedId == queryCuit, "Padron did not return the explicitly requested test identity.");
             }
+            await ReportAsync($"- Consulta autenticada validada: {service}.", token);
         }
+        if (mode == "emision")
+        {
+            var result = await WsfeFiscalHomologationScenario.RunAsync(provider, tenant, pointOfSale, voucherType, voucherNumber, token);
+            await ReportAsync($"### Comprobante de homologación verificado\nPunto {pointOfSale}, tipo {voucherType}, número {voucherNumber}. " +
+                (result.AlreadyExisted ? "Ya existía y coincidió con el escenario; no se envió otra autorización." : "Se autorizó y se confirmó mediante consulta posterior."), token);
+        }
+    }
+
+    private static async Task ReportAsync(string text, CancellationToken token)
+    {
+        if (Environment.GetEnvironmentVariable("GITHUB_STEP_SUMMARY") is { Length: > 0 } summary)
+            await File.AppendAllTextAsync(summary, text + "\n\n", token);
+        Console.WriteLine(text);
+    }
+
+    private static long ReadPositiveSetting(string name, long maximum)
+    {
+        if (!long.TryParse(Environment.GetEnvironmentVariable(name), NumberStyles.None, CultureInfo.InvariantCulture, out long value)
+            || value < 1 || value > maximum)
+            throw new InvalidOperationException($"Missing or invalid homologation configuration: {name}.");
+        return value;
+    }
+
+    private sealed class FiscalWorkspace : IDisposable
+    {
+        public string Path { get; } = Directory.CreateTempSubdirectory("netarcaws-fiscal-").FullName;
+
+        public FiscalWorkspace()
+        {
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(Path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        public void Dispose() => Directory.Delete(Path, recursive: true);
     }
 
     private sealed class UnusedTicketProvider : IArcaTicketProvider
