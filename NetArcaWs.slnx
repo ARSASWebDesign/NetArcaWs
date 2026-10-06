@@ -7,6 +7,8 @@
   <Project Path="tests/NetArcaWs.UnitTests/NetArcaWs.UnitTests.csproj" />
   <Project Path="src/NetArcaWs.EntityFrameworkCore/NetArcaWs.EntityFrameworkCore.csproj" />
   <Project Path="src/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite.csproj" />
+  <Project Path="src/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb.csproj" />
+  <Project Path="src/NetArcaWs.EntityFrameworkCore.Migrations.MySql/NetArcaWs.EntityFrameworkCore.Migrations.MySql.csproj" />
   <Project Path="src/NetArcaWs.EntityFrameworkCore.MySql/NetArcaWs.EntityFrameworkCore.MySql.csproj" />
   <Project Path="src/NetArcaWs.EntityFrameworkCore.PostgreSql/NetArcaWs.EntityFrameworkCore.PostgreSql.csproj" />
   <Project Path="src/NetArcaWs.EntityFrameworkCore.SqlServer/NetArcaWs.EntityFrameworkCore.SqlServer.csproj" />

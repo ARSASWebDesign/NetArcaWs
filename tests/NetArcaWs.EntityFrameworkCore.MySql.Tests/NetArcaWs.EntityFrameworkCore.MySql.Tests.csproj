@@ -12,6 +12,8 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.MySql/NetArcaWs.EntityFrameworkCore.MySql.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.Migrations.MySql/NetArcaWs.EntityFrameworkCore.Migrations.MySql.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb.csproj" />
     <ProjectReference Include="../NetArcaWs.Persistence.Probe/NetArcaWs.Persistence.Probe.csproj" />
   </ItemGroup>
 </Project>

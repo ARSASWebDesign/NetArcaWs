@@ -692,6 +692,20 @@
           "NetArcaWs": "[0.5.0, )"
         }
       },
+      "netarcaws.entityframeworkcore.migrations.mariadb": {
+        "type": "Project",
+        "dependencies": {
+          "Microting.EntityFrameworkCore.MySql": "[10.0.12, )",
+          "NetArcaWs.EntityFrameworkCore": "[0.5.0, )"
+        }
+      },
+      "netarcaws.entityframeworkcore.migrations.mysql": {
+        "type": "Project",
+        "dependencies": {
+          "Microting.EntityFrameworkCore.MySql": "[10.0.12, )",
+          "NetArcaWs.EntityFrameworkCore": "[0.5.0, )"
+        }
+      },
       "netarcaws.entityframeworkcore.mysql": {
         "type": "Project",
         "dependencies": {

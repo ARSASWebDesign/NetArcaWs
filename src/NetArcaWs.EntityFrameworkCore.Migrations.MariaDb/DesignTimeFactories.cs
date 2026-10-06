@@ -1,0 +1,16 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Design;
+
+namespace NetArcaWs.EntityFrameworkCore.Migrations.MariaDb;
+
+public sealed class InvoicingDesignTimeFactory : IDesignTimeDbContextFactory<MariaDbInvoicingMigrationsDbContext>
+{
+    public MariaDbInvoicingMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<MariaDbInvoicingMigrationsDbContext>()
+        .UseMySql("Server=localhost;Database=netarcaws_design_time", new MariaDbServerVersion(new Version(11, 4, 13)), x => x.MigrationsAssembly(typeof(InvoicingDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsInvoiceMigrations")).Options);
+}
+
+public sealed class WsaaTicketsDesignTimeFactory : IDesignTimeDbContextFactory<MariaDbWsaaTicketsMigrationsDbContext>
+{
+    public MariaDbWsaaTicketsMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<MariaDbWsaaTicketsMigrationsDbContext>()
+        .UseMySql("Server=localhost;Database=netarcaws_design_time", new MariaDbServerVersion(new Version(11, 4, 13)), x => x.MigrationsAssembly(typeof(WsaaTicketsDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsTicketMigrations")).Options);
+}
