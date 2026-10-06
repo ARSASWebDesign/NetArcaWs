@@ -121,11 +121,6 @@ public sealed class ArcaServicesHomologationTests
         if (string.IsNullOrWhiteSpace(certificatePath) || string.IsNullOrWhiteSpace(keyPath))
             throw new InvalidOperationException("Set WSAA_CERT_PATH and WSAA_KEY_PATH when ARCA_HOMOLOGY_SERVICES enables authenticated lookups.");
         long cuit = long.Parse(Environment.GetEnvironmentVariable("ARCA_CUIT")!, System.Globalization.CultureInfo.InvariantCulture);
-        bool queriesPadron = selected.Any(x => x.StartsWith("padron-", StringComparison.Ordinal));
-        string? configuredQueryCuit = Environment.GetEnvironmentVariable("ARCA_QUERY_CUIT");
-        if (queriesPadron && string.IsNullOrWhiteSpace(configuredQueryCuit))
-            throw new InvalidOperationException("Set ARCA_QUERY_CUIT to the person CUIT for a Padron lookup.");
-        long queryCuit = string.IsNullOrWhiteSpace(configuredQueryCuit) ? cuit : long.Parse(configuredQueryCuit, System.Globalization.CultureInfo.InvariantCulture);
         WsaaCertificateContent content = WsaaCertificateContent.FromPem(await File.ReadAllTextAsync(certificatePath), await File.ReadAllTextAsync(keyPath), Environment.GetEnvironmentVariable("WSAA_KEY_PASSWORD"));
         var tenant = new ArcaTenantContext("homologation-contract-test", cuit, ArcaEnvironment.Homologation, content);
         var services = new ServiceCollection();
@@ -135,7 +130,9 @@ public sealed class ArcaServicesHomologationTests
             services.AddNetArcaWsSqliteInvoicing(Path.Combine(workspace.Path, "journal.db"));
         using ServiceProvider provider = services.BuildServiceProvider();
         CancellationToken token = TestContext.Current.CancellationToken;
-        foreach (string service in selected)
+        List<string> padronFailures = [];
+        // Complete the person matrix before unrelated catalog probes can abort a mixed run.
+        foreach (string service in selected.OrderBy(service => !service.StartsWith("padron-", StringComparison.Ordinal)))
         {
             if (service == "wsfe")
             {
@@ -154,33 +151,33 @@ public sealed class ArcaServicesHomologationTests
                 }
                 continue;
             }
+            if (service.StartsWith("padron-", StringComparison.Ordinal))
+            {
+                await ReportAsync(service == "padron-a4"
+                    ? "### Padrón A4: casos del listado oficial de testing"
+                    : $"### {service}: casos del listado A4 contrastados en QA el 2026-10-06", token);
+                padronFailures.AddRange(await PadronTestCases.RunAsync(service, async (fixture, ct) => service switch
+                {
+                    "padron-a4" => await provider.GetRequiredService<PadronA4Service>().getPersonaAsync(tenant, new NetArcaWs.Contracts.PadronA4.GetPersona { IdPersona = fixture.Id }, ct),
+                    "padron-a5" => await provider.GetRequiredService<PadronA5Service>().getPersonaAsync(tenant, new NetArcaWs.Contracts.PadronA5.GetPersona { IdPersona = fixture.Id }, ct),
+                    "padron-a10" => await provider.GetRequiredService<PadronA10Service>().getPersonaAsync(tenant, new NetArcaWs.Contracts.PadronA10.GetPersona { IdPersona = fixture.Id }, ct),
+                    "padron-a13" => await provider.GetRequiredService<PadronA13Service>().getPersonaAsync(tenant, new NetArcaWs.Contracts.PadronA13.GetPersona { IdPersona = fixture.Id }, ct),
+                    _ => throw new ArgumentOutOfRangeException(nameof(service))
+                }, ReportAsync, token));
+                continue;
+            }
             object response = service switch
             {
                 "wsfex" => await provider.GetRequiredService<Wsfexv1Service>().FEXGetPARAM_MONAsync(tenant, new FexGetParamMon(), token),
                 "wsmtxca" => await provider.GetRequiredService<Wsmtxcav1Service>().consultarMonedasAsync(tenant, new ConsultarMonedasRequestType(), token),
                 "wscdc" => await provider.GetRequiredService<WscdcService>().ComprobantesModalidadConsultarAsync(tenant, new ComprobantesModalidadConsultar(), token),
                 "wsfecred" => await provider.GetRequiredService<WsfecredService>().consultarTiposRetencionesAsync(tenant, new ConsultarTiposRetencionesRequest(), token),
-                "padron-a4" => await provider.GetRequiredService<PadronA4Service>().getPersonaAsync(tenant, new NetArcaWs.Contracts.PadronA4.GetPersona { IdPersona = queryCuit }, token),
-                "padron-a5" => await provider.GetRequiredService<PadronA5Service>().getPersonaAsync(tenant, new NetArcaWs.Contracts.PadronA5.GetPersona { IdPersona = queryCuit }, token),
-                "padron-a10" => await provider.GetRequiredService<PadronA10Service>().getPersonaAsync(tenant, new NetArcaWs.Contracts.PadronA10.GetPersona { IdPersona = queryCuit }, token),
-                "padron-a13" => await provider.GetRequiredService<PadronA13Service>().getPersonaAsync(tenant, new NetArcaWs.Contracts.PadronA13.GetPersona { IdPersona = queryCuit }, token),
                 _ => throw new InvalidOperationException($"Unknown ARCA_HOMOLOGY_SERVICES entry '{service}'.")
             };
             AuthenticatedLookupValidation.ValidateResponse(response);
-            if (service.StartsWith("padron-", StringComparison.Ordinal))
-            {
-                long? returnedId = response switch
-                {
-                    NetArcaWs.Contracts.PadronA4.GetPersonaResponse r => r.PersonaReturn?.Persona?.IdPersona,
-                    NetArcaWs.Contracts.PadronA5.GetPersonaResponse r => r.PersonaReturn?.DatosGenerales?.IdPersona,
-                    NetArcaWs.Contracts.PadronA10.GetPersonaResponse r => r.PersonaReturn?.Persona?.IdPersona,
-                    NetArcaWs.Contracts.PadronA13.GetPersonaResponse r => r.PersonaReturn?.Persona?.IdPersona,
-                    _ => null
-                };
-                Assert.True(returnedId == queryCuit, "Padron did not return the explicitly requested test identity.");
-            }
             await ReportAsync($"- Consulta autenticada validada: {service}.", token);
         }
+        Assert.True(padronFailures.Count == 0, "Padron cases failed: " + string.Join("; ", padronFailures));
         if (mode == "emision")
         {
             var result = await WsfeFiscalHomologationScenario.RunAsync(provider, tenant, pointOfSale, voucherType, voucherNumber, token);

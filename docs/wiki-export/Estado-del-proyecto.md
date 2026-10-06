@@ -39,8 +39,33 @@ omitidas. En la suite normal, los 3 omitidos corresponden a WSAA sin credenciale
 servicios autenticados no seleccionados y `Dummy` sin habilitación opt-in. Ningún
 resultado acredita una autorización de negocio con certificado real.
 
-La autenticación WSAA de homologación y las llamadas autenticadas fiscales siguen
-pendientes de certificados autorizados. El environment GitHub `nuget` contiene
+El seguimiento vigente de autenticación y escenarios ejecutados se registra en
+[la issue de homologación](https://github.com/ARSASWebDesign/NetArcaWs/issues/12).
+La suite de padrón incorpora tres identidades públicas del listado oficial A4:
+CUIT física, CUIL física y CUIT jurídica. Las reutiliza como candidatos en A10/A13
+y solo CUIT en Constancia, comprobando identificador y tipos devueltos. No requiere
+`ARCA_QUERY_CUIT`. La [ejecución protegida del 6 de octubre de 2026](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37512157290)
+aprobó seis casos: CUIT jurídica en los cuatro padrones y CUIT física en A10/A13.
+Fallaron CUIT física en A4/Constancia y CUIL física en A4/A10/A13; el diagnóstico
+original no distinguía sus causas. Se agregaron categorías seguras de error para
+la siguiente ejecución, sin relajar validaciones ni publicar datos remotos.
+No se afirma que los cuatro servicios compartan datos de QA ni homologación total.
+La [corrida siguiente](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37513178195)
+falló en autenticación WSAA en los once casos, sin validar respuestas de padrón.
+El diagnóstico reconoce ahora también el código `alreadyAuthenticated` con un
+prefijo XML válido; esto no determina retrospectivamente el código de esa corrida.
+
+Validación posterior local, autorizada, del 6 de octubre de 2026: **12/12 consultas
+autenticadas de padrón aprobadas** con los fixtures actualizados y el mismo
+`PadronTestCases.RunAsync`/validador de la suite, reutilizando los cuatro TA guardados
+en almacenamiento privado fuera del repositorio. Se reemplazó la CUIT física con
+error AT por `20188192514` y el caso del listado CUIL por `20188027963`, que ARCA
+devuelve actualmente como CUIT. La matriz mantiene tipo e identidad exactos; no se
+modificaron los clientes SOAP. La cobertura autenticada de CUIL real sigue pendiente
+de una identidad pública que efectivamente devuelva CUIL; la cobertura sintética
+se conserva. La suite local sin red aprobó 376 pruebas, con cuatro opt-in omitidas.
+
+El environment GitHub `nuget` contiene
 `NUGET_USER=arsas`; el workflow de release intercambió OIDC correctamente y
 NuGet aceptó e indexó ambos paquetes 0.5.0 en el índice del feed v3; además, el
 Tool público se instaló desde una caché aislada y `--help` terminó con código 0.

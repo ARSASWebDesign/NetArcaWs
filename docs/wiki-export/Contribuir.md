@@ -58,6 +58,50 @@ para desarrollar, probar o revisar un cambio. Los chequeos de CI compilan,
 ejecutan las pruebas, empaquetan los proyectos y hacen una instalación de prueba
 local de la herramienta.
 
+### Entorno local de ChatGPT / Codex
+
+El repositorio incluye [environment.toml](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/.codex/environments/environment.toml)
+para Codex en la aplicación de escritorio de ChatGPT, y [AGENTS.md](Documento-AGENTS)
+con las decisiones e instrucciones para trabajar en el proyecto.
+
+Instala previamente el SDK indicado por `global.json` y asegúrate de que
+`dotnet` esté en el PATH del proceso que ejecuta los comandos. Usa el SDK de la
+arquitectura del equipo (por ejemplo, Arm64 en Apple Silicon). Las instrucciones
+oficiales de instalación cubren [macOS, Linux y Windows](https://learn.microsoft.com/dotnet/core/install/).
+Comprueba `dotnet --version` desde la raíz del repositorio; si falta una versión
+compatible, el setup se detendrá. No se instala ni cambia el SDK automáticamente.
+
+Abre esta raíz como proyecto en Codex y selecciona el entorno **NetArcaWs** en
+los ajustes de entornos locales. El archivo usa la estructura aceptada por la
+app: versión 1, setup general, overrides por plataforma y acciones compartidas.
+Si lo editas o guardas desde los ajustes, revisa el diff que genere la app.
+
+| Host que ejecuta los comandos | Perfil | Setup |
+| --- | --- | --- |
+| macOS | `setup.darwin` | Verifica SDK, restaura lockfiles y compila Release |
+| Linux, incluido WSL cuando ejecuta allí | `setup.linux` | Verifica SDK, restaura lockfiles y compila Release |
+| Windows nativo con PowerShell | `setup.win32` | Verifica SDK, restaura lockfiles y compila Release; detiene el flujo ante errores |
+
+Codex ejecuta el setup al crear un worktree. En un clon existente también puedes
+ejecutar los comandos de la sección anterior manualmente. El setup general
+restaura con `--locked-mode` si no se aplica un override. No modifica ramas,
+remotos, certificados ni configuraciones de la máquina.
+
+Las acciones **Build Release**, **Tests**, **Pack library and tool** y **CLI help**
+usan comandos .NET comunes a los tres sistemas, con restauración bloqueada
+incluso si todavía no se ejecutó el setup. Tests compila y ejecuta la solución;
+Pack genera los dos paquetes en `artifacts/`; CLI help muestra la ayuda sin crear
+certificados. No se publican paquetes mediante estas acciones.
+
+El entorno no configura secretos ni habilita pruebas reales de ARCA. La suite
+de integración sigue sus condiciones opt-in: si ya configuraste variables de
+homologación en tu shell, revísalas antes de ejecutar Tests. Mantén esas
+credenciales fuera de este archivo. En macOS usa PEM para certificados en
+memoria; la importación efímera de PFX está disponible en Windows/Linux.
+
+Ver [entornos locales de ChatGPT](https://learn.chatgpt.com/docs/environments/local-environment)
+y [certificados en memoria](Decisi%C3%B3n-3-Certificados-en-memoria).
+
 ### Licencias de dependencias
 
 Revisa la licencia de cada dependencia nueva y de cada actualización, incluidas

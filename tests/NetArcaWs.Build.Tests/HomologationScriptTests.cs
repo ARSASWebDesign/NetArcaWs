@@ -101,7 +101,28 @@ public sealed class HomologationScriptTests
 
         result.ExitCode.Should().Be(0);
         File.ReadAllText(fixture.Capture("service")).Should().Be(services);
-        File.ReadAllText(fixture.Capture("query-cuit")).Should().Be(services.Contains("padron-", StringComparison.Ordinal) ? "20123456789" : "");
+        File.ReadAllText(fixture.Capture("query-cuit")).Should().BeEmpty();
+        AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
+    }
+
+    [Theory]
+    [InlineData("padron-a4")]
+    [InlineData("padron-a5")]
+    [InlineData("padron-a10")]
+    [InlineData("padron-a13")]
+    public void Run_executes_each_padron_service_without_query_cuit(string service)
+    {
+        EnsureBashAvailable();
+        using var workspace = new BuildTestWorkspace();
+        var fixture = CreateFixture(workspace);
+        fixture.Environment["ARCA_HOMOLOGY_SERVICES"] = service;
+        fixture.Environment.Remove("ARCA_QUERY_CUIT");
+
+        ProcessResult result = RunScript(workspace, fixture.Environment);
+
+        result.ExitCode.Should().Be(0);
+        File.ReadAllText(fixture.Capture("service")).Should().Be(service);
+        File.ReadAllText(fixture.Capture("query-cuit")).Should().BeEmpty();
         AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
     }
 
@@ -195,40 +216,6 @@ public sealed class HomologationScriptTests
         ProcessResult result = RunScript(workspace, fixture.Environment);
 
         result.ExitCode.Should().NotBe(0);
-        File.Exists(fixture.Capture("args")).Should().BeFalse();
-        AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
-    }
-
-    [Fact]
-    public void Run_requires_query_cuit_for_padron_services()
-    {
-        EnsureBashAvailable();
-        using var workspace = new BuildTestWorkspace();
-        var fixture = CreateFixture(workspace);
-        fixture.Environment["ARCA_HOMOLOGY_SERVICES"] = "padron-a4";
-        fixture.Environment.Remove("ARCA_QUERY_CUIT");
-
-        ProcessResult result = RunScript(workspace, fixture.Environment);
-
-        result.ExitCode.Should().NotBe(0);
-        result.StandardError.Should().Contain("ARCA_QUERY_CUIT es obligatorio para servicios de padrón y debe contener 11 dígitos.");
-        File.Exists(fixture.Capture("args")).Should().BeFalse();
-        AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
-    }
-
-    [Fact]
-    public void Run_rejects_a_malformed_query_cuit_for_padron_services()
-    {
-        EnsureBashAvailable();
-        using var workspace = new BuildTestWorkspace();
-        var fixture = CreateFixture(workspace);
-        fixture.Environment["ARCA_HOMOLOGY_SERVICES"] = "padron-a13";
-        fixture.Environment["ARCA_QUERY_CUIT"] = "123";
-
-        ProcessResult result = RunScript(workspace, fixture.Environment);
-
-        result.ExitCode.Should().NotBe(0);
-        result.StandardError.Should().Contain("ARCA_QUERY_CUIT es obligatorio para servicios de padrón y debe contener 11 dígitos.");
         File.Exists(fixture.Capture("args")).Should().BeFalse();
         AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
     }
