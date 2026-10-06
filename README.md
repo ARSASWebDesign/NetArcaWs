@@ -22,7 +22,7 @@ Las pruebas unitarias no se conectan a ARCA. El paquete compilado localmente
 puede instalarse desde una carpeta NuGet:
 
 ```sh
-dotnet add package NetArcaWs --version 0.2.0 --source /ruta/absoluta/a/artifacts
+dotnet add package NetArcaWs --version 0.3.0 --source /ruta/absoluta/a/artifacts
 ```
 
 ## Autenticación
@@ -59,6 +59,23 @@ El consumidor conserva y libera el certificado. `AddNetArcaWs` registra el
 servicio y la caché compartida; no crear un contenedor por factura. Devuelve
 `IHttpClientBuilder` para configurar timeout, proxy o autoridades de confianza.
 El transporte conserva la validación TLS de .NET.
+
+## CLI de certificados
+
+El paquete `NetArcaWs.Tool` agrega los comandos `cert-dev`, `cert-prod` y
+`cert-info`. Puede instalarse con un manifiesto local de herramientas .NET,
+como EF Core. Genera claves y CSR; ARCA debe emitir el certificado y autorizar
+los servicios. Ver [instalación y guía de la CLI](docs/certificates-cli.md).
+
+```sh
+dotnet pack src/NetArcaWs.Tool/NetArcaWs.Tool.csproj --configuration Release --no-build --output artifacts
+dotnet new tool-manifest
+dotnet tool install --local NetArcaWs.Tool --add-source ./artifacts --version 0.3.0
+dotnet tool run netarcaws cert-dev --cuit "$ARCA_CUIT" --organization "Mi Empresa" --name "Mi App" --output ./certificados/dev --password-env NETARCA_KEY_PASSWORD
+```
+
+Definir previamente `ARCA_CUIT` y `NETARCA_KEY_PASSWORD` en el entorno.
+Si el proyecto ya tiene manifiesto de herramientas, omitir `dotnet new tool-manifest`.
 
 ## Claves y CSR
 

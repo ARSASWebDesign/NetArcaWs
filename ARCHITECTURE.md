@@ -97,3 +97,25 @@ fiscal incierto a rechazado ni autoriza a reenviar una factura.
 En los próximos hitos, las autorizaciones deberán conservar identidad y payload
 de negocio, persistir el estado y reconciliar tras resultados inciertos. Esa
 política no se puede reemplazar por un retry genérico del transporte HTTP.
+
+## Herramienta de certificados
+
+`NetArcaWs.Tool` es un paquete .NET tool independiente que referencia la biblioteca.
+`CertificateTool` separa la ejecución de comandos de consola y recibe salida,
+errores y acceso al entorno para probarlos sin exponer secretos. Reutiliza la
+criptografía nativa del port: RSA, CSR PKCS#10 y claves PKCS#8 cifradas. No ejecuta
+procesos externos ni conecta con ARCA.
+
+Los comandos exigen un destino nuevo. Escriben cuatro archivos en una carpeta
+hermana temporal privada y publican el conjunto con Directory.Move. Los permisos
+Unix son 0700/0600; Windows hereda las ACL del directorio padre. La contraseña se
+obtiene de una variable de entorno, nunca de un argumento literal. El manifiesto
+incluye la huella de la clave pública, nunca la clave privada ni su contraseña.
+
+`cert-info` lee cada entrada desde un único handle con límite de 1 MiB, exige RSA,
+comprueba vigencia local y opcionalmente la correspondencia de la clave privada.
+No determina confianza, revocación ni habilitaciones de ARCA. Los strings PEM
+administrados conservan la limitación de borrado de memoria descrita arriba.
+La suite `NetArcaWs.Tool.Tests` valida comandos, CSR, claves, concurrencia,
+permisos, cancelación y errores. CI empaqueta e instala la herramienta para
+comprobar también su ejecución fuera de la solución.

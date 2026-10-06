@@ -1,5 +1,7 @@
 <Solution>
   <Project Path="src/NetArcaWs/NetArcaWs.csproj" />
+  <Project Path="src/NetArcaWs.Tool/NetArcaWs.Tool.csproj" />
   <Project Path="tests/NetArcaWs.UnitTests/NetArcaWs.UnitTests.csproj" />
   <Project Path="tests/NetArcaWs.IntegrationTests/NetArcaWs.IntegrationTests.csproj" />
+  <Project Path="tests/NetArcaWs.Tool.Tests/NetArcaWs.Tool.Tests.csproj" />
 </Solution>

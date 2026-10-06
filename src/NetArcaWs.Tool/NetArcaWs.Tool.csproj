@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>netarcaws</ToolCommandName>
+    <PackageId>NetArcaWs.Tool</PackageId>
+    <Version>0.3.0</Version>
+    <Authors>NetArcaWs .NET contributors</Authors>
+    <RepositoryUrl>https://github.com/ARSASWebDesign/NetArcaWs</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/ARSASWebDesign/NetArcaWs</PackageProjectUrl>
+    <Description>CLI para generar solicitudes locales de certificados ARCA y consultar certificados.</Description>
+    <Copyright>Original PyAfipWs: Copyright (C) 2008-2021 Mariano Reingart. .NET port: NetArcaWs .NET contributors.</Copyright>
+    <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>afip;arca;certificate;csr;cli</PackageTags>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../NetArcaWs/NetArcaWs.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../docs/certificates-cli.md" Pack="true" PackagePath="/README.md" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="/" />
+    <None Include="../../COPYING" Pack="true" PackagePath="/" />
+    <None Include="../../THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>
