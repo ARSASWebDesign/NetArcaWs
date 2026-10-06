@@ -9,16 +9,16 @@ artefactos**, sin publicar ni solicitar credenciales NuGet.
 
 ## Estado de activación
 
-El propietario previsto es **ArsasGroup**. Al configurar este flujo todavía no
-existía la cuenta NuGet indicada por el mantenedor. La publicación externa no está
-activada hasta completar los pasos siguientes. Una release en borrador no publica
+El usuario NuGet `arsas` fue confirmado y el environment GitHub `nuget` ya está
+configurado con `NUGET_USER=arsas`. El mantenedor confirmó la creación de la política NuGet de Trusted Publishing;
+su funcionamiento se verifica con la primera publicación. La publicación
+externa no está activada hasta completar los pasos siguientes. Una release en
+borrador no publica
 paquetes. No confundir artefactos de GitHub con paquetes disponibles en nuget.org.
 
 ## Configuración inicial del mantenedor
 
-1. Crear una cuenta personal en nuget.org y la organización `ArsasGroup`, si el
-   nombre está disponible; agregar el usuario como miembro autorizado. GitHub y
-   NuGet administran cuentas y permisos independientes.
+1. Verificar el propietario elegido (cuenta u organización) y sus permisos de publicación. GitHub y NuGet administran cuentas y permisos independientes.
 2. En NuGet, crear una política de **Trusted Publishing** bajo el propietario
    elegido. Configurar Repository Owner `ARSASWebDesign`, Repository `NetArcaWs`,
    Workflow File `release.yml` (solo el nombre) y Environment `nuget`.
@@ -87,8 +87,8 @@ adjuntos a una release permiten conservar los paquetes con sus checksums. Los
 ## Consumir tras la publicación efectiva
 
 ```sh
-dotnet add package NetArcaWs --version 0.4.0
-dotnet tool install --global NetArcaWs.Tool --version 0.4.0
+dotnet add package NetArcaWs --version 0.5.0
+dotnet tool install --global NetArcaWs.Tool --version 0.5.0
 ```
 
 Estos comandos contra nuget.org solo funcionarán después de completar la primera

@@ -1,0 +1,2 @@
+# Preserve byte-exact upstream contract snapshots and their recorded hashes.
+docs/reference/**/*.wsdl -text -whitespace

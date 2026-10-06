@@ -2,8 +2,9 @@
 
 - Estado: Aceptado
 - Fecha: 2026-10-06
-- Alcance actual: selección de identidad, endpoint y caché para WSAA
-- Alcance futuro: operaciones de negocio de WSFEv1, WSFEXv1, WSMTXCA y Padrones
+- Alcance actual: selección de identidad, endpoint y caché para WSAA y las
+  operaciones autenticadas de las fachadas SOAP
+- Validación de negocio e integración: sigue abierta para Hitos 2–5
 
 ## Contexto
 
@@ -65,10 +66,12 @@ locales de caché sean distintas.
 
 ## Alcance de otros servicios
 
-WSFEv1, WSFEXv1, WSMTXCA y Padrones todavía no tienen operaciones de negocio
-implementadas. Al desarrollar esos clientes, deben aceptar el contexto resuelto
-por la aplicación y usar coherentemente su certificado, CUIT representada y
-ambiente. No deben mutar opciones globales para alternar tenants.
+Las fachadas autenticadas de WSFEv1, WSFEXv1, WSMTXCA y Padrón reciben el
+contexto por operación y lo usan para seleccionar ticket y endpoint. Sus
+contratos y suites locales están verificados; la autenticación fiscal real no se
+ejecutó por falta de certificados autorizados. No mutan opciones globales para
+alternar tenants. Esto no acredita que una CUIT esté habilitada para cada
+operación.
 
 Los health checks siguen siendo checks de infraestructura por servicio y ambiente.
 No usan `ArcaTenantContext` ni certificados y no verifican autorización fiscal.
@@ -101,8 +104,7 @@ por tenant y límites explícitos de cada servicio.
   aplicación y debe ocurrir antes de construir el contexto.
 - La huella del certificado y los campos de tenant separan tickets locales, pero
   ARCA puede rechazar autenticaciones concurrentes que compartan certificado.
-- La extensión a otros WS no implica que hoy existan adaptadores ni APIs de
-  facturación; su contrato deberá preservar la identidad del contexto y el límite
-  de unicidad fiscal.
+- La presencia de fachadas en otros WS no cierra su validación funcional ni
+  cambia el límite de unicidad fiscal definido en ADR 0001.
 - La rotación de secreto y cualquier caché compartida entre réplicas requieren
   coordinación de la aplicación; la biblioteca no integra un proveedor de vault.

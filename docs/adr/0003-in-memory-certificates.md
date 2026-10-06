@@ -1,6 +1,7 @@
 # ADR 0003: Certificados en memoria y origen de secretos
 
-- Estado: Aceptado e implementado para WSAA
+- Estado: Aceptado e implementado para WSAA y las fachadas autenticadas actuales;
+  suite local verificada y homologación autenticada pendiente de certificados
 - Fecha: 2026-10-06
 - Complementa: [ADR 0002: contexto multitenant](0002-arca-tenant-context.md)
 
@@ -70,9 +71,10 @@ solo la representación del mismo certificado no crea una identidad nueva.
 El certificado público sin su clave privada no permite firmar. WSAA valida
 vigencia y firma, mientras que ARCA determina la habilitación de los servicios.
 
-Los futuros clientes WSFEv1, WSFEXv1, WSMTXCA y Padrón deben reutilizar este contrato
-y el contexto multitenant, sin exigir archivos ni cambiar opciones globales.
-Su implementación continúa pendiente en los hitos respectivos.
+Las fachadas autenticadas actuales de WSFEv1, WSFEXv1, WSMTXCA y Padrón reutilizan
+este contrato y el contexto multitenant, sin exigir archivos ni cambiar opciones
+globales. Suites y wire contracts se verificaron localmente; la homologación
+autenticada sigue pendiente de certificados autorizados.
 
 ## Evidencia
 

@@ -65,11 +65,12 @@ vigentes y aplica restricciones a nuevos pedidos tras ciertos errores.
 
 - [x] Hito 1: código WSAA, configuración NuGet y suite de pruebas entregados.
 - [ ] Validación WSAA contra homologación real: requiere certificados autorizados.
-- [ ] Hito 2: WSFEv1.
-- [ ] Hito 3: WSFEXv1.
-- [ ] Hito 4: WSMTXCA; verificar nombre y alcance oficial antes del diseño.
-- [ ] Hito 5: Padrón A4/A5/A10/A13.
-- [ ] Hito 6: documentación integral de todos los módulos.
+- [x] Hito 2: WSFEv1 — contrato, fachada y suite verificados (22 operaciones).
+- [x] Hito 3: WSFEXv1 — contrato, fachada y suite verificados (19 operaciones).
+- [x] Hito 4: WSMTXCA — contrato, fachada y suite verificados (27 operaciones).
+- [x] Hito 5: Padrón A4/Constancia A5/A10/A13 — contratos y suite verificados.
+- [x] Hito 6: README, arquitectura, ADR y guías integrales.
+- [ ] Hito 7: wiki integral; la publicación sigue bloqueada y el inventario upstream requiere revisión final.
 
 Este checklist mide entregables, no un porcentaje de paridad del repositorio
 Python entero: el inventario global de PyAfipWs excede estos seis hitos y debe
@@ -84,4 +85,4 @@ auditarse antes de afirmar un port del 100%.
 - Dos regresiones reproducidas antes de corregirse: timeout durante lectura del
   body y contraseña vacía en LoadPem. El Fault con detalle textual también se
   conserva mediante XmlAnyElement y está cubierto con HTTP 200 y 500.
-- Sin validación fiscal de WSFE/otros módulos: esos hitos siguen pendientes.
+- Los Dummies de homologación QA respondieron; no se validaron operaciones fiscales autenticadas sin certificados autorizados.

@@ -14,4 +14,8 @@
   <ItemGroup>
     <ProjectReference Include="../../src/NetArcaWs/NetArcaWs.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../docs/reference/contracts/*-production.wsdl" Link="contracts/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

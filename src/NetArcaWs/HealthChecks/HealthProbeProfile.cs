@@ -1,4 +1,5 @@
 using NetArcaWs.Wsaa;
+using NetArcaWs.Services;
 
 namespace NetArcaWs.HealthChecks;
 
@@ -24,7 +25,7 @@ internal sealed record HealthProbeProfile(Uri Endpoint, string Namespace, string
                 "", "", "", "", null, "", "", LowerComponents),
             ArcaService.Wsfev1 => Invoice("wsfev1", "http://ar.gov.afip.dif.FEV1/", "FEDummy", production),
             ArcaService.Wsfexv1 => Invoice("wsfexv1", "http://ar.gov.afip.dif.fexv1/", "FEXDummy", production),
-            ArcaService.Wsmtxca => new(new Uri($"https://{(production ? "serviciosjava" : "fwshomo")}.afip.gov.ar/wsmtxca/services/MTXCAService"),
+            ArcaService.Wsmtxca => new(production ? ArcaServiceEndpoints.WsmtxcaProduction : ArcaServiceEndpoints.WsmtxcaHomologation,
                 "http://impl.service.wsmtxca.afip.gov.ar/service/", "dummy",
                 "http://impl.service.wsmtxca.afip.gov.ar/service/dummy", "dummyResponse", null, "", "", LowerComponents, EmptyBody: true),
             ArcaService.PadronA4 => Padron(4, production),
@@ -40,6 +41,8 @@ internal sealed record HealthProbeProfile(Uri Endpoint, string Namespace, string
             ns, operation, ns + operation, operation + "Response", operation + "Result", ns, ns, PascalComponents);
 
     private static HealthProbeProfile Padron(int version, bool production)
-        => new(new Uri($"https://{(production ? "aws" : "awshomo")}.afip.gov.ar/sr-padron/webservices/personaServiceA{version}"),
+        => new(version == 5
+                ? (production ? ArcaServiceEndpoints.PadronA5Production : ArcaServiceEndpoints.PadronA5Homologation)
+                : new Uri($"https://{(production ? "aws" : "awshomo")}.afip.gov.ar/sr-padron/webservices/personaServiceA{version}"),
             $"http://a{version}.soap.ws.server.puc.sr/", "dummy", "", "dummyResponse", "return", "", "", LowerComponents);
 }

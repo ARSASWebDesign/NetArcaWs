@@ -6,13 +6,13 @@ La clave usa RSA de 4096 bits y se cifra con contraseña por defecto. La contras
 
 ## Instalar desde el paquete local
 
-La integración continua genera `NetArcaWs.Tool.0.4.0.nupkg` dentro de `artifacts/`. Estos ejemplos usan ese paquete local y no presuponen que se haya publicado en nuget.org.
+La integración continua genera `NetArcaWs.Tool.0.5.0.nupkg` dentro de `artifacts/`. Estos ejemplos usan ese paquete local y no presuponen que se haya publicado en nuget.org.
 
 Instalación local mediante manifiesto, versionada junto al proyecto (similar a EF Core):
 
 ```sh
 dotnet new tool-manifest
-dotnet tool install --local NetArcaWs.Tool --add-source ./artifacts --version 0.4.0
+dotnet tool install --local NetArcaWs.Tool --add-source ./artifacts --version 0.5.0
 dotnet tool run netarcaws --help
 ```
 
@@ -24,14 +24,14 @@ para instalación global; con instalación local usar `dotnet tool run netarcaws
 Instalación global:
 
 ```sh
-dotnet tool install --global NetArcaWs.Tool --add-source ./artifacts --version 0.4.0
+dotnet tool install --global NetArcaWs.Tool --add-source ./artifacts --version 0.5.0
 netarcaws --help
 ```
 
 Instalación aislada en una carpeta del proyecto:
 
 ```sh
-dotnet tool install NetArcaWs.Tool --tool-path ./.tools --add-source ./artifacts --version 0.4.0
+dotnet tool install NetArcaWs.Tool --tool-path ./.tools --add-source ./artifacts --version 0.5.0
 ./.tools/netarcaws --help
 ```
 

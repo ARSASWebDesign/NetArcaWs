@@ -6,8 +6,8 @@ transport, error handling and cache behavior; see docs/plans/hito-1.md.
 Original source: https://github.com/reingart/pyafipws/tree/d595b072110accec9dae1ddb58165ab847b8520a
 
 Versions and license declarations were checked against NuGet.org and restored
-package manifests on 2026-10-06. The production dependency graph was inspected:
-all 20 restored dependencies declare MIT. Additional transitive packages are
+package manifests on 2026-10-06. Production dependency graph licenses include
+MIT and Apache-2.0. Additional transitive packages are
 Microsoft.Extensions.Caching.Abstractions, Configuration, Configuration.Abstractions,
 Configuration.Binder, DependencyInjection, DependencyInjection.Abstractions,
 Diagnostics, Diagnostics.Abstractions, Logging, Logging.Abstractions,
@@ -24,6 +24,23 @@ These NuGet dependencies are referenced, not embedded into this library's DLL.
 | Microsoft.Extensions.Options | 10.0.12 | MIT |
 | Microsoft.Extensions.Diagnostics.HealthChecks | 10.0.12 | MIT |
 | System.Security.Cryptography.Pkcs | 10.0.12 | MIT |
+| Microsoft.Data.Sqlite | 10.0.12 | MIT |
+
+### Transitive library dependencies added by SQLite
+
+`Microsoft.Data.Sqlite` 10.0.12 resolves `Microsoft.Data.Sqlite.Core` 10.0.12
+(MIT), `SQLitePCLRaw.bundle_e_sqlite3` 2.1.12, `SQLitePCLRaw.core` 2.1.12,
+`SQLitePCLRaw.provider.e_sqlite3` 2.1.12 and `SQLitePCLRaw.lib.e_sqlite3`
+2.1.12. The SQLitePCLRaw packages declare Apache-2.0. The bundle includes the
+native SQLite amalgamation; its upstream SQLite project is public domain, while
+the SQLitePCLRaw packaging/provider code remains under the package's declared
+Apache-2.0 license (Copyright 2014-2024 SourceGear, LLC). See the
+[SQLitePCLRaw project notices](https://github.com/ericsink/SQLitePCL.raw/blob/v2.1.12/README.md),
+[SQLite project copyright](https://www.sqlite.org/copyright.html), and the
+[NuGet license declaration](https://www.nuget.org/packages/SQLitePCLRaw.lib.e_sqlite3/2.1.12).
+The library references these packages and does not statically link them into
+its own managed assembly; deployment assets can include their native runtime
+library.
 
 ## Test dependencies
 

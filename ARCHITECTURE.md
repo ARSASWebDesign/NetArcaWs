@@ -1,4 +1,4 @@
-# Arquitectura del Hito 1
+# Arquitectura de NetArcaWs
 
 La biblioteca `src/NetArcaWs` apunta a net10.0. Las pruebas se separan en
 `NetArcaWs.UnitTests` y `NetArcaWs.IntegrationTests`. No requiere un host ASP.NET;
@@ -36,6 +36,43 @@ administra handlers y conexiones; el cliente se libera por operación. Si la
 aplicación obtiene un `X509Certificate2` con `LoadCertificate()`, quien llama
 es responsable de desecharlo. La aplicación puede configurar proxy/TLS mediante
 el builder de DI. No hay bypass TLS ni ejecución de procesos externos.
+
+## Fachadas fiscales y contratos de servicio
+
+El repositorio contiene modelos públicos XML y fachadas generadas desde los
+WSDL versionados. El inventario actual es de 81 operaciones: WSFEv1 22,
+WSFEXv1 19, WSMTXCA 27, Padrón A4 2, Constancia por ruta A5 5, A10 2 y A13 4.
+Están en `NetArcaWs.Contracts.*` y `NetArcaWs.Services`; `AddNetArcaWs` registra
+las siete fachadas y `PadronService`. Los requests/responses autenticados son
+tipados 1:1 con los XSD y la llamada recibe `ArcaTenantContext`; el cliente pide
+su ticket a WSAA e inserta la autenticación en una copia serializable del request.
+Los `Dummy` sin autenticación eligen entorno explícito y no piden ticket.
+
+El mapeo conserva las diferencias contractuales en vez de normalizarlas: por
+ejemplo, algunos importes WSFE son `xsd:double` y el código público generado los
+expone como `double`. La calculadora `decimal` es un helper opcional de dominio;
+no cambia la representación SOAP. No se usa WCF: las fachadas usan
+`ISoapTransport`/`SoapTransport`, que aplica SOAP 1.1. Los snapshots archivados
+son la fuente reproducible para la generación, no una afirmación de compatibilidad
+con todos los cambios futuros del servicio.
+
+La build Release y la suite de Hitos 2–5 se verificaron: 201 casos, 198 aprobados
+y 3 omitidos. Los 81 QName/SOAPAction se compararon con sus WSDL y 166 tipos
+raíz XML pasaron round-trip. Los 22 tipos de contrato con campos `DateTime`
+(`xs:date`/`xs:dateTime`) conservaron sus valores. En QA real hubo 9 casos:
+7 probes `Dummy` respondieron y 2 pruebas autenticadas se omitieron por falta de
+certificados; la homologación fiscal autenticada sigue pendiente.
+
+WSMTXCA modela el web service de factura electrónica con detalle y sus
+operaciones CAE/CAEA. No cubre por equivalencia todo el ciclo de Factura de
+Crédito Electrónica MiPyME; los contratos y reglas adicionales quedan fuera de
+esta afirmación. Ver el [ADR de contratos](docs/adr/0004-public-soap-contracts.md)
+y la [matriz de operaciones](docs/wiki/Servicios-y-cobertura.md).
+
+`SoapTransport` limita la serialización del request y la lectura de response a
+4 MiB por defecto cada una, configurable entre 1 KiB y 32 MiB. El tope de
+request actúa durante la serialización, antes de que se envíe HTTP; ambos límites
+se aplican independientemente.
 
 ### Certificados en memoria
 
@@ -97,15 +134,15 @@ para aislamiento multitenant.
 El tenant separa entradas de caché locales, no la identidad que ARCA ve en el
 certificado. Reutilizar una misma credencial en dos contextos puede producir
 `coe.alreadyAuthenticated` y no promete sesiones remotas independientes. WSFEv1,
-WSFEXv1, WSMTXCA y Padrones todavía no implementan clientes de negocio; cuando se
-agreguen, cada operación de esos servicios debe recibir el contexto resuelto para
-elegir certificado, CUIT y ambiente de forma coherente. Los health checks siguen
-siendo probes de infraestructura por servicio/ambiente: no usan contexto ni
-certificados y no verifican permiso fiscal del tenant.
+WSFEXv1, WSMTXCA y Padrones ya tienen fachadas con el contexto por operación
+autenticada, verificadas con la suite local. No hubo llamadas autenticadas reales
+en QA por falta de certificados autorizados. Los health checks son probes de
+infraestructura por servicio/ambiente y no usan contexto ni certificados ni
+verifican permiso fiscal del tenant.
 
-La futura autorización de facturas también debe mantener la clave fiscal global
-definida en [ADR 0001](docs/adr/0001-safe-invoice-retries.md): ambiente, CUIT
-emisora, punto de venta, tipo y número. No se debe agregar tenant como parte de esa
+`SafeInvoiceService` mantiene la clave fiscal global definida en
+[ADR 0001](docs/adr/0001-safe-invoice-retries.md): ambiente, CUIT emisora, punto
+de venta, tipo y número. No se debe agregar tenant como parte de esa
 unicidad. Dos tenants que operan la misma CUIT no pueden registrar dos veces el
 mismo comprobante; el límite por tenant controla acceso y visibilidad, no duplica
 identidad fiscal.
@@ -127,7 +164,7 @@ No hay reintentos automáticos ni persistencia distribuida. Reinicios, expulsió
 de entradas y procesos independientes pueden perder un TA todavía válido en
 ARCA; el error correspondiente no debe ocultarse ni tratarse como éxito.
 
-## Agentes y validación
+## Hito 1: agentes y validación
 
 Luna Cripto desarrolló las operaciones criptográficas; Luna DevOps estructuró
 proyectos, empaquetado y licencias; Luna Testing escribió las pruebas. El
@@ -135,10 +172,12 @@ coordinador implementó el servicio e integró los componentes. El rol Luna
 Integración revisó el contrato SOAP y la caché en una segunda tarea del agente
 Cripto, debido al límite de threads del entorno.
 
-Las pruebas comprueban CMS y CSR con primitivas independientes de verificación,
-simulan HTTP/SOAP y controlan el reloj. La suite real queda separada y requiere
-certificados autorizados. Compilar y pasar mocks no demuestra aceptación por
-ARCA. El inventario y las diferencias con Python están documentados en
+La suite validada comprobó CMS y CSR con primitivas independientes de
+verificación, simuló HTTP/SOAP y controló el reloj. La suite Release final pasó
+198/201 casos (3 omitidos); build con 0 warnings y 0 errors. Los Dummies reales
+en QA comprobaron disponibilidad, no autorización de negocio. La suite de
+homologación autenticada requiere certificados autorizados; compilar y pasar
+tests no demuestra aceptación fiscal. El inventario y las diferencias con Python están documentados en
 `docs/plans/hito-1.md`; no se declara compatibilidad binaria/COM ni paridad de
 todos los módulos del repositorio original.
 
@@ -162,16 +201,24 @@ y campos directos. XmlSerializer y lectores sin DTD preservan esas diferencias.
 WSAA verifica únicamente el WSDL, nunca solicita un ticket. Los detalles y fuentes
 del contrato están en `docs/reference/healthchecks-contracts.md`.
 
-## Reintentos de facturación
+## Diario fiscal y reintentos
 
-El diseño está en `docs/adr/0001-safe-invoice-retries.md`. Todavía no hay cliente
-de emisión ni diario durable implementados. WSAA y los health checks actuales
-no tienen retries automáticos. Un health check exitoso no cambia un resultado
-fiscal incierto a rechazado ni autoriza a reenviar una factura.
+`InvoiceCoordinator`, `IInvoiceJournal` y `SqliteInvoiceJournal` implementan las
+primitivas del diario: guardan payload/hash e identidad fiscal, adquieren leases
+con fencing y conservan estados inciertos para reconciliación explícita. El
+archivo SQLite local permite procesos del mismo host; no NFS ni hosts
+distribuidos. Otra implementación transaccional compartida debe conservar
+idempotencia y unicidad para multi-host.
 
-En los próximos hitos, las autorizaciones deberán conservar identidad y payload
-de negocio, persistir el estado y reconciliar tras resultados inciertos. Esa
-política no se puede reemplazar por un retry genérico del transporte HTTP.
+`SafeInvoiceService` conecta las fachadas con autorización CAE unitaria y
+consultas de reconciliación exactas por WSFEv1, WSFEXv1 y WSMTXCA. La suite y la
+validación de contratos de esos flujos pasaron; el transporte común no reintenta.
+`ResumeAsync` envía solo un snapshot aún `Prepared`; estados
+inciertos se reconcilian sin reenvío. Corregir un rechazo confirmado genera una
+revisión auditable que queda preparada hasta que la aplicación invoque
+explícitamente `ResumeAsync`. Aplican las reglas del
+[ADR 0001](docs/adr/0001-safe-invoice-retries.md); una prueba de diario no prueba
+la garantía del ciclo fiscal completo.
 
 ## Herramienta de certificados
 

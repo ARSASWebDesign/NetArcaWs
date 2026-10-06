@@ -1,10 +1,23 @@
 # NetArcaWs para .NET 10
 
-Port C# de WSAA de [PyAfipWs](https://github.com/reingart/pyafipws), de Mariano
-Reingart. Licencia **LGPL-3.0-or-later**. Incluye autenticación WSAA y health checks
-opt-in. Las operaciones de negocio de WSFEv1, WSFEXv1, WSMTXCA y Padrón siguen
-pendientes. No es todavía un port del
-repositorio Python completo ni se ha publicado este paquete en nuget.org.
+Port .NET 10 de [PyAfipWs](https://github.com/reingart/pyafipws), de Mariano
+Reingart. Licencia **LGPL-3.0-or-later**. Además de WSAA y health checks opt-in,
+el código ya contiene contratos tipados y fachadas de transporte para las 81
+operaciones SOAP de los snapshots ARCA actuales de WSFEv1 (22), WSFEXv1 (19),
+WSMTXCA (27), Padrón A4 (2), Constancia en la ruta A5 (5), A10 (2) y A13 (4).
+Los contratos y las fachadas de Hitos 2–5, su suite, mapeos QName/action y
+roundtrips de serialización fueron verificados. Esto no afirma paridad funcional
+completa con el repositorio Python, homologación de operaciones autenticadas ni
+publicación en nuget.org.
+
+Verificación registrada el 2026-10-06: build Release con 0 warnings/errores;
+201 casos de suite, 198 aprobados y 3 omitidos. Se comprobaron QName y
+SOAPAction de las 81 operaciones contra sus WSDL y 166 tipos raíz XML en
+round-trip. Los 22 tipos de contrato con campos `DateTime` (`xs:date` y
+`xs:dateTime`) conservaron sus valores. En QA real respondieron los siete
+probes `Dummy` en una corrida `ARCA_RUN_HOMOLOGY=1` de 9 casos; dos pruebas
+autenticadas se omitieron por falta de certificados. Los Dummies prueban
+disponibilidad, no autorizaciones fiscales.
 
 ## Extras y adaptaciones propias respecto de PyAfipWs
 
@@ -20,30 +33,96 @@ contrastan con el [upstream](https://github.com/reingart/pyafipws) y la
 | Criptografía nativa de .NET | CMS/TRA, RSA y CSR con `System.Security.Cryptography.Pkcs` y `System.Formats.Asn1`; sin procesos OpenSSL ni BouncyCastle |
 | API asíncrona e inyección de dependencias | `Task`, `CancellationToken`, `IHttpClientFactory`, opciones y `TimeProvider`; SOAP con `HttpClient` y `XmlSerializer` |
 | Certificados como contenido | `WsaaCertificateContent`: PEM, PFX/P12 en bytes o Base64, configuración o parámetro por operación; apto para secretos obtenidos de vault/BD por la aplicación |
-| Contexto multitenant explícito | `ArcaTenantContext`: tenant, CUIT representada, entorno y certificado; autenticación WSAA y caché aisladas; adopción en los demás clientes pendiente |
+| Contexto multitenant explícito | `ArcaTenantContext`: tenant, CUIT representada, entorno y certificado; usado por WSAA y las operaciones autenticadas de las fachadas SOAP actuales; autorización del tenant sigue a cargo de la aplicación |
 | Caché compartida dentro del proceso | `IMemoryCache`, vencimiento real del TA y coordinación de logins concurrentes; rotación separada por huella; no es caché distribuida |
 | Health checks integrables en ASP.NET Core | `IHealthCheck`, registro opt-in por WS/entorno, timeout, tags y estado de componentes; sin certificados ni login |
 | Herramienta instalable con `dotnet tool` | `cert-dev`, `cert-prod`, `cert-info`; manifiesto local o instalación global, contraseña por variable de entorno y protección contra sobrescrituras |
-| Manejo de recursos y errores | Certificados importados liberados por operación, claves PFX efímeras donde se soportan, XML sin DTD, límites de respuesta y timeout de lectura; secretos ocultos en `ToString` |
+| Manejo de recursos y errores | Certificados importados liberados por operación, claves PFX efímeras donde se soportan, XML sin DTD, límites configurables de 4 MiB para request/response y timeout de lectura; secretos ocultos en `ToString` |
 | Validación propia del port | xUnit/FluentAssertions, SOAP simulado, pruebas de firmas y aislamiento concurrente entre tenants, suite separada de homologación y CI de build/test/pack/instalación de la CLI |
 | Arquitectura trazable | ADR de certificados en memoria y multitenancy; límites y equivalencias documentados |
-| Prevención durable de facturas duplicadas | **Diseñada, pendiente de implementar** en los clientes de facturación; no hay retry automático de emisión |
-| Wiki integral del repositorio | **Hito final pendiente**: adaptación de toda la documentación upstream más todas las extensiones de NetArcaWs |
+| Diario fiscal y coordinación durable | `SafeInvoiceService` + `IInvoiceJournal` / `InvoiceCoordinator` ofrecen autorización unitaria y reconciliación exacta en WSFE/WSFEX/WSMTXCA; implementación y suite local verificadas. SQLite sirve a procesos de un host, no NFS ni multi-host; sin worker ni reenvío de estados inciertos |
+| Clientes SOAP por contrato ARCA | 81 fachadas tipadas verificadas por QName/action y roundtrips; sin WCF. La autorización fiscal real requiere certificados y se valida aparte |
+| Wiki integral del repositorio | Contenido y mirror local preparados; publicación GitHub pendiente de autorización y revisión final del inventario upstream |
 
 Ver las decisiones de [multitenancy](docs/adr/0002-arca-tenant-context.md),
 [certificados en memoria](docs/adr/0003-in-memory-certificates.md) y
-[reintentos seguros](docs/adr/0001-safe-invoice-retries.md).
+[reintentos seguros](docs/adr/0001-safe-invoice-retries.md) y
+[contratos SOAP públicos](docs/adr/0004-public-soap-contracts.md).
+
+## Contratos SOAP ARCA disponibles
+
+El código generado ofrece las siguientes fachadas, con una operación async por
+cada operación de los WSDL versionados. Los requests y responses son contratos
+tipados 1:1 con esos schemas; las llamadas autenticadas reciben un
+`ArcaTenantContext` y `CancellationToken`, y las operaciones `Dummy` toman el
+ambiente sin obtener ticket. Las fachadas pasaron la suite y la verificación de
+QName/actions contra los WSDL; los 166 tipos raíz XML se comprobaron en round-trip.
+No se ejecutaron llamadas autenticadas de negocio en homologación por falta de
+certificados autorizados.
+
+| Fachada | Operaciones del snapshot | Alcance |
+| --- | ---: | --- |
+| `Wsfev1Service` | 22 | CAE, CAEA, consultas y parámetros WSFEv1 |
+| `Wsfexv1Service` | 19 | Autorización, consultas, validación de permisos y parámetros de exportación |
+| `Wsmtxcav1Service` | 27 | Comprobantes con detalle, CAEA, ajustes IVA, consultas y parámetros |
+| `PadronA4Service` | 2 | `dummy`, `getPersona` |
+| `PadronA5Service` | 5 | Constancia en la ruta histórica `personaServiceA5`; service WSAA `ws_sr_constancia_inscripcion` |
+| `PadronA10Service` | 2 | `dummy`, `getPersona` |
+| `PadronA13Service` | 4 | `dummy`, `getIdPersonaListByDocumento`, `getPersona`, `getPersonaV2` |
+| **Total** | **81** | Superficie actual de esos contratos versionados |
+
+Las solicitudes y respuestas se derivan de los WSDL de producción fijados en
+[`docs/reference/contracts`](docs/reference/contracts), cotejados con los
+snapshots de homologación disponibles. La matriz de operaciones, fuente y
+estado de cobertura está en [Servicios y cobertura](docs/wiki/Servicios-y-cobertura.md).
+El snapshot de homologación WSMTXCA archivado está truncado y no es un contrato
+válido para generar modelos; esa superficie se derivó del WSDL de producción y
+requiere cotejo con la fuente desplegada antes del release. WSMTXCA es el servicio
+de facturación con detalle y CAE/CAEA que define su manual; no representa por sí
+solo todo el ciclo de Factura de Crédito Electrónica MiPyME. La API de servicio
+está disponible en `NetArcaWs.Services`; `AddNetArcaWs` registra WSAA, el
+transporte compartido, las siete fachadas por servicio y la fachada agrupadora
+`PadronService`.
+
+Ejemplo de consulta WSFEv1 por DI. La aplicación resuelve y autoriza `tenant`
+antes de construirlo; el método obtiene el ticket para esa llamada.
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using NetArcaWs.Contracts.WsfeV1;
+using NetArcaWs.Services;
+
+var wsfe = provider.GetRequiredService<Wsfev1Service>();
+var last = await wsfe.FECompUltimoAutorizadoAsync(
+    tenant,
+    new FeCompUltimoAutorizado
+    {
+        Auth = new FeAuthRequest(), // Token, Sign y CUIT se completan con WSAA.
+        PtoVta = pointOfSale,
+        CbteTipo = voucherType
+    },
+    cancellationToken);
+```
+
+Los tipos generados reflejan los primitivos del schema; por ejemplo, campos
+`xsd:double` de WSFE se mantienen como `double`. `TaxCalculator` ofrece
+operaciones `decimal` opt-in para cálculos básicos, no convierte el contrato SOAP
+ni valida todas las reglas fiscales del servicio.
 
 ## Documentación y wiki final
 
 El [checklist](PROGRESS.md) incorpora el **Hito 7 final**: publicar toda la
 documentación en el wiki de este repositorio, con fuentes versionadas y una
 matriz de cobertura basada en el manual y el wiki de PyAfipWs. Incluirá tanto
-los flujos equivalentes adaptados a C# como todos los extras anteriores.
-El wiki todavía no está publicado. El [plan del wiki](docs/plans/hito-7-wiki.md)
-detalla el inventario, el contenido obligatorio y los criterios de cierre.
-Mientras tanto, las guías están en este README, [ARCHITECTURE.md](ARCHITECTURE.md)
-y `docs/`.
+los flujos equivalentes adaptados a C# como todos los extras anteriores. El
+mirror local contiene 29 páginas de contenido más barra lateral y manifiesto
+en `docs/wiki-export/`, generado desde `docs/wiki/` con enlaces internos
+convertidos. La publicación en GitHub sigue pendiente porque el acceso al
+navegador requerido fue rechazado; no se usó una vía alternativa. El [plan del
+wiki](docs/plans/hito-7-wiki.md) detalla el inventario upstream restante. La
+la cuenta NuGet `arsas` fue confirmada y el environment GitHub `nuget` está
+configurado con `NUGET_USER=arsas`; falta configurar y verificar la política de
+Trusted Publishing. Los paquetes 0.5.0 no se han publicado.
 
 ## Compilar, probar y empaquetar
 
@@ -61,7 +140,7 @@ Las pruebas unitarias no se conectan a ARCA. El paquete compilado localmente
 puede instalarse desde una carpeta NuGet:
 
 ```sh
-dotnet add package NetArcaWs --version 0.4.0 --source /ruta/absoluta/a/artifacts
+dotnet add package NetArcaWs --version 0.5.0 --source /ruta/absoluta/a/artifacts
 ```
 
 ## Autenticación
@@ -173,10 +252,11 @@ Esa separación local no hace que ARCA considere distintas dos identidades que u
 el mismo certificado; compartirlo entre tenants todavía puede provocar
 `coe.alreadyAuthenticated` y no garantiza independencia en el servidor.
 
-Este contexto es el punto de partida para los futuros clientes de WSFEv1, WSFEXv1,
-WSMTXCA y Padrones, que todavía no están implementados. Los health checks actuales
-comprueban disponibilidad de infraestructura por servicio y ambiente; no aceptan
-certificados ni contexts de tenant, y no verifican autorización fiscal.
+Las fachadas tipadas WSFEv1, WSFEXv1, WSMTXCA y Padrón reciben este contexto en
+cada operación autenticada; la suite y el contrato de contexto se verificaron.
+La autenticación fiscal en vivo sigue pendiente de certificados autorizados. Los
+health checks comprueban disponibilidad por servicio/ambiente; no reciben
+certificados ni contexto tenant y no verifican autorización fiscal.
 
 El contrato y los límites de este flujo se detallan en el
 [ADR de contexto multitenant](docs/adr/0002-arca-tenant-context.md).
@@ -203,7 +283,7 @@ los servicios. Ver [instalación y guía de la CLI](docs/certificates-cli.md).
 ```sh
 dotnet pack src/NetArcaWs.Tool/NetArcaWs.Tool.csproj --configuration Release --no-build --output artifacts
 dotnet new tool-manifest
-dotnet tool install --local NetArcaWs.Tool --add-source ./artifacts --version 0.4.0
+dotnet tool install --local NetArcaWs.Tool --add-source ./artifacts --version 0.5.0
 dotnet tool run netarcaws cert-dev --cuit "$ARCA_CUIT" --organization "Mi Empresa" --name "Mi App" --output ./certificados/dev --password-env NETARCA_KEY_PASSWORD
 ```
 
@@ -309,23 +389,37 @@ monitor del consumidor puede consultar el endpoint con la frecuencia elegida
 y alertar ante fallos. Conviene mantener los checks externos separados del
 endpoint de liveness para que una caída de ARCA no reinicie la aplicación.
 
-## Reintentos y prevención de duplicados
+## Reintentos y diario fiscal
 
-No se aplica retry automático a las llamadas HTTP del paquete. El diseño para
-facturación está en el [ADR de reintentos seguros](docs/adr/0001-safe-invoice-retries.md):
-persistir identidad y contenido de negocio antes del envío; tratar un timeout como
-resultado desconocido; consultar el comprobante exacto antes de decidir un reenvío;
-y conservar número e identificador al repetir. WSFEX tiene una regla específica
-de reproceso con el mismo `Cmp.Id`, documentada por ARCA.
+No se aplica retry automático a las llamadas SOAP. `InvoiceCoordinator`,
+`IInvoiceJournal` y `SqliteInvoiceJournal` permiten persistir identidad y payload
+antes del envío, adquirir leases y dejar resultado incierto para reconciliación;
+el archivo SQLite permite procesos en un host, no NFS ni varios hosts. Para
+réplicas distribuidas se necesita otro proveedor transaccional de `IInvoiceJournal`.
+`SafeInvoiceService` conecta autorización unitaria de WSFE, WSFEX y WSMTXCA con
+el coordinador y sus consultas exactas de reconciliación. Una respuesta negativa
+o no concluyente permanece `Unknown`; reconciliar no reenvía. `ResumeAsync` envía
+solo snapshots que sigan `Prepared`; las correcciones de rechazos requieren una
+revisión auditable y una llamada explícita posterior. Hitos 2–4 y sus
+pruebas/contratos siguen en validación, así que no se afirma cierre funcional ni
+emisión exactamente una vez. Un health check verde tampoco resuelve el resultado
+fiscal.
 
-La coordinación necesita almacenamiento durable y restricciones únicas para
-proteger varias instancias. Un health check verde o una caché en memoria no
-resuelven esa garantía. **Este flujo de emisión se implementará en los hitos de
-facturación; no está implementado en esta versión.**
+Para el diario SQLite local, registrar `services.AddNetArcaWsSqliteInvoicing(path)`
+y resolver `SafeInvoiceService`. Si se usa almacenamiento transaccional propio,
+registrar `IInvoiceJournal` antes de llamar `AddNetArcaWsInvoicing()`. Las APIs de
+autorización son `AuthorizeWsfeAsync`, `AuthorizeWsfexAsync` y
+`AuthorizeWsmtxcaAsync`; `ReconcileAsync(tenant, key)` solo consulta la operación
+guardada. `ReviseRejectedAsync` crea una revisión preparada sin enviarla.
+La guía [Diario fiscal](docs/wiki/Diario-fiscal.md) incluye las restricciones por
+protocolo y recuperación de `ListPendingAsync` mediante `ResumeAsync`.
 
 ## Homologación
 
-Configurar en el entorno del proceso, sin subir certificados ni claves al repo:
+La suite actual debe volver a validarse junto con las nuevas fachadas SOAP. La
+homologación WSAA continúa siendo opt-in y requiere certificados autorizados;
+no hay credenciales disponibles en el repositorio. Para la prueba WSAA existente,
+configurar en el entorno del proceso, sin subir certificados ni claves al repo:
 
 ```sh
 export WSAA_CERT_PATH=/ruta/certificado-homologacion.crt
@@ -364,6 +458,7 @@ datos fiscales reales en issues o ejemplos.
 
 El workflow [Release](.github/workflows/release.yml) genera y publica la biblioteca
 `NetArcaWs` y el tool `NetArcaWs.Tool` al publicar una release GitHub. Permite un
-ensayo manual sin publicar. La activación en NuGet está pendiente de crear la
-cuenta/organización prevista `ArsasGroup` y configurar Trusted Publishing.
+ensayo manual sin publicar. La cuenta NuGet `arsas` fue confirmada y el environment
+GitHub `nuget` está configurado con `NUGET_USER=arsas`; falta configurar y
+verificar la política de Trusted Publishing para activar la publicación.
 Ver [publicación y recuperación de releases](docs/releases.md).

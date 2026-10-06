@@ -1,7 +1,8 @@
 # Hito 7 final: wiki integral de NetArcaWs
 
-Estado: pendiente. Este documento define el alcance y los criterios de cierre;
-no significa que el wiki esté publicado ni que el port esté completo.
+Estado: fuentes y mirror local preparados; hito pendiente de revisión final del
+inventario upstream, pack/ejemplos y publicación autorizada. El wiki remoto no
+está publicado y este estado no implica que el port esté completo.
 
 ## Objetivo y publicación
 
@@ -17,6 +18,16 @@ entre páginas. Los ADR y contratos técnicos existentes conservarán su histori
 el wiki incluirá su contenido y procedencia, sin crear dos versiones editadas
 independientemente. Definir y verificar un mecanismo reproducible de publicación
 para que fuentes y wiki correspondan al mismo commit.
+
+El espejo plano local se genera con `python3 scripts/build-wiki-mirror.py` en
+`docs/wiki-export/`; contiene 29 páginas de contenido más barra lateral y
+manifiesto. Incluye las páginas temáticas y copia README, arquitectura, progreso,
+ADR, guía de contribución, releases, CLI y referencias, convirtiendo enlaces
+relativos a navegación entre páginas. El manifiesto declara las fuentes, la fecha
+de snapshots de contratos (2026-10-06) y que la salida todavía no está fijada a
+un commit. Se revisa junto a las fuentes antes de cualquier publicación. La
+publicación remota permanece pendiente porque el acceso al navegador requerido
+para GitHub fue rechazado; el wiki no está publicado y no se intenta otro canal.
 
 ## Fuentes de base e inventario
 

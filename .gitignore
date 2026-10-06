@@ -28,3 +28,6 @@ TestResults/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Contract generator cache
+__pycache__/

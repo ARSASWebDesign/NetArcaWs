@@ -1,12 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>NetArcaWs</PackageId>
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
     <Authors>NetArcaWs .NET contributors</Authors>
     <RepositoryUrl>https://github.com/ARSASWebDesign/NetArcaWs</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://github.com/ARSASWebDesign/NetArcaWs</PackageProjectUrl>
-    <Description>Native .NET 10 WSAA authentication and opt-in health checks for ARCA web services.</Description>
+    <Description>Native .NET 10 multitenant ARCA clients, WSAA, complete typed SOAP contracts, durable invoicing and opt-in health checks.</Description>
     <Copyright>Original PyAfipWs: Copyright (C) 2008-2021 Mariano Reingart. .NET port: NetArcaWs .NET contributors.</Copyright>
     <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -15,6 +15,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.12" />
@@ -23,6 +24,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="../../docs/wiki/**/*.md" Pack="true" PackagePath="docs/wiki/%(RecursiveDir)" />
+    <None Include="../../docs/reference/contracts/**/*" Pack="true" PackagePath="docs/reference/contracts/%(RecursiveDir)" />
+    <None Include="../../docs/adr/0004-public-soap-contracts.md" Pack="true" PackagePath="docs/adr/" />
     <None Include="../../CONTRIBUTING.md" Pack="true" PackagePath="/" />
     <None Include="../../docs/releases.md" Pack="true" PackagePath="docs/" />
     <None Include="../../README.md" Pack="true" PackagePath="/" />
