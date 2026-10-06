@@ -82,6 +82,33 @@ public sealed class SqliteInvoiceJournalTests
     }
 
     [Fact]
+    public async Task Same_idempotency_key_is_scoped_to_tenant_and_restores_each_tenants_own_submission()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        var journal = new SqliteInvoiceJournal(InvoiceTestData.NewDatabasePath(database, "tenant-idempotency"));
+        InvoiceSubmission tenantA = InvoiceTestData.Submission(
+            tenantId: "tenant-a", idempotencyKey: "invoice-001");
+        InvoiceSubmission tenantB = InvoiceTestData.Submission(
+            tenantId: "tenant-b",
+            idempotencyKey: "invoice-001",
+            identity: InvoiceTestData.Identity(cuit: 20999888777),
+            payload: "<invoice><total>242.00</total></invoice>");
+
+        InvoiceOperation preparedA = await journal.PrepareAsync(tenantA, cancellationToken);
+        InvoiceOperation preparedB = await journal.PrepareAsync(tenantB, cancellationToken);
+        InvoiceOperation? restoredA = await journal.FindAsync("tenant-a", "invoice-001", cancellationToken);
+        InvoiceOperation? restoredB = await journal.FindAsync("tenant-b", "invoice-001", cancellationToken);
+
+        preparedA.Submission.Should().BeEquivalentTo(tenantA);
+        preparedB.Submission.Should().BeEquivalentTo(tenantB);
+        restoredA.Should().NotBeNull();
+        restoredA!.Submission.Should().BeEquivalentTo(tenantA);
+        restoredB.Should().NotBeNull();
+        restoredB!.Submission.Should().BeEquivalentTo(tenantB);
+    }
+
+    [Fact]
     public async Task PrepareAsync_rejects_canonical_version_changes_for_an_existing_idempotency_key()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
