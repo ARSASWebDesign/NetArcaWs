@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageReference Include="xunit.v3" Version="4.0.1" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" />
+    <PackageReference Include="AwesomeAssertions" Version="9.6.0" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore/NetArcaWs.EntityFrameworkCore.csproj" />
+  </ItemGroup>
+</Project>
