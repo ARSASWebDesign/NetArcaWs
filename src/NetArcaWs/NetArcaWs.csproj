@@ -1,12 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>NetArcaWs</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>NetArcaWs .NET contributors</Authors>
     <RepositoryUrl>https://github.com/ARSASWebDesign/NetArcaWs</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://github.com/ARSASWebDesign/NetArcaWs</PackageProjectUrl>
-    <Description>.NET client for AFIP WSAA authentication and login tickets.</Description>
+    <Description>Native .NET 10 WSAA authentication and opt-in health checks for ARCA web services.</Description>
     <Copyright>Original PyAfipWs: Copyright (C) 2008-2021 Mariano Reingart. .NET port: NetArcaWs .NET contributors.</Copyright>
     <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
@@ -18,6 +18,7 @@
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.12" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.12" />
   </ItemGroup>
 
@@ -29,5 +30,7 @@
     <None Include="../../ARCHITECTURE.md" Pack="true" PackagePath="/" />
     <None Include="../../docs/plans/hito-1.md" Pack="true" PackagePath="docs/plans/" />
     <None Include="../../docs/reference/wsaa-homologation.wsdl" Pack="true" PackagePath="docs/reference/" />
+    <None Include="../../docs/reference/healthchecks-contracts.md" Pack="true" PackagePath="docs/reference/" />
+    <None Include="../../docs/adr/0001-safe-invoice-retries.md" Pack="true" PackagePath="docs/adr/" />
   </ItemGroup>
 </Project>

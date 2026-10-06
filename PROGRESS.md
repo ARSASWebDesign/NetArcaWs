@@ -1,6 +1,9 @@
 # Progreso de NetArcaWs
 
 - [x] Hito 1: WSAA nativo, NuGet LGPL-3.0-or-later, xUnit y FluentAssertions.
+- [x] Health checks independientes y opt-in por WS, sin credenciales.
+- [x] Diseño documentado de reintentos y reconciliación para evitar duplicados.
+- [ ] Implementar y probar diario durable/reconciliación en los hitos de facturación.
 - [ ] WSAA: ejecutar homologación real con certificados autorizados.
 - [ ] Hito 2: WSFEv1 y pruebas.
 - [ ] Hito 3: WSFEXv1 y pruebas.
@@ -10,5 +13,5 @@
 
 La documentación del Hito 1 ya está disponible en README.md y ARCHITECTURE.md.
 El detalle de compatibilidad y verificación está en docs/plans/hito-1.md.
-Pruebas locales: 36 aprobadas y 1 omitida por falta de credenciales de homologación.
+Pruebas locales con health checks: 69 aprobadas y 1 omitida por falta de credenciales de homologación.
 Este estado no equivale al 100% del port del repositorio original.

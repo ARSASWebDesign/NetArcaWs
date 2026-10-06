@@ -7,11 +7,12 @@ Original source: https://github.com/reingart/pyafipws/tree/d595b072110accec9dae1
 
 Versions and license declarations were checked against NuGet.org and restored
 package manifests on 2026-10-06. The production dependency graph was inspected:
-all 16 restored dependencies declare MIT. Additional transitive packages are
+all 20 restored dependencies declare MIT. Additional transitive packages are
 Microsoft.Extensions.Caching.Abstractions, Configuration, Configuration.Abstractions,
 Configuration.Binder, DependencyInjection, DependencyInjection.Abstractions,
 Diagnostics, Diagnostics.Abstractions, Logging, Logging.Abstractions,
-Options.ConfigurationExtensions and Primitives, all version 10.0.12.
+Options.ConfigurationExtensions, Primitives, Diagnostics.HealthChecks.Abstractions,
+FileProviders.Abstractions and Hosting.Abstractions, all version 10.0.12.
 These NuGet dependencies are referenced, not embedded into this library's DLL.
 
 ## Library dependencies
@@ -21,6 +22,7 @@ These NuGet dependencies are referenced, not embedded into this library's DLL.
 | Microsoft.Extensions.Caching.Memory | 10.0.12 | MIT |
 | Microsoft.Extensions.Http | 10.0.12 | MIT |
 | Microsoft.Extensions.Options | 10.0.12 | MIT |
+| Microsoft.Extensions.Diagnostics.HealthChecks | 10.0.12 | MIT |
 | System.Security.Cryptography.Pkcs | 10.0.12 | MIT |
 
 ## Test dependencies

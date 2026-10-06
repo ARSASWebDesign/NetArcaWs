@@ -1,8 +1,9 @@
 # NetArcaWs para .NET 10
 
 Port C# de WSAA de [PyAfipWs](https://github.com/reingart/pyafipws), de Mariano
-Reingart. Licencia **LGPL-3.0-or-later**. El Hito 1 implementa autenticación;
-WSFEv1, WSFEXv1, WSMTXCA y Padrón siguen pendientes. No es todavía un port del
+Reingart. Licencia **LGPL-3.0-or-later**. Incluye autenticación WSAA y health checks
+opt-in. Las operaciones de negocio de WSFEv1, WSFEXv1, WSMTXCA y Padrón siguen
+pendientes. No es todavía un port del
 repositorio Python completo ni se ha publicado este paquete en nuget.org.
 
 ## Compilar, probar y empaquetar
@@ -21,7 +22,7 @@ Las pruebas unitarias no se conectan a ARCA. El paquete compilado localmente
 puede instalarse desde una carpeta NuGet:
 
 ```sh
-dotnet add package NetArcaWs --version 0.1.0 --source /ruta/absoluta/a/artifacts
+dotnet add package NetArcaWs --version 0.2.0 --source /ruta/absoluta/a/artifacts
 ```
 
 ## Autenticación
@@ -99,6 +100,77 @@ Los SOAP Faults arrojan `WsaaSoapException` con `FaultCode`, `FaultString`,
 SOAP válido, `HttpRequestException`; cancelación, `OperationCanceledException`.
 No se reintenta automáticamente un login fallido. Los mensajes de error de
 ARCA pueden incluir información sensible: evitar volcados sin filtrar.
+
+## Health checks por servicio
+
+El registro es **opt-in**: solo se consultan los WS que agregue la aplicación.
+No hace falta registrar `AddNetArcaWs`, cargar certificados ni solicitar un TA
+para usar estos checks. Ejemplo en una aplicación ASP.NET Core:
+
+```csharp
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using NetArcaWs.HealthChecks;
+
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddHealthChecks()
+    .AddWsaaHealthCheck(ArcaEnvironment.Production, timeout: TimeSpan.FromSeconds(3))
+    .AddWsfev1HealthCheck(ArcaEnvironment.Production, timeout: TimeSpan.FromSeconds(3));
+
+var app = builder.Build();
+app.MapHealthChecks("/health/arca", new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("arca"),
+    ResponseWriter = (context, report) => context.Response.WriteAsJsonAsync(new
+    {
+        status = report.Status.ToString(),
+        services = report.Entries.ToDictionary(entry => entry.Key, entry => new
+        {
+            status = entry.Value.Status.ToString(),
+            description = entry.Value.Description,
+            data = entry.Value.Data
+        })
+    }, cancellationToken: context.RequestAborted)
+});
+app.Run();
+```
+
+También se exponen `AddWsfexv1HealthCheck`, `AddWsmtxcaHealthCheck`,
+`AddPadronA4HealthCheck`, `AddPadronA5HealthCheck`, `AddPadronA10HealthCheck` y
+`AddPadronA13HealthCheck`. El registro genérico es
+`AddNetArcaWsService(ArcaService.Wsfev1, ...)`. Cada registro acepta entorno,
+timeout, endpoint alternativo y nombre; por defecto usa homologación y 5 segundos.
+Los nombres por defecto incluyen servicio y entorno para permitir ambos a la vez.
+
+Un Dummy solo devuelve `Healthy` si sus tres componentes informan `OK`. Fallos
+HTTP, SOAP, timeout, XML inválido o componentes no disponibles devuelven
+`Unhealthy`; el endpoint ASP.NET responde 503 cuando alguno falla. El resultado
+incluye servicio, entorno, tiempo de respuesta y estados por componente. Una
+falla de red indica indisponibilidad **desde la aplicación que ejecuta el check**,
+no demuestra una caída global de ARCA.
+
+WSAA no expone Dummy: su check solo verifica HTTPS y la presencia del contrato
+WSDL con loginCms. Su resultado incluye `probe=wsdl` y
+`authenticationVerified=false`; no prueba que un certificado pueda autenticarse.
+Los Dummy tampoco comprueban autorizaciones fiscales de un contribuyente.
+
+No hay sondeo en segundo plano, reintentos ni notificaciones automáticas. El
+monitor del consumidor puede consultar el endpoint con la frecuencia elegida
+y alertar ante fallos. Conviene mantener los checks externos separados del
+endpoint de liveness para que una caída de ARCA no reinicie la aplicación.
+
+## Reintentos y prevención de duplicados
+
+No se aplica retry automático a las llamadas HTTP del paquete. El diseño para
+facturación está en el [ADR de reintentos seguros](docs/adr/0001-safe-invoice-retries.md):
+persistir identidad y contenido de negocio antes del envío; tratar un timeout como
+resultado desconocido; consultar el comprobante exacto antes de decidir un reenvío;
+y conservar número e identificador al repetir. WSFEX tiene una regla específica
+de reproceso con el mismo `Cmp.Id`, documentada por ARCA.
+
+La coordinación necesita almacenamiento durable y restricciones únicas para
+proteger varias instancias. Un health check verde o una caché en memoria no
+resuelven esa garantía. **Este flujo de emisión se implementará en los hitos de
+facturación; no está implementado en esta versión.**
 
 ## Homologación
 

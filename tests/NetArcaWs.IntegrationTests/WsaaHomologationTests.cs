@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using NetArcaWs.Cryptography;
@@ -8,7 +9,10 @@ namespace NetArcaWs.IntegrationTests;
 
 public sealed class RequiresHomologationCredentialsFactAttribute : FactAttribute
 {
-    public RequiresHomologationCredentialsFactAttribute()
+    public RequiresHomologationCredentialsFactAttribute(
+        [CallerFilePath] string? sourceFilePath = null,
+        [CallerLineNumber] int sourceLineNumber = -1)
+        : base(sourceFilePath, sourceLineNumber)
     {
         string? certificatePath = Environment.GetEnvironmentVariable("WSAA_CERT_PATH");
         string? keyPath = Environment.GetEnvironmentVariable("WSAA_KEY_PATH");

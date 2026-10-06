@@ -66,3 +66,34 @@ certificados autorizados. Compilar y pasar mocks no demuestra aceptación por
 ARCA. El inventario y las diferencias con Python están documentados en
 `docs/plans/hito-1.md`; no se declara compatibilidad binaria/COM ni paridad de
 todos los módulos del repositorio original.
+
+## Health checks opt-in
+
+`NetArcaWs.HealthChecks` implementa `IHealthCheck` sin dependencia de ASP.NET ni
+certificados. `AddHealthChecks().AddWsfev1HealthCheck(...)` registra únicamente
+WSFEv1; los demás WS se agregan individualmente. Cada registro tiene nombre,
+entorno, endpoint, timeout y tags propios. No hay un registro global implícito,
+trabajo en segundo plano ni una dependencia del cliente WSAA.
+
+La fábrica HttpClient administra conexiones; cada ejecución tiene un token de
+timeout que cubre envío y lectura. Los probes no se reintentan ni cachean: el
+monitor decide cuándo volver a consultar. La cancelación del consumidor se
+propaga y no se registra como una caída de ARCA. HTTP, TLS/red, XML inválido,
+respuesta excesiva y estados no OK se convierten en Unhealthy con motivo acotado.
+
+Los perfiles del protocolo son explícitos: WSFE/FEX tienen resultado y campos
+calificados; Padrón devuelve `return` y campos sin namespace; MTXCA usa Body vacío
+y campos directos. XmlSerializer y lectores sin DTD preservan esas diferencias.
+WSAA verifica únicamente el WSDL, nunca solicita un ticket. Los detalles y fuentes
+del contrato están en `docs/reference/healthchecks-contracts.md`.
+
+## Reintentos de facturación
+
+El diseño está en `docs/adr/0001-safe-invoice-retries.md`. Todavía no hay cliente
+de emisión ni diario durable implementados. WSAA y los health checks actuales
+no tienen retries automáticos. Un health check exitoso no cambia un resultado
+fiscal incierto a rechazado ni autoriza a reenviar una factura.
+
+En los próximos hitos, las autorizaciones deberán conservar identidad y payload
+de negocio, persistir el estado y reconciliar tras resultados inciertos. Esa
+política no se puede reemplazar por un retry genérico del transporte HTTP.
