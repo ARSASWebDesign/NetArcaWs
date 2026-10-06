@@ -3,6 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using NetArcaWs.Cryptography;
 using NetArcaWs.EntityFrameworkCore;
 using NetArcaWs.EntityFrameworkCore.MySql;
+using NetArcaWs.EntityFrameworkCore.PostgreSql;
+using NetArcaWs.EntityFrameworkCore.SqlServer;
 using NetArcaWs.HealthChecks;
 using NetArcaWs.Invoicing;
 using NetArcaWs.Multitenancy;
@@ -26,7 +28,7 @@ internal static class Program
             PersistenceConfiguration configuration = PersistenceConfiguration.FromEnvironment();
             NetArcaWsModelOptions selection = NetArcaWsModelOptions.Configure(options => options.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1));
             var services = new ServiceCollection();
-            services.AddNetArcaWsMySqlStores(configuration.ConnectionString, configuration.ServerVersion, selection);
+            configuration.RegisterStores(services, selection);
             await using ServiceProvider provider = services.BuildServiceProvider();
             IInvoiceJournal journal = provider.GetRequiredService<IInvoiceJournal>();
             if (args is ["claim", var tenant, var key])
@@ -62,7 +64,7 @@ internal static class Program
         var services = new ServiceCollection();
         services.AddSingleton<IWsaaTicketProtector>(new AesGcmWsaaTicketProtector("probe", new Dictionary<string, byte[]> { ["probe"] = sharedKey }));
         services.AddSingleton<IWsaaTicketLoginClient>(new SyntheticLoginClient(counterPath));
-        services.AddNetArcaWsMySqlStores(configuration.ConnectionString, configuration.ServerVersion, selection);
+        configuration.RegisterStores(services, selection);
         await using ServiceProvider provider = services.BuildServiceProvider();
         var tenant = new ArcaTenantContext(tenantId, 20_123_456_789, ArcaEnvironment.Homologation,
             WsaaCertificateContent.FromPem(certificatePem, privateKeyPem));
@@ -111,7 +113,7 @@ internal sealed class SyntheticLoginClient(string counterPath) : IWsaaTicketLogi
     }
 }
 
-internal sealed record PersistenceConfiguration(string ConnectionString, ServerVersion ServerVersion)
+internal sealed record PersistenceConfiguration(string ConnectionString, string Kind, Version Version)
 {
     public static PersistenceConfiguration FromEnvironment()
     {
@@ -119,15 +121,31 @@ internal sealed record PersistenceConfiguration(string ConnectionString, ServerV
         string kind = ProbeEnvironment.Required("NETARCA_PERSISTENCE_DB_KIND");
         string version = ProbeEnvironment.Required("NETARCA_PERSISTENCE_DB_VERSION");
         if (!Version.TryParse(version, out Version? parsed)) throw new InvalidOperationException("NETARCA_PERSISTENCE_DB_VERSION must be numeric.");
-        ServerVersion serverVersion = kind switch
-        {
-            "mysql" => new MySqlServerVersion(parsed),
-            "mariadb" => new MariaDbServerVersion(parsed),
-            _ => throw new InvalidOperationException("NETARCA_PERSISTENCE_DB_KIND must be mysql or mariadb.")
-        };
-        return new PersistenceConfiguration(connectionString, serverVersion);
+        if (kind is not ("mysql" or "mariadb" or "postgresql" or "sqlserver"))
+            throw new InvalidOperationException("NETARCA_PERSISTENCE_DB_KIND must be mysql, mariadb, postgresql, or sqlserver.");
+        return new PersistenceConfiguration(connectionString, kind, parsed);
     }
 
+    public void RegisterStores(IServiceCollection services, NetArcaWsModelOptions selection)
+    {
+        switch (Kind)
+        {
+            case "mysql":
+                services.AddNetArcaWsMySqlStores(ConnectionString, new MySqlServerVersion(Version), selection);
+                break;
+            case "mariadb":
+                services.AddNetArcaWsMySqlStores(ConnectionString, new MariaDbServerVersion(Version), selection);
+                break;
+            case "postgresql":
+                services.AddNetArcaWsPostgreSqlStores(ConnectionString, selection);
+                break;
+            case "sqlserver":
+                services.AddNetArcaWsSqlServerStores(ConnectionString, selection);
+                break;
+            default:
+                throw new InvalidOperationException("The persistence engine kind is unsupported.");
+        }
+    }
 }
 
 internal static class ProbeEnvironment

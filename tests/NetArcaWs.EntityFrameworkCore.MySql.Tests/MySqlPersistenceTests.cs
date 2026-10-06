@@ -69,10 +69,12 @@ public sealed class MySqlPersistenceTests
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         bool anyOptInSetting = new[] { "NETARCA_PERSISTENCE_DB", "NETARCA_PERSISTENCE_DB_KIND", "NETARCA_PERSISTENCE_DB_VERSION" }
-            .Any(name => !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(name)));
+            .Any(name => Environment.GetEnvironmentVariable(name) is not null);
         Assert.SkipWhen(!anyOptInSetting,
             "Opt-in MySQL/MariaDB engine test. Set NETARCA_PERSISTENCE_DB, NETARCA_PERSISTENCE_DB_KIND, and NETARCA_PERSISTENCE_DB_VERSION to request it.");
         PersistenceDbSettings settings = PersistenceDbSettings.ReadRequired();
+        Assert.SkipWhen(settings.Kind is not ("mysql" or "mariadb"),
+            $"MySQL/MariaDB integration test skipped because the requested shared engine kind is '{settings.Kind}'.");
         await using var database = await MySqlTestDatabase.CreateAsync(settings);
         IInvoiceJournal journal = database.Services.GetRequiredService<IInvoiceJournal>();
         string stem = "integration-" + Guid.NewGuid().ToString("N");
@@ -186,8 +188,8 @@ internal sealed record PersistenceDbSettings(string ConnectionString, string Kin
             throw new InvalidOperationException("MySQL/MariaDB opt-in was requested, but NETARCA_PERSISTENCE_DB, NETARCA_PERSISTENCE_DB_KIND, or NETARCA_PERSISTENCE_DB_VERSION is missing.");
         if (!Version.TryParse(version, out Version? parsed))
             throw new InvalidOperationException("NETARCA_PERSISTENCE_DB_VERSION must be a dotted numeric version.");
-        if (kind is not ("mysql" or "mariadb"))
-            throw new InvalidOperationException("NETARCA_PERSISTENCE_DB_KIND must be 'mysql' or 'mariadb'.");
+        if (kind is not ("mysql" or "mariadb" or "postgresql" or "sqlserver"))
+            throw new InvalidOperationException("NETARCA_PERSISTENCE_DB_KIND must be 'mysql', 'mariadb', 'postgresql', or 'sqlserver'.");
         return new PersistenceDbSettings(connection, kind, parsed);
     }
 }

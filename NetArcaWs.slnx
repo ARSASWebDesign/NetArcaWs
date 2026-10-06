@@ -7,9 +7,14 @@
   <Project Path="tests/NetArcaWs.UnitTests/NetArcaWs.UnitTests.csproj" />
   <Project Path="src/NetArcaWs.EntityFrameworkCore/NetArcaWs.EntityFrameworkCore.csproj" />
   <Project Path="src/NetArcaWs.EntityFrameworkCore.MySql/NetArcaWs.EntityFrameworkCore.MySql.csproj" />
+  <Project Path="src/NetArcaWs.EntityFrameworkCore.PostgreSql/NetArcaWs.EntityFrameworkCore.PostgreSql.csproj" />
+  <Project Path="src/NetArcaWs.EntityFrameworkCore.SqlServer/NetArcaWs.EntityFrameworkCore.SqlServer.csproj" />
   <Project Path="tests/NetArcaWs.EntityFrameworkCore.Tests/NetArcaWs.EntityFrameworkCore.Tests.csproj" />
   <Project Path="tests/NetArcaWs.EntityFrameworkCore.MySql.Tests/NetArcaWs.EntityFrameworkCore.MySql.Tests.csproj" />
+  <Project Path="tests/NetArcaWs.EntityFrameworkCore.PostgreSql.Tests/NetArcaWs.EntityFrameworkCore.PostgreSql.Tests.csproj" />
+  <Project Path="tests/NetArcaWs.EntityFrameworkCore.SqlServer.Tests/NetArcaWs.EntityFrameworkCore.SqlServer.Tests.csproj" />
   <Project Path="tests/NetArcaWs.Persistence.Probe/NetArcaWs.Persistence.Probe.csproj" />
+  <Project Path="tests/NetArcaWs.Persistence.Server.Tests/NetArcaWs.Persistence.Server.Tests.csproj" />
   <Project Path="tests/NetArcaWs.IntegrationTests/NetArcaWs.IntegrationTests.csproj" />
   <Project Path="tests/NetArcaWs.Tool.Tests/NetArcaWs.Tool.Tests.csproj" />
 </Solution>
