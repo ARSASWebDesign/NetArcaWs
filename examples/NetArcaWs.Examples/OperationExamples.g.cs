@@ -201,6 +201,156 @@ public static class OperationExamples
 
     public static Task<global::NetArcaWs.Contracts.WsfeCred.ModificarOpcionTransferenciaResponse> WsfeCred_modificarOpcionTransferenciaAsync(IWsfecredService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.WsfeCred.ModificarOpcionTransferenciaRequestType validatedRequest, CancellationToken cancellationToken = default) => service.modificarOpcionTransferenciaAsync(tenant, validatedRequest, cancellationToken);
 
+    public static Task<global::NetArcaWs.Contracts.Wscpe.DummyResponse> Wscpe_dummyAsync(IWscpeService service, ArcaEnvironment environment, CancellationToken cancellationToken = default) => service.dummyAsync(environment, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarProvinciasResponse> Wscpe_consultarProvinciasAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarProvinciasRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarProvinciasAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarCategoriasSemillasResponse> Wscpe_consultarCategoriasSemillasAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarCategoriasSemillasRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarCategoriasSemillasAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarVariedadesSemillasResponse> Wscpe_consultarVariedadesSemillasAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarVariedadesSemillasRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarVariedadesSemillasAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarCpedgPendienteActivacionResponse> Wscpe_consultarCPEDGPendienteActivacionAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarCpedgPendienteActivacionRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarCPEDGPendienteActivacionAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarCpeEmitidasDestinoDgPendientesActivacionResponse> Wscpe_consultarCPEEmitidasDestinoDGPendientesActivacionAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarCpeEmitidasDestinoDgPendientesActivacionRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarCPEEmitidasDestinoDGPendientesActivacionAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarTiposEmbalajeResponse> Wscpe_consultarTiposEmbalajeAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarTiposEmbalajeRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarTiposEmbalajeAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarUnidadesMedidaResponse> Wscpe_consultarUnidadesMedidaAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarUnidadesMedidaRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarUnidadesMedidaAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarDerivadosGranariosResponse> Wscpe_consultarDerivadosGranariosAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarDerivadosGranariosRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarDerivadosGranariosAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarLocalidadesPorProvinciaResponse> Wscpe_consultarLocalidadesPorProvinciaAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarLocalidadesPorProvinciaRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarLocalidadesPorProvinciaAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarDomiciliosPorCuitResponse> Wscpe_consultarDomiciliosPorCUITAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarDomiciliosPorCuitRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarDomiciliosPorCUITAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarLocalidadesProductorResponse> Wscpe_consultarLocalidadesProductorAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarLocalidadesProductorRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarLocalidadesProductorAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarTiposGranoResponse> Wscpe_consultarTiposGranoAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarTiposGranoRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarTiposGranoAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarUltNroOrdenResponse> Wscpe_consultarUltNroOrdenAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarUltNroOrdenRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarUltNroOrdenAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.InformarContingenciaResponse> Wscpe_informarContingenciaAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.InformarContingenciaRequest validatedRequest, CancellationToken cancellationToken = default) => service.informarContingenciaAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.InformarContingenciaEmisionDestinoDgResponse> Wscpe_informarContingenciaEmisionDestinoDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.InformarContingenciaEmisionDestinoDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.informarContingenciaEmisionDestinoDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.AnularCpeResponse> Wscpe_anularCPEAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.AnularCpeRequest validatedRequest, CancellationToken cancellationToken = default) => service.anularCPEAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.AnularCpeEmisionDestinoDgResponse> Wscpe_anularCPEEmisionDestinoDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.AnularCpeEmisionDestinoDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.anularCPEEmisionDestinoDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConfirmarArriboCpeResponse> Wscpe_confirmarArriboCPEAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConfirmarArriboCpeRequest validatedRequest, CancellationToken cancellationToken = default) => service.confirmarArriboCPEAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.RechazoCpeResponse> Wscpe_rechazoCPEAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.RechazoCpeRequest validatedRequest, CancellationToken cancellationToken = default) => service.rechazoCPEAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.DescargadoDestinoCpeResponse> Wscpe_descargadoDestinoCPEAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.DescargadoDestinoCpeRequest validatedRequest, CancellationToken cancellationToken = default) => service.descargadoDestinoCPEAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.DescargadoDestinoCpeEmisionDestinoDgResponse> Wscpe_descargadoDestinoCPEEmisionDestinoDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.DescargadoDestinoCpeEmisionDestinoDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.descargadoDestinoCPEEmisionDestinoDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.AceptarEmisionDgResponse> Wscpe_aceptarEmisionDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.AceptarEmisionDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.aceptarEmisionDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.RechazarEmisionDgResp> Wscpe_rechazarEmisionDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.RechazarEmisionDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.rechazarEmisionDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.AceptarEmisionDestinoDgResponse> Wscpe_aceptarEmisionDestinoDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.AceptarEmisionDestinoDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.aceptarEmisionDestinoDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.RechazarEmisionDestinoDgResp> Wscpe_rechazarEmisionDestinoDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.RechazarEmisionDestinoDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.rechazarEmisionDestinoDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarCpePorDestinoResponse> Wscpe_consultarCPEPorDestinoAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarCpePorDestinoRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarCPEPorDestinoAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarCpepPendientesDeResolucionResponse> Wscpe_consultarCPEPPendientesDeResolucionAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarCpepPendientesDeResolucionRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarCPEPPendientesDeResolucionAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.CerrarContingenciaCpeResponse> Wscpe_cerrarContingenciaCPEAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.CerrarContingenciaCpeRequest validatedRequest, CancellationToken cancellationToken = default) => service.cerrarContingenciaCPEAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.CerrarContingenciaCpeEmisionDestinoDgResponse> Wscpe_cerrarContingenciaCPEEmisionDestinoDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.CerrarContingenciaCpeEmisionDestinoDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.cerrarContingenciaCPEEmisionDestinoDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarPlantasResponse> Wscpe_consultarPlantasAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarPlantasRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarPlantasAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarPlantasDgResponse> Wscpe_consultarPlantasDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarPlantasDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarPlantasDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.AutorizarCpeFerroviariaResponse> Wscpe_autorizarCPEFerroviariaAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.AutorizarCpeFerroviariaRequest validatedRequest, CancellationToken cancellationToken = default) => service.autorizarCPEFerroviariaAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.AutorizarCpeFerroviariaDgResponse> Wscpe_autorizarCPEFerroviariaDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.AutorizarCpeFerroviariaDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.autorizarCPEFerroviariaDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarCpeFerroviariaResponse> Wscpe_consultarCPEFerroviariaAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarCpeFerroviariaRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarCPEFerroviariaAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarCpeFerroviariaDgResponse> Wscpe_consultarCPEFerroviariaDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarCpeFerroviariaDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarCPEFerroviariaDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarCpeAutomotorDgResponse> Wscpe_consultarCPEAutomotorDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarCpeAutomotorDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarCPEAutomotorDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarCpeEmisionDestinoDgResponse> Wscpe_consultarCPEEmisionDestinoDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarCpeEmisionDestinoDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarCPEEmisionDestinoDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarCpeDuctosResponse> Wscpe_consultarCPEDuctosAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarCpeDuctosRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarCPEDuctosAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.NuevoDestinoDestinatarioCpeFerroviariaResponse> Wscpe_nuevoDestinoDestinatarioCPEFerroviariaAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.NuevoDestinoDestinatarioCpeFerroviariaRequest validatedRequest, CancellationToken cancellationToken = default) => service.nuevoDestinoDestinatarioCPEFerroviariaAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.NuevoDestinoDestinatarioCpeFerroviariaDgResponse> Wscpe_nuevoDestinoDestinatarioCPEFerroviariaDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.NuevoDestinoDestinatarioCpeFerroviariaDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.nuevoDestinoDestinatarioCPEFerroviariaDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.NuevoDestinoDestinatarioCpeAutomotorDgResponse> Wscpe_nuevoDestinoDestinatarioCPEAutomotorDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.NuevoDestinoDestinatarioCpeAutomotorDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.nuevoDestinoDestinatarioCPEAutomotorDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.NuevoDestinoDestinatarioCpeEmisionDestinoDgResponse> Wscpe_nuevoDestinoDestinatarioCPEEmisionDestinoDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.NuevoDestinoDestinatarioCpeEmisionDestinoDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.nuevoDestinoDestinatarioCPEEmisionDestinoDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.RegresoOrigenCpeFerroviariaResponse> Wscpe_regresoOrigenCPEFerroviariaAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.RegresoOrigenCpeFerroviariaRequest validatedRequest, CancellationToken cancellationToken = default) => service.regresoOrigenCPEFerroviariaAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.DesvioCpeFerroviariaResponse> Wscpe_desvioCPEFerroviariaAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.DesvioCpeFerroviariaRequest validatedRequest, CancellationToken cancellationToken = default) => service.desvioCPEFerroviariaAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.DesvioCpeFerroviariaDgResponse> Wscpe_desvioCPEFerroviariaDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.DesvioCpeFerroviariaDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.desvioCPEFerroviariaDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.DesvioCpeAutomotorDgResponse> Wscpe_desvioCPEAutomotorDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.DesvioCpeAutomotorDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.desvioCPEAutomotorDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConfirmacionDefinitivaCpeFerroviariaResponse> Wscpe_confirmacionDefinitivaCPEFerroviariaAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConfirmacionDefinitivaCpeFerroviariaRequest validatedRequest, CancellationToken cancellationToken = default) => service.confirmacionDefinitivaCPEFerroviariaAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConfirmacionDefinitivaCpeFerroviariaDgResponse> Wscpe_confirmacionDefinitivaCPEFerroviariaDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConfirmacionDefinitivaCpeFerroviariaDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.confirmacionDefinitivaCPEFerroviariaDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConfirmacionDefinitivaCpeAutomotorDgResponse> Wscpe_confirmacionDefinitivaCPEAutomotorDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConfirmacionDefinitivaCpeAutomotorDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.confirmacionDefinitivaCPEAutomotorDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConfirmacionDefinitivaCpeDuctosDgResponse> Wscpe_confirmacionDefinitivaCPEDuctosDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConfirmacionDefinitivaCpeDuctosDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.confirmacionDefinitivaCPEDuctosDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultaCpeFerroviariaPorNroOperativoResponse> Wscpe_consultaCPEFerroviariaPorNroOperativoAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultaCpeFerroviariaPorNroOperativoRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultaCPEFerroviariaPorNroOperativoAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.EditarCpeFerroviariaResponse> Wscpe_editarCPEFerroviariaAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.EditarCpeFerroviariaRequest validatedRequest, CancellationToken cancellationToken = default) => service.editarCPEFerroviariaAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.EditarCpedgFerroviariaResponse> Wscpe_editarCPEDGFerroviariaAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.EditarCpedgFerroviariaRequest validatedRequest, CancellationToken cancellationToken = default) => service.editarCPEDGFerroviariaAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.EditarCpedgAutomotorResponse> Wscpe_editarCPEDGAutomotorAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.EditarCpedgAutomotorRequest validatedRequest, CancellationToken cancellationToken = default) => service.editarCPEDGAutomotorAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.EditarCpedgDuctosResponse> Wscpe_editarCPEDGDuctosAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.EditarCpedgDuctosRequest validatedRequest, CancellationToken cancellationToken = default) => service.editarCPEDGDuctosAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.EditarCpeConfirmadaFerroviariaResponse> Wscpe_editarCPEConfirmadaFerroviariaAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.EditarCpeConfirmadaFerroviariaRequest validatedRequest, CancellationToken cancellationToken = default) => service.editarCPEConfirmadaFerroviariaAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.AutorizarCpeAutomotorResponse> Wscpe_autorizarCPEAutomotorAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.AutorizarCpeAutomotorRequest validatedRequest, CancellationToken cancellationToken = default) => service.autorizarCPEAutomotorAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.AutorizarCpeAutomotorDgResponse> Wscpe_autorizarCPEAutomotorDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.AutorizarCpeAutomotorDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.autorizarCPEAutomotorDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.AutorizarCpeDuctosDgResponse> Wscpe_autorizarCPEDuctosDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.AutorizarCpeDuctosDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.autorizarCPEDuctosDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.AutorizarCpeEmisionDestinoDgResponse> Wscpe_autorizarCPEEmisionDestinoDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.AutorizarCpeEmisionDestinoDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.autorizarCPEEmisionDestinoDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarCpeAutomotorResponse> Wscpe_consultarCPEAutomotorAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarCpeAutomotorRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarCPEAutomotorAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.NuevoDestinoDestinatarioCpeAutomotorResponse> Wscpe_nuevoDestinoDestinatarioCPEAutomotorAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.NuevoDestinoDestinatarioCpeAutomotorRequest validatedRequest, CancellationToken cancellationToken = default) => service.nuevoDestinoDestinatarioCPEAutomotorAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.RegresoOrigenCpeAutomotorResponse> Wscpe_regresoOrigenCPEAutomotorAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.RegresoOrigenCpeAutomotorRequest validatedRequest, CancellationToken cancellationToken = default) => service.regresoOrigenCPEAutomotorAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.RegresoOrigenCpeAutomotorDgResponse> Wscpe_regresoOrigenCPEAutomotorDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.RegresoOrigenCpeAutomotorDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.regresoOrigenCPEAutomotorDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.RegresoOrigenCpeFerroviariaDgResponse> Wscpe_regresoOrigenCPEFerroviariaDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.RegresoOrigenCpeFerroviariaDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.regresoOrigenCPEFerroviariaDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.RegresoOrigenCpeEmisionDestinoDgResponse> Wscpe_regresoOrigenCPEEmisionDestinoDGAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.RegresoOrigenCpeEmisionDestinoDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.regresoOrigenCPEEmisionDestinoDGAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.DesvioCpeAutomotorResponse> Wscpe_desvioCPEAutomotorAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.DesvioCpeAutomotorRequest validatedRequest, CancellationToken cancellationToken = default) => service.desvioCPEAutomotorAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConfirmacionDefinitivaCpeAutomotorResponse> Wscpe_confirmacionDefinitivaCPEAutomotorAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConfirmacionDefinitivaCpeAutomotorRequest validatedRequest, CancellationToken cancellationToken = default) => service.confirmacionDefinitivaCPEAutomotorAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.EditarCpeAutomotorResponse> Wscpe_editarCPEAutomotorAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.EditarCpeAutomotorRequest validatedRequest, CancellationToken cancellationToken = default) => service.editarCPEAutomotorAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.EditarCpeConfirmadaAutomotorResponse> Wscpe_editarCPEConfirmadaAutomotorAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.EditarCpeConfirmadaAutomotorRequest validatedRequest, CancellationToken cancellationToken = default) => service.editarCPEConfirmadaAutomotorAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.EditarCpeConfirmadaAutomotorDgResponse> Wscpe_editarCPEDGConfirmadaAutomotorAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.EditarCpeConfirmadaAutomotorDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.editarCPEDGConfirmadaAutomotorAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.EditarCpeConfirmadaFerroviariaDgResponse> Wscpe_editarCPEDGConfirmadaFerroviariaAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.EditarCpeConfirmadaFerroviariaDgRequest validatedRequest, CancellationToken cancellationToken = default) => service.editarCPEDGConfirmadaFerroviariaAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.EditarCpeConfirmadaDuctosResponse> Wscpe_editarCPEConfirmadaDuctosAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.EditarCpeConfirmadaDuctosRequest validatedRequest, CancellationToken cancellationToken = default) => service.editarCPEConfirmadaDuctosAsync(tenant, validatedRequest, cancellationToken);
+
+    public static Task<global::NetArcaWs.Contracts.Wscpe.ConsultarRenspaResponse> Wscpe_consultarRenspaAsync(IWscpeService service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.Wscpe.ConsultarRenspaRequest validatedRequest, CancellationToken cancellationToken = default) => service.consultarRenspaAsync(tenant, validatedRequest, cancellationToken);
+
     public static Task<global::NetArcaWs.Contracts.PadronA4.DummyResponse> PadronA4_dummyAsync(IPadronA4Service service, ArcaEnvironment environment, CancellationToken cancellationToken = default) => service.dummyAsync(environment, cancellationToken);
 
     public static Task<global::NetArcaWs.Contracts.PadronA4.GetPersonaResponse> PadronA4_getPersonaAsync(IPadronA4Service service, ArcaTenantContext tenant, global::NetArcaWs.Contracts.PadronA4.GetPersona validatedRequest, CancellationToken cancellationToken = default) => service.getPersonaAsync(tenant, validatedRequest, cancellationToken);

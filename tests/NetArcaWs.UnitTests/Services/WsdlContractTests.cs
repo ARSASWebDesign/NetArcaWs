@@ -23,6 +23,7 @@ public sealed class WsdlContractTests
         (typeof(IWsmtxcav1Service), "wsmtxca-production.wsdl"),
         (typeof(IWscdcService), "wscdc-production.wsdl"),
         (typeof(IWsfecredService), "wsfecred-production.wsdl"),
+        (typeof(IWscpeService), "wscpe-production.wsdl"),
         (typeof(IPadronA4Service), "padron-a4-production.wsdl"),
         (typeof(IPadronA5Service), "padron-a5-production.wsdl"),
         (typeof(IPadronA10Service), "padron-a10-production.wsdl"),
@@ -101,6 +102,7 @@ public sealed class WsdlContractTests
             new Wsfev1Service(transport, tickets), new Wsfexv1Service(transport, tickets),
             new Wsmtxcav1Service(transport, tickets), new PadronA4Service(transport, tickets),
             new WscdcService(transport, tickets), new WsfecredService(transport, tickets),
+            new WscpeService(transport, tickets),
             new PadronA5Service(transport, tickets), new PadronA10Service(transport, tickets), new PadronA13Service(transport, tickets)
         ];
         foreach ((Type contract, string file) in Services)
@@ -123,7 +125,7 @@ public sealed class WsdlContractTests
                 string operationName = operation.Name[..^"Async".Length];
                 transport.LastCall.Action.Should().Be(expectedActions[operationName], $"{contract.Name}.{operation.Name}");
                 if (operationName == "dummy" &&
-                    (contract == typeof(IWsmtxcav1Service) || contract == typeof(IWsfecredService)))
+                    (contract == typeof(IWsmtxcav1Service) || contract == typeof(IWsfecredService) || contract == typeof(IWscpeService)))
                     transport.LastCall.Request.Should().BeNull("the pinned dummy operation has an empty SOAP body");
             }
         }
@@ -134,7 +136,7 @@ public sealed class WsdlContractTests
     {
         Assembly assembly = typeof(IWsfev1Service).Assembly;
         Type[] types = assembly.GetTypes().Where(t => t.Namespace?.StartsWith("NetArcaWs.Contracts.", StringComparison.Ordinal) == true && t.GetCustomAttribute<XmlRootAttribute>() is not null).ToArray();
-        types.Should().HaveCount(219);
+        types.Should().HaveCount(369);
         foreach (Type type in types)
         {
             var serializer = new XmlSerializer(type);
@@ -152,7 +154,9 @@ public sealed class WsdlContractTests
         Type[] types = typeof(IWsfev1Service).Assembly.GetTypes()
             .Where(t => t.Namespace?.StartsWith("NetArcaWs.Contracts.", StringComparison.Ordinal) == true && t.GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Any(p => p.PropertyType == typeof(DateTime) && p.CanWrite && p.GetCustomAttribute<XmlIgnoreAttribute>() is null)).ToArray();
-        types.Should().HaveCount(30);
+        types.Where(t => t.Namespace != "NetArcaWs.Contracts.Wscpe").Should().HaveCount(30);
+        types.Where(t => t.Namespace == "NetArcaWs.Contracts.Wscpe").Should().HaveCount(26,
+            "the pinned WSCPE contract has 26 date-bearing generated types");
         DateTime value = new(2026, 10, 6, 15, 45, 12, DateTimeKind.Unspecified);
         foreach (Type type in types)
         {

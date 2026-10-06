@@ -21,6 +21,12 @@ namespace NetArcaWs.Examples;
 /// </summary>
 public static class GuideExamples
 {
+    /// <summary>Reads the CPE province catalog for a tenant authorized for wscpe.</summary>
+    public static Task<NetArcaWs.Contracts.Wscpe.ConsultarProvinciasResponse> ReadCpeProvincesAsync(
+        IServiceProvider provider, ArcaTenantContext tenant, CancellationToken cancellationToken)
+        => provider.GetRequiredService<IWscpeService>().consultarProvinciasAsync(
+            tenant, new NetArcaWs.Contracts.Wscpe.ConsultarProvinciasRequest(), cancellationToken);
+
     /// <summary>Reads WSCDC modalities for a tenant already authorized by the host.</summary>
     public static Task<ComprobantesModalidadConsultarResponse> ReadVerificationModesAsync(
         IServiceProvider provider, ArcaTenantContext tenant, CancellationToken cancellationToken)

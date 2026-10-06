@@ -14,6 +14,7 @@ PyAfipWs ni homologación fiscal de una instalación.
 - [Servicios implementados](Servicios-implementados.md) — qué hace cada cliente, cómo integrarlo y dónde consultar operaciones y manuales ARCA.
 - [WSCDC](WSCDC.md) — constatación y consulta de comprobantes.
 - [WSFECred](WSFECred.md) — gestión del ciclo de Factura de Crédito Electrónica MiPyME.
+- [Carta de Porte Electrónica](WSCPE.md) — traslados de granos y derivados, destinos, contingencias y catálogos.
 - [Seguimiento de servicios PyAfipWs pendientes](https://github.com/ARSASWebDesign/NetArcaWs/issues/10) — prioridades y comprobaciones de vigencia por organismo.
 - [Funcionalidades adicionales](Funcionalidades-adicionales.md) — multitenancy, certificados, health checks, CLI, emisión durable, cálculos, herramientas y publicación.
 - [Diagnóstico y glosario](Diagnostico-y-glosario.md) — errores, límites y términos habituales.

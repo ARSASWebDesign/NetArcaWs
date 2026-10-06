@@ -19,6 +19,7 @@ public static class ContractGenerator
         ("wsfexv1-production.wsdl", "WsfexV1", "Wsfexv1Service", "wsfex", "Wsfex"),
         ("wsmtxca-production.wsdl", "Wsmtxca", "Wsmtxcav1Service", "wsmtxca", "Wsmtxca"),
         ("wscdc-production.wsdl", "Wscdc", "WscdcService", "wscdc", "Wscdc"),
+        ("wscpe-production.wsdl", "Wscpe", "WscpeService", "wscpe", "Wscpe"),
         ("wsfecred-production.wsdl", "WsfeCred", "WsfecredService", "wsfecred", "Wsfecred"),
         ("padron-a4-production.wsdl", "PadronA4", "PadronA4Service", "ws_sr_padron_a4", "PadronA4"),
         ("padron-a5-production.wsdl", "PadronA5", "PadronA5Service", "ws_sr_constancia_inscripcion", "PadronA5"),

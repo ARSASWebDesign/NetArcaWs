@@ -114,6 +114,15 @@ manual describe un reenvío seguro. Solo una coincidencia positiva y autorizada
 puede resolver a `Authorized`. La repetición de la propia llamada
 `ReconcileAsync` es una nueva consulta, no una nueva emisión.
 
+Si ARCA respondió pero falla el guardado local, el coordinador intenta conservar
+el XML de respuesta como evidencia en estado `Unknown` y propaga el error
+original. Si también falla esa escritura, la operación sigue con su lease
+durable; una vez vencida, `ResumeAsync` consulta el comprobante antes de resolver
+el resultado. Si el commit de `Authorized` se realizó pero se perdió su acuse,
+el fencing impide degradarlo a `Unknown`: la recuperación devuelve el resultado
+guardado. Ninguno de estos caminos vuelve a emitir la autorización. La evidencia
+no puede garantizarse si el almacenamiento permanece inaccesible.
+
 Antes de consultar o devolver un resultado ya terminal, `ReconcileAsync` comprueba
 que tenant, CUIT representada, ambiente y versión de canonicalización coincidan
 con el registro. El contexto incorrecto no revela ni devuelve la operación.

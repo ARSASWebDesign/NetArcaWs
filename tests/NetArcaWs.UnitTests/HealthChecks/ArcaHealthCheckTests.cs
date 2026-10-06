@@ -15,6 +15,7 @@ public sealed class ArcaHealthCheckTests
     private const string WsfexNamespace = "http://ar.gov.afip.dif.fexv1/";
     private const string WscdcNamespace = "http://servicios1.afip.gob.ar/wscdc/";
     private const string WsfecredNamespace = "http://ar.gob.afip.wsfecred/FECredService/";
+    private const string WscpeNamespace = "https://serviciosjava.afip.gob.ar/wscpe/";
     private const string WsdlNamespace = "http://schemas.xmlsoap.org/wsdl/";
 
     [Theory]
@@ -23,6 +24,7 @@ public sealed class ArcaHealthCheckTests
     [InlineData(ArcaService.Wsmtxca, "", "http://impl.service.wsmtxca.afip.gov.ar/service/", "\"http://impl.service.wsmtxca.afip.gov.ar/service/dummy\"")]
     [InlineData(ArcaService.Wscdc, "ComprobanteDummy", WscdcNamespace, "\"http://servicios1.afip.gob.ar/wscdc/ComprobanteDummy\"")]
     [InlineData(ArcaService.Wsfecred, "", WsfecredNamespace, "\"http://ar.gob.afip.wsfecred/FECredService/dummy\"")]
+    [InlineData(ArcaService.Wscpe, "", WscpeNamespace, "\"https://serviciosjava.afip.gob.ar/wscpe/dummy\"")]
     [InlineData(ArcaService.PadronA4, "dummy", "http://a4.soap.ws.server.puc.sr/", "\"\"")]
     [InlineData(ArcaService.PadronA5, "dummy", "http://a5.soap.ws.server.puc.sr/", "\"\"")]
     [InlineData(ArcaService.PadronA10, "dummy", "http://a10.soap.ws.server.puc.sr/", "\"\"")]
@@ -61,7 +63,7 @@ public sealed class ArcaHealthCheckTests
         capturedAction.Should().Be(expectedSoapAction);
         XDocument request = XDocument.Parse(requestBody!);
         XElement body = request.Descendants(XName.Get("Body", SoapNamespace)).Should().ContainSingle().Which;
-        if (service is ArcaService.Wsmtxca or ArcaService.Wsfecred)
+        if (service is ArcaService.Wsmtxca or ArcaService.Wsfecred or ArcaService.Wscpe)
             body.Elements().Should().BeEmpty();
         else
             body.Elements(XName.Get(requestOperation, serviceNamespace)).Should().ContainSingle();
@@ -70,6 +72,7 @@ public sealed class ArcaHealthCheckTests
     [Theory]
     [InlineData(ArcaService.Wscdc, "https://wswhomo.afip.gov.ar/WSCDC/service.asmx")]
     [InlineData(ArcaService.Wsfecred, "https://fwshomo.afip.gov.ar/wsfecred/FECredService")]
+    [InlineData(ArcaService.Wscpe, "https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap")]
     public async Task New_health_checks_use_their_homologation_endpoint_when_no_override_is_supplied(
         ArcaService service, string expectedEndpoint)
     {
@@ -242,6 +245,8 @@ public sealed class ArcaHealthCheckTests
 
     private static string DummyResponse(ArcaService service, string appServer, string dbServer, string authServer)
     {
+        if (service is ArcaService.Wscpe)
+            return SoapResponseWithUnqualifiedElements(WscpeNamespace, "DummyResp", "respuesta", appServer, dbServer, authServer);
         if (service is ArcaService.Wsmtxca or ArcaService.Wsfecred)
         {
             if (service == ArcaService.Wsfecred)
@@ -328,6 +333,7 @@ public sealed class ArcaHealthCheckTests
         ArcaService.Wsfexv1 => WsfexNamespace,
         ArcaService.Wscdc => WscdcNamespace,
         ArcaService.Wsfecred => WsfecredNamespace,
+        ArcaService.Wscpe => WscpeNamespace,
         ArcaService.PadronA4 => "http://a4.soap.ws.server.puc.sr/",
         ArcaService.PadronA5 => "http://a5.soap.ws.server.puc.sr/",
         ArcaService.PadronA10 => "http://a10.soap.ws.server.puc.sr/",

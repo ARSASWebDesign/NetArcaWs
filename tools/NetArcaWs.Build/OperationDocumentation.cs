@@ -17,6 +17,7 @@ public static class OperationDocumentation
         ("wsmtxca-production.wsdl", "Wsmtxca", "Wsmtxcav1Service", "wsmtxca"),
         ("wscdc-production.wsdl", "Wscdc", "WscdcService", "wscdc"),
         ("wsfecred-production.wsdl", "WsfeCred", "WsfecredService", "wsfecred"),
+        ("wscpe-production.wsdl", "Wscpe", "WscpeService", "wscpe"),
         ("padron-a4-production.wsdl", "PadronA4", "PadronA4Service", "ws_sr_padron_a4"),
         ("padron-a5-production.wsdl", "PadronA5", "PadronA5Service", "ws_sr_constancia_inscripcion"),
         ("padron-a10-production.wsdl", "PadronA10", "PadronA10Service", "ws_sr_padron_a10"),
@@ -47,7 +48,7 @@ public static class OperationDocumentation
             File.WriteAllText(Path.Combine(docsDir, service.Contract.ToLowerInvariant() + ".md"), RenderService(service, ns, schema, operations), new UTF8Encoding(false));
             RenderExamples(allExamples, service, operations);
         }
-        if (total != 108) throw new InvalidOperationException($"Expected 108 WSDL operations, found {total}.");
+        if (total != 183) throw new InvalidOperationException($"Expected 183 WSDL operations, found {total}.");
         allExamples.AppendLine("}");
         File.WriteAllText(Path.Combine(exampleDir, "OperationExamples.g.cs"), allExamples.ToString(), new UTF8Encoding(false));
         File.WriteAllText(Path.Combine(exampleDir, "NetArcaWs.Examples.csproj"), """
@@ -191,6 +192,7 @@ public static class OperationDocumentation
         "Wsmtxca" => "Las respuestas WSMTXCA exponen `resultado` y, según operación, `arrayErrores` y `arrayObservaciones` como códigos y descripciones; interpretar sus valores con el manual vigente.",
         "Wscdc" => "La constatación devuelve `Resultado`, `Observaciones`, `Errors` y `Events`: un HTTP 200 no acredita la validez del comprobante. Revisar los códigos devueltos según el manual de WSCDC.",
         "WsfeCred" => "Las respuestas pueden incluir `arrayErrores` y `arrayErroresFormato`, aun con HTTP 200. Revisar el resultado de negocio específico antes de avanzar el estado local; no reenviar escrituras automáticamente ante una respuesta incierta.",
+        "Wscpe" => "Las respuestas incluyen `respuesta` y, según la operación, `errores` (lista `error` con código y descripción) y `metadata`. Un HTTP 200 no confirma la autorización: revisar errores y datos de negocio antes de actualizar el estado local. Las escrituras no tienen reenvío automático ni diario integrado.",
         _ => "Los WSDL de Padrón declaran `SRValidationException` como fault SOAP de servicio; su estructura aparece en el catálogo XSD y los errores no se expresan como `Errors` dentro de un resultado normal."
     };
 
@@ -203,13 +205,15 @@ public static class OperationDocumentation
         "Wsmtxca" => new("WSMTXCA: factura electrónica", "Servicio de factura electrónica con operaciones de autorización y consulta.", "Autorizar comprobantes y ajustes, informar CAEA y consultar catálogos, estados y comprobantes.", "Elegir las operaciones según el circuito habilitado para el contribuyente y validar los códigos de resultado con el manual vigente."),
         "Wscdc" => new("WSCDC: constatación de comprobantes", "Verifica comprobantes emitidos y sus datos de autorización.", "Constatar un comprobante y consultar modalidades, tipos de comprobante, documentos y opcionales.", "Consultar con los datos reales del comprobante; interpretar resultado, observaciones y errores. No emite comprobantes ni reemplaza el control tributario de la aplicación."),
         "WsfeCred" => new("WSFECred: Factura de Crédito Electrónica MiPyME", "Gestiona el ciclo posterior a la emisión de la FCE y su cuenta corriente.", "Consultar, aceptar y rechazar FCE, informar cancelaciones o transferencia, consultar historiales, remitos y parámetros.", "Usarlo con un tenant autorizado para wsfecred. Las escrituras no tienen reintentos ni diario automático; persistir la intención y reconciliar las respuestas inciertas mediante consultas antes de cualquier reenvío."),
+        "Wscpe" => new("WSCPE: Carta de Porte Electrónica", "Gestiona documentos electrónicos de traslado de granos y derivados granarios.", "Autorizar, consultar y actualizar cartas de porte automotor, ferroviarias y de ductos, gestionar contingencias, destinos y confirmaciones, y consultar catálogos.", "Usarlo con un tenant autorizado para wscpe. Validar los datos según el manual vigente y registrar las intenciones de escritura en la aplicación; ante resultado incierto consultar el estado antes de reenviar. Ver la guía WSCPE para endpoints y límites de cobertura."),
         "PadronA4" => new("Padrón A4: consulta de persona", "Consulta de datos registrales de una persona.", "Consultar una persona por CUIT representada y persona consultada.", "Usarlo como consulta registral autenticada; el WSDL declara faults de validación del padrón."),
         "PadronA5" => new("Padrón A5: constancia de inscripción", "Consulta de constancia y datos de inscripción.", "Consultar personas y listas, con variantes de respuesta v2.", "Usarlo para recuperar datos de inscripción; verificar en el manual la variante adecuada y tratar faults `SRValidationException`."),
         "PadronA10" => new("Padrón A10: consulta registral", "Consulta individual del padrón A10.", "Consultar datos de una persona y comprobar disponibilidad técnica.", "Usarlo como lectura autenticada y tratar faults `SRValidationException`."),
         _ => new("Padrón A13: búsqueda y consulta de persona", "Búsqueda de identidad y consulta de datos registrales.", "Buscar identificadores por documento y consultar personas, incluidas respuestas v2.", "Usarlo para búsquedas y lecturas autenticadas; tratar faults `SRValidationException`.")
     };
 
-    private static bool IsWrite(string name) => Regex.IsMatch(name, "solicitar|informar|informativ|registrar|autorizar|authorize|emitir|anular|baja|alta|modificar|actualizar|asociar|insertar|grabar|aceptar|rechazar", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static bool IsWrite(string name) => !name.StartsWith("consulta", StringComparison.OrdinalIgnoreCase) &&
+        Regex.IsMatch(name, "solicitar|informar|informativ|registrar|autorizar|authorize|emitir|anular|baja|alta|modificar|actualizar|asociar|insertar|grabar|aceptar|rechazar|rechazo|confirmar|confirmacion|descargado|cerrar|nuevoDestino|regreso|desvio|editar", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private static string Local(string qname) => qname[(qname.LastIndexOf(':') + 1)..];
     private static string Escape(string text) => text.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
 }

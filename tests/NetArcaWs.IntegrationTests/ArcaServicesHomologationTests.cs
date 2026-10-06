@@ -57,6 +57,7 @@ public sealed class ArcaServicesHomologationTests
     [InlineData("wsmtxca")]
     [InlineData("wscdc")]
     [InlineData("wsfecred")]
+    [InlineData("wscpe")]
     [InlineData("padron-a4")]
     [InlineData("padron-a5")]
     [InlineData("padron-a10")]
@@ -74,6 +75,7 @@ public sealed class ArcaServicesHomologationTests
             "wsmtxca" => await new Wsmtxcav1Service(transport, tickets).dummyAsync(ArcaEnvironment.Homologation, token),
             "wscdc" => await new WscdcService(transport, tickets).ComprobanteDummyAsync(ArcaEnvironment.Homologation, token),
             "wsfecred" => await new WsfecredService(transport, tickets).dummyAsync(ArcaEnvironment.Homologation, token),
+            "wscpe" => await new WscpeService(transport, tickets).dummyAsync(ArcaEnvironment.Homologation, token),
             "padron-a4" => await new PadronA4Service(transport, tickets).dummyAsync(ArcaEnvironment.Homologation, token),
             "padron-a5" => await new PadronA5Service(transport, tickets).dummyAsync(ArcaEnvironment.Homologation, token),
             "padron-a10" => await new PadronA10Service(transport, tickets).dummyAsync(ArcaEnvironment.Homologation, token),

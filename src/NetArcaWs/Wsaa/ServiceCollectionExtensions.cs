@@ -36,6 +36,8 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton<PadronService>();
         services.TryAddSingleton<WscdcService>();
         services.TryAddSingleton<IWscdcService>(provider => provider.GetRequiredService<WscdcService>());
+        services.TryAddSingleton<WscpeService>();
+        services.TryAddSingleton<IWscpeService>(provider => provider.GetRequiredService<WscpeService>());
         services.TryAddSingleton<WsfecredService>();
         services.TryAddSingleton<IWsfecredService>(provider => provider.GetRequiredService<WsfecredService>());
 

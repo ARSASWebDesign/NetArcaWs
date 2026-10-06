@@ -21,6 +21,7 @@ condiciones de acceso y las validaciones de negocio.
 | **Padrón A13** | Busca identificadores por documento y consulta datos de persona, incluidas las operaciones v2. | [Operaciones A13](../reference/operations/padrona13.md) | [Manual oficial Padrón A13](https://ftp.afip.gob.ar/ws/ws-padron-a13/manual-ws-sr-padron-a13-v1.4.pdf) |
 | **WSCDC** | Constata si un comprobante está registrado y autorizado, y consulta modalidades y tablas referenciales. | [Operaciones WSCDC](../reference/operations/wscdc.md), [guía WSCDC](WSCDC.md) | [Manual oficial WSCDC, revisión 2025-12-01](https://www.afip.gob.ar/ws/WSCDCV1/WSCDC-manual-desarrollador-v4.pdf) |
 | **WSFECred** | Gestiona aceptación/rechazo, cancelaciones, cuentas corrientes, estados y operaciones del ciclo de FCE MiPyME. No autoriza la factura original. | [Operaciones WSFECred](../reference/operations/wsfecred.md), [guía WSFECred](WSFECred.md) | [Manual oficial del Web Service FECred](https://servicioscf.afip.gob.ar/facturadecreditoelectronica/documentos/Manual-Desarrollador-WSFECRED.pdf) |
+| **WSCPE** | Gestiona Carta de Porte Electrónica automotor y ferroviaria, derivados granarios y ductos, contingencias, destinos y estados. | [Operaciones WSCPE](../reference/operations/wscpe.md), [guía de Carta de Porte](WSCPE.md) | [Manual oficial WSCPE v2.2.1](https://www.arca.gob.ar/ws/documentos/manual-wscpe.pdf) |
 
 Los nombres A4/A5/A10/A13 se refieren a los contratos/endpoints y no determinan
 por sí solos cuál servicio debe usar una aplicación. En particular, A5 se

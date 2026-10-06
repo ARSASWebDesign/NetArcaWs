@@ -35,16 +35,19 @@ public sealed class InvoiceCoordinator(IInvoiceJournal journal, TimeSpan? leaseD
 
     private async Task<InvoiceOperation> ExecuteAsync(InvoiceLease lease, Func<CancellationToken, Task<InvoiceDecision>> action, CancellationToken cancellationToken)
     {
+        InvoiceDecision? decision = null;
         try
         {
-            var decision = await action(cancellationToken).ConfigureAwait(false);
+            decision = await action(cancellationToken).ConfigureAwait(false);
             // Preserve a received fiscal result even if the initiating HTTP request was cancelled.
             return await journal.CompleteAsync(lease, decision, CancellationToken.None).ConfigureAwait(false);
         }
         catch
         {
-            try { await journal.CompleteAsync(lease, new(InvoiceState.Unknown), CancellationToken.None).ConfigureAwait(false); }
-            catch (InvalidOperationException) { /* A newer fencing version owns recovery; never overwrite it. */ }
+            // A local persistence failure after a remote response must remain uncertain,
+            // while retaining that response as reconciliation evidence.
+            try { await journal.CompleteAsync(lease, new(InvoiceState.Unknown, ResponseXml: decision?.ResponseXml), CancellationToken.None).ConfigureAwait(false); }
+            catch { /* Keep the original failure; recovery can use the durable lease and query later. */ }
             throw;
         }
     }

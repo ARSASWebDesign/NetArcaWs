@@ -14,6 +14,27 @@ Los snapshots se descargaron el 2026-10-06 desde los WSDL públicos indicados. S
 
 ## Decisiones de generación y diferencias de entorno
 
+### WSCPE: Carta de Porte Electrónica (2026-10-06)
+
+| Contrato | Fuente QA | Fuente producción | SHA-256 QA | SHA-256 producción |
+|---|---|---|---|---|
+| WSCPE | `https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap?wsdl` | `https://cpea-ws.afip.gob.ar/wscpe/services/soap?wsdl` | `23dc7d94985537f7cc8a0cec2a95c57118262ffeb335c4db424429da6b6c7759` | `9d85d6b60b7a49e18ea7610e9845fa69a0c7c822e72bab698ff7b820d087bce3` |
+
+Ambos snapshots exponen 75 operaciones, 341 tipos complejos y 150 elementos
+globales, sin imports XSD ni alternativas `xs:choice`. Los DTO y el cliente
+se generan del contrato de producción. El namespace contractual es
+`https://serviciosjava.afip.gob.ar/wscpe/`; los elementos locales están sin
+namespace. La autenticación usa `auth/token`, `auth/sign` y
+`auth/cuitRepresentada`, aunque algunos ejemplos del manual muestran `cuit`.
+El binding WSDL determina los nombres que se envían. `dummy` no tiene partes
+de entrada: se envía el cuerpo SOAP vacío y se recibe `DummyResp/respuesta`.
+
+Se consultó el [manual oficial WSCPE v2.2.1, revisión 4.7.20 del 22/07/2026](https://www.arca.gob.ar/ws/documentos/manual-wscpe.pdf),
+SHA-256 `3b1e4da2850c38cf9c7cae97636d91a7cb4ddb97260b6be73cf9f3188674af0e`.
+Los hosts `.afip.gob.ar` de la tabla entregaron XML con TLS válido; los alias
+`.arca.gob.ar` consultados entregaron HTML y no se adoptaron como contrato.
+No se realizaron operaciones autenticadas de negocio con estos snapshots.
+
 ### WSCDC y WSFECred (2026-10-06)
 
 | Contrato | Fuente QA | Fuente producción | SHA-256 QA | SHA-256 producción |
