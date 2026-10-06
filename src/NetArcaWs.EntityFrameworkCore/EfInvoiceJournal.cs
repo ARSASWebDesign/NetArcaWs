@@ -34,6 +34,27 @@ public sealed class EfInvoiceJournal<TContext> : IInvoiceJournal where TContext 
     {
         Validate(submission);
         EnsureServiceEnabled(submission.Service);
+        try
+        {
+            return await ExecuteWithContentionRetryAsync(
+                token => PrepareAttemptAsync(submission, token), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (IsConstraintFailure(exception))
+        {
+            // The failed attempt has unwound and disposed its transaction/context before this fresh read.
+            InvoiceOperation? winner = await ExecuteWithContentionRetryAsync(
+                token => FindAsync(submission.TenantId, submission.IdempotencyKey, token), cancellationToken).ConfigureAwait(false);
+            if (winner is not null)
+            {
+                if (winner.Submission == submission) return winner;
+                throw new InvoiceConflictException("The idempotency key is already bound to a different immutable submission.");
+            }
+            throw new InvoiceConflictException("The fiscal identity, remote request ID, or unresolved fiscal series is already reserved.");
+        }
+    }
+
+    private async Task<InvoiceOperation> PrepareAttemptAsync(InvoiceSubmission submission, CancellationToken cancellationToken)
+    {
         await using TContext context = await CreateContextAsync(cancellationToken).ConfigureAwait(false);
         await using IDbContextTransaction transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken).ConfigureAwait(false);
         (string tenantHash, string keyHash) = GetOperationKeys(submission.TenantId, submission.IdempotencyKey);
@@ -56,15 +77,8 @@ public sealed class EfInvoiceJournal<TContext> : IInvoiceJournal where TContext 
         var operation = CreateEntity(submission, clock.GetUtcNow());
         context.Add(reservation);
         context.Add(operation);
-        try
-        {
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (DbUpdateException ex) when (IsConstraintFailure(ex))
-        {
-            throw new InvoiceConflictException("The fiscal identity, remote request ID, or unresolved fiscal series is already reserved.");
-        }
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return ToOperation(operation);
     }
 
@@ -74,6 +88,20 @@ public sealed class EfInvoiceJournal<TContext> : IInvoiceJournal where TContext 
         Validate(replacement);
         EnsureServiceEnabled(replacement.Service);
         if (expectedVersion < 0) throw new ArgumentOutOfRangeException(nameof(expectedVersion));
+        try
+        {
+            return await ExecuteWithContentionRetryAsync(
+                token => ReviseRejectedAttemptAsync(replacement, expectedVersion, token), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (IsConstraintFailure(exception))
+        {
+            throw new InvoiceConflictException("The revised fiscal identity, remote request ID, or series is already reserved.");
+        }
+    }
+
+    private async Task<InvoiceOperation> ReviseRejectedAttemptAsync(InvoiceSubmission replacement, long expectedVersion,
+        CancellationToken cancellationToken)
+    {
         await using TContext context = await CreateContextAsync(cancellationToken).ConfigureAwait(false);
         await using IDbContextTransaction transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken).ConfigureAwait(false);
         (string tenantHash, string keyHash) = GetOperationKeys(replacement.TenantId, replacement.IdempotencyKey);
@@ -118,9 +146,7 @@ public sealed class EfInvoiceJournal<TContext> : IInvoiceJournal where TContext 
                 .SetProperty(x => x.AuthorizationCode, (string?)null)
                 .SetProperty(x => x.ResponseXml, (string?)null), cancellationToken).ConfigureAwait(false);
         if (changed != 1) throw new InvoiceConflictException("The rejected invoice changed while its revision was being saved.");
-        try { await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false); }
-        catch (DbUpdateException ex) when (IsConstraintFailure(ex))
-        { throw new InvoiceConflictException("The revised fiscal identity, remote request ID, or series is already reserved."); }
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return new InvoiceOperation(replacement, InvoiceState.Prepared, checked(previous.Version + 1), previous.Attempt);
     }
@@ -180,6 +206,13 @@ public sealed class EfInvoiceJournal<TContext> : IInvoiceJournal where TContext 
     {
         ValidateIdentifier(tenantId, nameof(tenantId)); ValidateIdentifier(idempotencyKey, nameof(idempotencyKey));
         if (leaseDuration <= TimeSpan.Zero || leaseDuration > TimeSpan.FromMinutes(30)) throw new ArgumentOutOfRangeException(nameof(leaseDuration));
+        return await ExecuteWithContentionRetryAsync(
+            token => TryAcquireAttemptAsync(tenantId, idempotencyKey, leaseDuration, reconciliation, token), cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<InvoiceLease?> TryAcquireAttemptAsync(string tenantId, string idempotencyKey, TimeSpan leaseDuration,
+        bool reconciliation, CancellationToken cancellationToken)
+    {
         await using TContext context = await CreateContextAsync(cancellationToken).ConfigureAwait(false);
         await using IDbContextTransaction transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken).ConfigureAwait(false);
         (string tenantHash, string keyHash) = GetOperationKeys(tenantId, idempotencyKey);
@@ -218,6 +251,13 @@ public sealed class EfInvoiceJournal<TContext> : IInvoiceJournal where TContext 
     {
         ArgumentNullException.ThrowIfNull(lease); ArgumentNullException.ThrowIfNull(decision);
         ValidateDecision(decision);
+        return await ExecuteWithContentionRetryAsync(
+            token => CompleteAttemptAsync(lease, decision, token), cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<InvoiceOperation> CompleteAttemptAsync(InvoiceLease lease, InvoiceDecision decision,
+        CancellationToken cancellationToken)
+    {
         InvoiceSubmission identity = lease.Operation.Submission;
         await using TContext context = await CreateContextAsync(cancellationToken).ConfigureAwait(false);
         await using IDbContextTransaction transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken).ConfigureAwait(false);
@@ -226,8 +266,14 @@ public sealed class EfInvoiceJournal<TContext> : IInvoiceJournal where TContext 
             .SingleOrDefaultAsync(x => x.TenantHash == tenantHash && x.KeyHash == keyHash, cancellationToken).ConfigureAwait(false);
         if (current is null) throw new KeyNotFoundException("Invoice operation not found.");
         EnsureIdentifierMatch(current, identity.TenantId, identity.IdempotencyKey);
-        // An already-owned SOAP call still needs to record its result after a startup allowlist change.
         InvoiceOperation stored = ToOperation(current);
+        if (stored.Submission == identity && stored.Version == lease.Version + 1 &&
+            stored.State == decision.State && stored.AuthorizationCode == decision.AuthorizationCode &&
+            stored.ResponseXml == decision.ResponseXml)
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return stored;
+        }
         long now = clock.GetUtcNow().ToUnixTimeMilliseconds();
         if (stored.Submission != identity || stored.Version != lease.Version ||
             stored.State is not (InvoiceState.Submitting or InvoiceState.Reconciling) ||
@@ -371,8 +417,39 @@ public sealed class EfInvoiceJournal<TContext> : IInvoiceJournal where TContext 
     }
 
     private static bool IsConstraintFailure(Exception exception) =>
-        exception.InnerException is SqliteException { SqliteErrorCode: 19 } ||
-        exception.InnerException is DbException dbException && dbException.SqlState is "23000" or "23505";
+        Exceptions(exception).Any(current => current is SqliteException { SqliteErrorCode: 19 } ||
+            current is DbException { SqlState: "23000" or "23505" });
+
+    private static bool IsContentionFailure(Exception exception) => Exceptions(exception).Any(current =>
+        current is SqliteException sqlite && (sqlite.SqliteErrorCode & 0xff) is 5 or 6 ||
+        current is DbException { SqlState: "40001" or "40P01" or "41000" } ||
+        current is DbException dbException && IsMySqlLockWaitTimeout(dbException));
+
+    private static bool IsMySqlLockWaitTimeout(DbException exception)
+    {
+        if (exception.GetType().FullName != "MySqlConnector.MySqlException" || exception.SqlState != "HY000") return false;
+        return exception.GetType().GetProperty("Number")?.GetValue(exception) is int number && number == 1205;
+    }
+
+    private static IEnumerable<Exception> Exceptions(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+            yield return current;
+    }
+
+    private static async Task<TResult> ExecuteWithContentionRetryAsync<TResult>(
+        Func<CancellationToken, Task<TResult>> operation, CancellationToken cancellationToken)
+    {
+        const int maximumAttempts = 3;
+        for (int attempt = 1; ; attempt++)
+        {
+            try { return await operation(cancellationToken).ConfigureAwait(false); }
+            catch (Exception exception) when (attempt < maximumAttempts && IsContentionFailure(exception))
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(10 * attempt), cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
 
     private static void Validate(InvoiceSubmission submission)
     {

@@ -1,6 +1,8 @@
 using AwesomeAssertions;
+using System.Data.Common;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using NetArcaWs.EntityFrameworkCore;
@@ -42,10 +44,11 @@ public sealed class EfInvoiceJournalTests
         using var database = new JournalDatabase();
         InvoiceSubmission original = Submission(remoteId: 9876);
         await database.Journal.PrepareAsync(original, cancellationToken);
-        InvoiceSubmission keyCase = original with { TenantId = "Tenant-A", IdempotencyKey = original.IdempotencyKey,
+        InvoiceSubmission keyCase = original with { TenantId = "Tenant-A", IdempotencyKey = original.IdempotencyKey.ToUpperInvariant(),
             Identity = Identity(cuit: 20999888777) };
         InvoiceOperation caseDistinct = await database.Journal.PrepareAsync(keyCase, cancellationToken);
         caseDistinct.Submission.TenantId.Should().Be("Tenant-A");
+        caseDistinct.Submission.IdempotencyKey.Should().Be(original.IdempotencyKey.ToUpperInvariant());
 
         Func<Task> idemConflict = () => database.Journal.PrepareAsync(original with { Payload = "different" }, cancellationToken);
         await idemConflict.Should().ThrowAsync<InvoiceConflictException>();
@@ -53,7 +56,7 @@ public sealed class EfInvoiceJournalTests
         InvoiceLease originalLease = (await database.Journal.TryAcquireAsync(original.TenantId, original.IdempotencyKey,
             TimeSpan.FromMinutes(1), reconciliation: false, cancellationToken))!;
         await database.Journal.CompleteAsync(originalLease, new InvoiceDecision(InvoiceState.Authorized, "123456"), cancellationToken);
-        InvoiceSubmission duplicateFiscal = original with { TenantId = "tenant-b", IdempotencyKey = "other" };
+        InvoiceSubmission duplicateFiscal = original with { TenantId = "tenant-b", IdempotencyKey = "other", Service = "wsfex" };
         Func<Task> fiscalConflict = () => database.Journal.PrepareAsync(duplicateFiscal, cancellationToken);
         await fiscalConflict.Should().ThrowAsync<InvoiceConflictException>();
 
@@ -88,6 +91,74 @@ public sealed class EfInvoiceJournalTests
     }
 
     [Fact]
+    public async Task Prepare_concurrent_identical_idempotency_requests_return_the_same_winner()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new JournalDatabase();
+        InvoiceSubmission submission = Submission();
+
+        using var start = new ManualResetEventSlim();
+        Task<InvoiceOperation> first = Task.Run(async () =>
+        {
+            start.Wait(cancellationToken);
+            return await database.Journal.PrepareAsync(submission, cancellationToken);
+        }, cancellationToken);
+        Task<InvoiceOperation> second = Task.Run(async () =>
+        {
+            start.Wait(cancellationToken);
+            return await database.Journal.PrepareAsync(submission, cancellationToken);
+        }, cancellationToken);
+        start.Set();
+        InvoiceOperation[] results = await Task.WhenAll(first, second);
+
+        results.Should().HaveCount(2);
+        results[0].Should().BeEquivalentTo(results[1]);
+        (await database.Journal.FindAsync(submission.TenantId, submission.IdempotencyKey, cancellationToken))
+            .Should().BeEquivalentTo(results[0]);
+    }
+
+    [Fact]
+    public async Task Rejected_revision_racing_next_invoice_prepare_keeps_one_series_reservation()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new JournalDatabase();
+        InvoiceSubmission submission = Submission(remoteId: 4567);
+        await database.Journal.PrepareAsync(submission, cancellationToken);
+        InvoiceLease lease = (await database.Journal.TryAcquireAsync(submission.TenantId, submission.IdempotencyKey,
+            TimeSpan.FromMinutes(1), reconciliation: false, cancellationToken))!;
+        InvoiceOperation rejected = await database.Journal.CompleteAsync(lease,
+            new InvoiceDecision(InvoiceState.Rejected, ResponseXml: "<rejected />"), cancellationToken);
+        InvoiceSubmission revision = submission with { Payload = "<invoice>corrected</invoice>" };
+        InvoiceSubmission next = Submission(id: "next", identity: submission.Identity with { VoucherNumber = 2 });
+
+        Task<InvoiceOperation> revise = database.Journal.ReviseRejectedAsync(revision, rejected.Version, cancellationToken);
+        Task<InvoiceOperation> prepare = database.Journal.PrepareAsync(next, cancellationToken);
+        Task<InvoiceOperation>[] attempts = [revise, prepare];
+        try { await Task.WhenAll(attempts); }
+        catch (InvoiceConflictException) { }
+
+        (revise.IsCompletedSuccessfully ^ prepare.IsCompletedSuccessfully).Should().BeTrue();
+        IReadOnlyList<InvoiceOperation> pending = await database.Journal.ListPendingAsync(submission.TenantId, cancellationToken: cancellationToken);
+        pending.Should().ContainSingle();
+        (await database.Journal.ListRevisionsAsync(submission.TenantId, submission.IdempotencyKey, cancellationToken))
+            .Count.Should().Be(revise.IsCompletedSuccessfully ? 1 : 0);
+    }
+
+    [Fact]
+    public async Task Prepare_retries_a_known_serialization_failure_with_a_fresh_database_attempt()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var transient = new FailFirstReadWithSerializationFailure();
+        using var database = new JournalDatabase(interceptor: transient);
+        InvoiceSubmission submission = Submission();
+
+        InvoiceOperation prepared = await database.Journal.PrepareAsync(submission, cancellationToken);
+
+        prepared.Submission.Should().BeEquivalentTo(submission);
+        transient.ReadAttempts.Should().BeGreaterThan(1);
+    }
+
+    [Fact]
     public async Task Lease_expiry_fences_stale_completion_and_only_reconciliation_can_resume()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -107,6 +178,23 @@ public sealed class EfInvoiceJournalTests
         await stale.Should().ThrowAsync<InvalidOperationException>();
         (await database.Journal.CompleteAsync(second,
             new InvoiceDecision(InvoiceState.Authorized, "123456"), cancellationToken)).State.Should().Be(InvoiceState.Authorized);
+    }
+
+    [Fact]
+    public async Task Complete_replay_returns_the_committed_result_after_an_uncertain_commit_response()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new JournalDatabase();
+        InvoiceSubmission submission = Submission();
+        await database.Journal.PrepareAsync(submission, cancellationToken);
+        InvoiceLease lease = (await database.Journal.TryAcquireAsync(submission.TenantId, submission.IdempotencyKey,
+            TimeSpan.FromMinutes(1), reconciliation: false, cancellationToken))!;
+        var decision = new InvoiceDecision(InvoiceState.Authorized, "123456", "<authorized />");
+
+        InvoiceOperation committed = await database.Journal.CompleteAsync(lease, decision, cancellationToken);
+        InvoiceOperation replay = await database.Journal.CompleteAsync(lease, decision, cancellationToken);
+
+        replay.Should().BeEquivalentTo(committed);
     }
 
     [Fact]
@@ -320,13 +408,18 @@ public sealed class EfInvoiceJournalTests
     private sealed class JournalDatabase : IDisposable
     {
         private readonly ServiceProvider provider;
-        public JournalDatabase(string? path = null, NetArcaWsModelOptions? modelOptions = null)
+        public JournalDatabase(string? path = null, NetArcaWsModelOptions? modelOptions = null,
+            IInterceptor? interceptor = null)
         {
             Path = path ?? System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"netarcaws-ef-{Guid.NewGuid():N}.sqlite3");
             Clock = new AdjustableTimeProvider(DateTimeOffset.UtcNow);
             ModelOptions = modelOptions ?? Options(ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca);
             var services = new ServiceCollection();
-            services.AddDbContextFactory<ArcaWsDbContext>(options => options.UseSqlite($"Data Source={Path};Pooling=False"));
+            services.AddDbContextFactory<ArcaWsDbContext>(options =>
+            {
+                options.UseSqlite($"Data Source={Path};Pooling=False");
+                if (interceptor is not null) options.AddInterceptors(interceptor);
+            });
             services.AddSingleton<TimeProvider>(Clock);
             services.AddNetArcaWsEntityFrameworkStores<ArcaWsDbContext>(ModelOptions);
             provider = services.BuildServiceProvider();
@@ -346,6 +439,25 @@ public sealed class EfInvoiceJournalTests
             SqliteConnection.ClearAllPools();
             if (File.Exists(Path)) File.Delete(Path);
         }
+    }
+
+    private sealed class FailFirstReadWithSerializationFailure : DbCommandInterceptor
+    {
+        private int readAttempts;
+        public int ReadAttempts => Volatile.Read(ref readAttempts);
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref readAttempts) == 1)
+                throw new SyntheticDbException("40001");
+            return ValueTask.FromResult(result);
+        }
+    }
+
+    private sealed class SyntheticDbException(string sqlState) : System.Data.Common.DbException("synthetic transaction contention")
+    {
+        public override string? SqlState => sqlState;
     }
 
     private sealed class AdjustableTimeProvider(DateTimeOffset now) : TimeProvider
