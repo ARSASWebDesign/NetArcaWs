@@ -14,7 +14,7 @@ var deploymentServices = new ServiceCollection();
 deploymentServices.AddNetArcaWsSqliteMigrations(connectionString, modelOptions);
 ```
 
-For MySQL, pass a `MySqlServerVersion`; for MariaDB, pass a `MariaDbServerVersion`. Then resolve `INetArcaWsMigrator` from the deployment host's provider:
+Resolve `INetArcaWsMigrator` from the deployment host's provider:
 
 ```csharp
 INetArcaWsMigrator migrator = deploymentProvider.GetRequiredService<INetArcaWsMigrator>();
