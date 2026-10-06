@@ -6,13 +6,13 @@ manual enlazado no significa que NetArcaWs ya tenga ese cliente.
 
 Las superficies SOAP incluidas hoy son los contratos ARCA de WSFEv1, WSFEXv1,
 WSMTXCA, Padrón A4, Constancia (endpoint A5 histórico), A10, A13, WSCDC y
-WSFECred. El inventario de métodos de PyAfipWs ayuda a
+WSFECred y WSCPE. El inventario de métodos de PyAfipWs ayuda a
 entender modelos, agregadores y compatibilidad, pero no recorta ni reemplaza los
 contratos oficiales. Las operaciones enumeradas debajo vienen de los WSDL
 descargados el 2026-10-06; volver a verificar manual/versiones y bindings antes
 de usar para un release.
 
-En QA real, el 2026-10-06, una corrida respondió los nueve probes `Dummy` y
+En QA real, el 2026-10-06, una corrida previa a WSCPE respondió los nueve probes `Dummy` y
 omitió dos pruebas autenticadas por falta de
 certificados. La ejecución no acredita autorización fiscal.
 
@@ -31,14 +31,15 @@ certificados. La ejecución no acredita autorización fiscal.
 | Padrón A13 | Hito 5 verificado: 4 métodos | Incluye `getIdPersonaListByDocumento`; distinto de `ws_sr_padron.py` upstream |
 | WSCDC | 6 métodos del WSDL fijado | Constatación, tablas de referencia y `ComprobanteDummy`; la constatación no autoriza ni emite comprobantes |
 | WSFECred | 21 métodos del WSDL fijado | Gestión posterior de FCE MiPyME y cuentas corrientes; separado de autorización WSFE/WSMTXCA y sin orquestación `SafeInvoiceService` |
+| WSCPE | 75 métodos del WSDL fijado | Cartas de porte, contingencias, destinos, estados y catálogos; sin diario automático ni homologación autenticada |
 | Health checks | Implementados para endpoints SOAP declarados | Comprueban disponibilidad del servicio, no autorización fiscal |
 | CLI certificados | Implementada para generar CSR e inspeccionar localmente | No emite certificado ni conecta con ARCA |
 
-La suma de los nueve contratos es 108 operaciones. La suite cotejó las
-operaciones contra WSDL y verificó 219 tipos raíz XML en round-trip; 30 tipos
+La suma de los diez contratos es 183 operaciones. La suite cotejó las
+operaciones contra WSDL y verificó 369 tipos raíz XML en round-trip; 56 tipos
 con campos `DateTime` conservaron sus valores. Los snapshots QA/producción de
-WSCDC y WSFECred coinciden en sus schemas.
-La corrida real de QA respondió los nueve probes `Dummy`; las dos pruebas
+WSCDC, WSFECred y WSCPE coinciden en sus schemas.
+La corrida real de QA anterior a WSCPE respondió los nueve probes `Dummy`; las dos pruebas
 autenticadas se omitieron por falta de certificados. Esto no acredita
 autorización fiscal. Hitos 2–6 se verificaron con build/suite local. La
 documentación de operaciones describe contratos, no amplía automáticamente la
@@ -63,6 +64,7 @@ inventario enlazado debajo.
 | Padrón A13 | [Referencia completa](../reference/operations/padrona13.md) | Sin equivalente en ese módulo upstream |
 | WSCDC | [Referencia completa](../reference/operations/wscdc.md), [guía](WSCDC.md) | `wscdc.py` |
 | WSFECred | [Referencia completa](../reference/operations/wsfecred.md), [guía](WSFECred.md) | `wsfecred.py` |
+| WSCPE | [Referencia completa](../reference/operations/wscpe.md), [guía](WSCPE.md) | `wscpe.py`; la cobertura .NET sigue las 75 operaciones actuales del WSDL |
 
 El [inventario del proyecto original](../reference/upstream-inventory.md)
 registra fuentes fijadas y límites de adaptación. El seguimiento priorizado de

@@ -42,10 +42,10 @@ el builder de DI. No hay bypass TLS ni ejecución de procesos externos.
 ## Fachadas fiscales y contratos de servicio
 
 El repositorio contiene modelos públicos XML y fachadas generadas desde los
-WSDL versionados. El inventario actual es de 108 operaciones: WSFEv1 22,
+WSDL versionados. El inventario actual es de 183 operaciones: WSFEv1 22,
 WSFEXv1 19, WSMTXCA 27, Padrón A4 2, Constancia por ruta A5 5, A10 2, A13 4,
-WSCDC 6 y WSFECred 21. Están en `NetArcaWs.Contracts.*` y
-`NetArcaWs.Services`; `AddNetArcaWs` registra las nueve fachadas de negocio y
+WSCDC 6, WSFECred 21 y WSCPE 75. Están en `NetArcaWs.Contracts.*` y
+`NetArcaWs.Services`; `AddNetArcaWs` registra las diez fachadas de negocio y
 `PadronService`. Los requests/responses autenticados son
 tipados 1:1 con los XSD y la llamada recibe `ArcaTenantContext`; el cliente pide
 su ticket a WSAA e inserta la autenticación en una copia serializable del request.
@@ -59,11 +59,12 @@ no cambia la representación SOAP. No se usa WCF: las fachadas usan
 son la fuente reproducible para la generación, no una afirmación de compatibilidad
 con todos los cambios futuros del servicio.
 
-La verificación Release actual tuvo 240 casos, 237 aprobados y 3 omitidos, con
-0 warnings y 0 errors. Las 108 operaciones se cotejaron con sus WSDL y 219 tipos
-raíz XML pasaron round-trip; los 30 tipos con `DateTime` (`xs:date`/`xs:dateTime`)
-conservaron sus valores. Los snapshots QA/producción de WSCDC y WSFECred tienen
-schemas coincidentes. En QA real respondieron 9 probes `Dummy`; 2 pruebas
+La verificación Release actual tuvo 256 casos, 253 aprobados y 3 omitidos, con
+0 warnings y 0 errors. Las 183 operaciones se cotejaron con sus WSDL y 369 tipos
+raíz XML pasaron round-trip; los 56 tipos con `DateTime` (`xs:date`/`xs:dateTime`)
+conservaron sus valores. Los snapshots QA/producción de WSCDC, WSFECred y WSCPE tienen
+schemas coincidentes. En una corrida anterior a WSCPE respondieron 9 probes
+`Dummy` en QA real; 2 pruebas
 autenticadas se omitieron por falta de certificados. La homologación fiscal
 autenticada sigue pendiente.
 
@@ -178,7 +179,7 @@ Cripto, debido al límite de threads del entorno.
 
 La suite validada comprobó CMS y CSR con primitivas independientes de
 verificación, simuló HTTP/SOAP y controló el reloj. La suite Release actual pasó
-237/240 casos (3 omitidos); build con 0 warnings y 0 errors. Los Dummies reales
+253/256 casos (3 omitidos); build con 0 warnings y 0 errors. Los Dummies reales
 en QA comprobaron disponibilidad, no autorización de negocio. La suite de
 homologación autenticada requiere certificados autorizados; compilar y pasar
 tests no demuestra aceptación fiscal. El inventario y las diferencias con Python están documentados en

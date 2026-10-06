@@ -32,6 +32,7 @@ public sealed class ArcaServiceOperationMatrixTests
             new ServiceSpec(new Wsmtxcav1Service(transport, tickets), "wsmtxca", "https://serviciosjava.afip.gob.ar/wsmtxca/services/MTXCAService", 27),
             new ServiceSpec(new WscdcService(transport, tickets), "wscdc", "https://servicios1.afip.gov.ar/WSCDC/service.asmx", 6),
             new ServiceSpec(new WsfecredService(transport, tickets), "wsfecred", "https://serviciosjava.afip.gob.ar/wsfecred/FECredService", 21),
+            new ServiceSpec(new WscpeService(transport, tickets), "wscpe", "https://cpea-ws.afip.gob.ar/wscpe/services/soap", 75),
             new ServiceSpec(new PadronA4Service(transport, tickets), "ws_sr_padron_a4", "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA4", 2),
             new ServiceSpec(new PadronA5Service(transport, tickets), "ws_sr_constancia_inscripcion", "https://aws.arca.gob.ar/sr-padron/webservices/personaServiceA5", 5),
             new ServiceSpec(new PadronA10Service(transport, tickets), "ws_sr_padron_a10", "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA10", 2),
@@ -90,8 +91,8 @@ public sealed class ArcaServiceOperationMatrixTests
             }
         }
 
-        transport.CallCount.Should().Be(108);
-        tickets.CallCount.Should().Be(99, "each service's dummy operation is unauthenticated");
+        transport.CallCount.Should().Be(183);
+        tickets.CallCount.Should().Be(173, "each service's dummy operation is unauthenticated");
     }
 
     [Theory]
@@ -109,6 +110,24 @@ public sealed class ArcaServiceOperationMatrixTests
         transport.LastCall.Endpoint.Should().Be(new Uri(wscdcEndpoint));
         await wsfecred.dummyAsync(environment, TestContext.Current.CancellationToken);
         transport.LastCall.Endpoint.Should().Be(new Uri(wsfecredEndpoint));
+        tickets.CallCount.Should().Be(0, "dummy probes do not authenticate");
+    }
+
+    [Theory]
+    [InlineData(ArcaEnvironment.Homologation, "https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap")]
+    [InlineData(ArcaEnvironment.Production, "https://cpea-ws.afip.gob.ar/wscpe/services/soap")]
+    public async Task Wscpe_dummy_operation_selects_the_configured_environment_endpoint(
+        ArcaEnvironment environment, string expectedEndpoint)
+    {
+        var transport = new RecordingSoapTransport();
+        var tickets = new RecordingArcaTicketProvider(TicketTestData.Create());
+        var service = new WscpeService(transport, tickets);
+
+        await service.dummyAsync(environment, TestContext.Current.CancellationToken);
+
+        transport.LastCall.Endpoint.Should().Be(new Uri(expectedEndpoint));
+        transport.LastCall.Request.Should().BeNull("the pinned CPE WSDL declares an empty dummy request body");
+        transport.LastCall.Action.Should().Be("https://serviciosjava.afip.gob.ar/wscpe/dummy");
         tickets.CallCount.Should().Be(0, "dummy probes do not authenticate");
     }
 

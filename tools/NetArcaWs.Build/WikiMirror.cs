@@ -162,6 +162,7 @@ public static class WikiMirror
         "docs/reference/operations/wsmtxca.md" => "WSMTXCA-Referencia-de-operaciones",
         "docs/reference/operations/wscdc.md" => "WSCDC-Referencia-de-operaciones",
         "docs/reference/operations/wsfecred.md" => "WSFECred-Referencia-de-operaciones",
+        "docs/reference/operations/wscpe.md" => "WSCPE-Referencia-de-operaciones",
         "docs/reference/operations/padrona4.md" => "Padrón-A4-Referencia-de-operaciones",
         "docs/reference/operations/padrona5.md" => "Padrón-A5-Referencia-de-operaciones",
         "docs/reference/operations/padrona10.md" => "Padrón-A10-Referencia-de-operaciones",

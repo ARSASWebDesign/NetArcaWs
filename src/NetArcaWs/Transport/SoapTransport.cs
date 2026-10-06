@@ -97,7 +97,18 @@ public sealed class SoapTransport : ISoapTransport
             response.EnsureSuccessStatusCode();
             try
             {
-                using var reader = body.CreateReader();
+                // XNodeReader cannot decode xs:base64Binary. Re-read the bounded, validated
+                // envelope with a binary-capable reader, preserving ancestor namespace bindings.
+                received.Position = 0;
+                using var reader = XmlReader.Create(received, new XmlReaderSettings
+                {
+                    DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = maxResponseBytes
+                });
+                reader.MoveToContent();
+                reader.ReadStartElement("Envelope", SoapNamespace);
+                while (reader.MoveToContent() == XmlNodeType.Element && !reader.IsStartElement("Body", SoapNamespace))
+                    reader.Skip();
+                reader.ReadStartElement("Body", SoapNamespace);
                 return (TResponse)(new XmlSerializer(typeof(TResponse)).Deserialize(reader)
                     ?? throw new FormatException("Missing SOAP response."));
             }

@@ -13,13 +13,14 @@ builder.Services.AddHealthChecks()
 ```
 
 Se exponen checks para WSAA, WSFEv1, WSFEXv1, WSMTXCA, Padrón A4, A5 histórico
-(Constancia), A10, A13, WSCDC y WSFECred. Cada registro admite entorno, timeout, endpoint
+(Constancia), A10, A13, WSCDC, WSFECred y WSCPE. Cada registro admite entorno, timeout, endpoint
 alternativo y nombre; los probes no reintentan ni cachean y no se ejecutan en
 segundo plano. El host que consume `IHealthCheck` decide frecuencia y alertas.
 
 WSFE/FEX envían su `Dummy` vacío con namespace y SOAPAction del WSDL. Padrón usa
 su `dummy` sin token/sign; MTXCA tiene `dummyRequest` sin partes y SOAPAction del
-binding publicado; WSCDC y WSFECred tienen su `Dummy` independiente, sin ticket.
+binding publicado; WSCDC, WSFECred y WSCPE tienen su `Dummy` independiente, sin ticket.
+WSCPE también envía un cuerpo SOAP vacío, con respuesta `DummyResp/respuesta`.
 Los contratos por operación, namespace, respuesta y fuentes
 están en [healthchecks-contracts.md](Contratos-de-health-checks).
 Los WSDL pueden cambiar: al actualizar fixtures, comprobar contrato desplegado y

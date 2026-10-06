@@ -1,6 +1,6 @@
 # Fuentes de la documentación
 
-Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 47 páginas de contenido y este manifiesto. GitHub muestra un único menú nativo; Home contiene la navegación por temas. Cada página incluye su fuente y reescribe enlaces relativos para navegación de wiki. Los contratos ARCA archivados en el repositorio tienen fecha de snapshot 2026-10-06. La salida refleja el árbol de trabajo. Al publicar, SOURCE_COMMIT en el repositorio wiki registra el SHA de origen. Revisar el mirror antes de publicar.
+Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 49 páginas de contenido y este manifiesto. GitHub muestra un único menú nativo; Home contiene la navegación por temas. Cada página incluye su fuente y reescribe enlaces relativos para navegación de wiki. Los contratos ARCA archivados en el repositorio tienen fecha de snapshot 2026-10-06. La salida refleja el árbol de trabajo. Al publicar, SOURCE_COMMIT en el repositorio wiki registra el SHA de origen. Revisar el mirror antes de publicar.
 
 - `.github/pull_request_template.md` → `Plantilla-de-pull-request`
 - `ARCHITECTURE.md` → `Arquitectura-general`
@@ -24,6 +24,7 @@ Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 47 páginas d
 - `docs/reference/operations/padrona4.md` → `Padrón-A4-Referencia-de-operaciones`
 - `docs/reference/operations/padrona5.md` → `Padrón-A5-Referencia-de-operaciones`
 - `docs/reference/operations/wscdc.md` → `WSCDC-Referencia-de-operaciones`
+- `docs/reference/operations/wscpe.md` → `WSCPE-Referencia-de-operaciones`
 - `docs/reference/operations/wsfecred.md` → `WSFECred-Referencia-de-operaciones`
 - `docs/reference/operations/wsfev1.md` → `WSFEv1-Referencia-de-operaciones`
 - `docs/reference/operations/wsfexv1.md` → `WSFEXv1-Referencia-de-operaciones`
@@ -48,4 +49,5 @@ Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 47 páginas d
 - `docs/wiki/Transporte-SOAP.md` → `Transporte-SOAP`
 - `docs/wiki/WSAA-y-certificados.md` → `WSAA-y-certificados`
 - `docs/wiki/WSCDC.md` → `WSCDC`
+- `docs/wiki/WSCPE.md` → `WSCPE`
 - `docs/wiki/WSFECred.md` → `WSFECred`

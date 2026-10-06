@@ -39,6 +39,10 @@ internal sealed record HealthProbeProfile(Uri Endpoint, string Namespace, string
             ArcaService.Wsfecred => new(production ? ArcaServiceEndpoints.WsfecredProduction : ArcaServiceEndpoints.WsfecredHomologation,
                 "http://ar.gob.afip.wsfecred/FECredService/", "dummy",
                 "http://ar.gob.afip.wsfecred/FECredService/dummy", "dummyResponse", "dummyReturn", "", "", LowerComponents, EmptyBody: true),
+            ArcaService.Wscpe => new(production ? ArcaServiceEndpoints.WscpeProduction : ArcaServiceEndpoints.WscpeHomologation,
+                "https://serviciosjava.afip.gob.ar/wscpe/", "dummy",
+                "https://serviciosjava.afip.gob.ar/wscpe/dummy", "DummyResp", "respuesta",
+                "", "", LowerComponents, EmptyBody: true),
             _ => throw new ArgumentOutOfRangeException(nameof(service))
         };
     }

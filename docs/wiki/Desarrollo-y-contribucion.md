@@ -17,9 +17,9 @@ sin ellas se omite. No guardar credenciales en fixtures, logs o commits y no
 ejecutar prueba productiva.
 
 Verificación registrada el 2026-10-06: build Release con 0 warnings y 0 errores;
-suite con 240 casos (237 aprobados, 3 omitidos). Los tres omitidos corresponden
+suite con 256 casos (253 aprobados, 3 omitidos). Los tres omitidos corresponden
 a credenciales autenticadas no disponibles y a la habilitación opt-in de pruebas
-Dummy. La corrida real de QA aprobó los nueve Dummies y omitió las dos pruebas
+Dummy. La corrida real de QA anterior a WSCPE aprobó los nueve Dummies y omitió las dos pruebas
 autenticadas. No se ejecutaron operaciones fiscales autenticadas con credenciales
 autorizadas. NuGet aceptó e indexó ambos paquetes 0.5.0 mediante OIDC. Ver
 [publicación y recuperación de releases](../releases.md).

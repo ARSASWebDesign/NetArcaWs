@@ -31,6 +31,21 @@ Los manuales de Padrón exceptúan expresamente `dummy` del requisito de enviar 
 
 El endpoint real conserva el sufijo `personaServiceA5`, pero el catálogo y manual actuales lo presentan como **WS de Constancia de Inscripción**, antes llamado `ws_sr_padron_a5`; el `service` que debe enviarse a WSAA es `ws_sr_constancia_inscripcion`. No confundir el nombre histórico de endpoint `A5` con la identidad actual del servicio. El manual vigente también documenta `getPersona_v2` y la incorporación opcional de `fechaSolicitud` en `caracterizacion`.
 
+### WSCPE: Carta de Porte Electrónica
+
+El health check opt-in `AddWscpeHealthCheck` usa el `dummy` del WSDL fijado,
+sin ticket WSAA. Homologación:
+`https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap`; producción:
+`https://cpea-ws.afip.gob.ar/wscpe/services/soap`.
+El cuerpo SOAP está vacío y `SOAPAction` es
+`https://serviciosjava.afip.gob.ar/wscpe/dummy`. El wrapper de respuesta
+es `DummyResp`, namespace `https://serviciosjava.afip.gob.ar/wscpe/`.
+Dentro, `respuesta` contiene `appserver`, `authserver` y `dbserver`; estos
+cuatro elementos locales no tienen namespace. Se exige `OK` en todos los
+componentes. El resultado no prueba habilitación de una CUIT para emitir CPE.
+Fuentes: [WSDL de homologación](https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap?wsdl)
+y [procedencia de contratos](Procedencia-de-contratos-SOAP).
+
 ## WSAA no ofrece un método `dummy`
 
 WSAA publica `LoginCms` en `https://wsaahomo.afip.gov.ar/ws/services/LoginCms` (homologación) y `https://wsaa.afip.gov.ar/ws/services/LoginCms` (producción), con operación SOAP `loginCms` y entrada CMS (`in0`) que contiene el TRA firmado. No hay operación `dummy` o health anónimo en el WSDL. Un GET de `?WSDL` sirve únicamente para comprobar resolución/conectividad HTTP y disponibilidad del contrato; no valida el método `loginCms`, certificados, autorización ni salud de servicios dependientes. No enviar CMS ni realizar llamadas en una comprobación de disponibilidad sin credenciales/configuración explícitas.

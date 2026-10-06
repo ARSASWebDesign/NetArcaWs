@@ -4,21 +4,22 @@
 
 Port .NET 10 de [PyAfipWs](https://github.com/reingart/pyafipws), de Mariano
 Reingart. Licencia **LGPL-3.0-or-later**. Además de WSAA y health checks opt-in,
-el código contiene contratos tipados y fachadas de transporte para 108
-operaciones SOAP de nueve contratos ARCA: WSFEv1 (22), WSFEXv1 (19), WSMTXCA
+el código contiene contratos tipados y fachadas de transporte para 183
+operaciones SOAP de diez contratos ARCA: WSFEv1 (22), WSFEXv1 (19), WSMTXCA
 (27), Padrón A4 (2), Constancia en la ruta histórica A5 (5), A10 (2), A13 (4),
-WSCDC (6) y WSFECred (21).
+WSCDC (6), WSFECred (21) y WSCPE (75).
 Los contratos y las fachadas de Hitos 2–5, su suite, mapeos QName/action y
 roundtrips de serialización fueron verificados. Esto no afirma paridad funcional
 completa con el repositorio Python ni homologación de operaciones autenticadas.
 
 Verificación registrada el 2026-10-06: build Release con 0 warnings y 0 errores;
-240 casos de suite, 237 aprobados y 3 omitidos. Se verificaron las 108
-operaciones contra sus WSDL y 219 tipos raíz XML en round-trip; los 30 tipos
+256 casos de suite, 253 aprobados y 3 omitidos. Se verificaron las 183
+operaciones contra sus WSDL y 369 tipos raíz XML en round-trip; los 56 tipos
 con campos `DateTime` (`xs:date` y `xs:dateTime`) conservaron sus valores. Los
-snapshots QA/producción de WSCDC y WSFECred coinciden en sus schemas. En QA real,
+snapshots QA/producción de WSCDC, WSFECred y WSCPE coinciden en sus schemas. En QA real,
 los nueve probes `Dummy` respondieron y dos pruebas autenticadas se omitieron
-por falta de certificados. Los Dummies prueban disponibilidad, no autorización
+por falta de certificados. Esa corrida precede a WSCPE; su nuevo Dummy solo
+se probó con SOAP simulado en este bloque. Los Dummies prueban disponibilidad, no autorización
 fiscal.
 
 ## Extras y adaptaciones propias respecto de PyAfipWs
@@ -42,10 +43,10 @@ contrastan con el [upstream](https://github.com/reingart/pyafipws) y la
 | Manejo de recursos y errores | Certificados importados liberados por operación, claves PFX efímeras donde se soportan, XML sin DTD, límites configurables de 4 MiB para request/response y timeout de lectura; secretos ocultos en `ToString` |
 | Validación propia del port | xUnit/AwesomeAssertions, SOAP simulado, pruebas de firmas y aislamiento concurrente entre tenants, suite separada de homologación y CI de build/test/pack/instalación de la CLI |
 | Arquitectura trazable | ADR de certificados en memoria y multitenancy; límites y equivalencias documentados |
-| Diario fiscal y coordinación durable | `SafeInvoiceService` + `IInvoiceJournal` / `InvoiceCoordinator` ofrecen autorización unitaria y reconciliación exacta en WSFE/WSFEX/WSMTXCA; implementación y suite local verificadas. No orquestan escrituras WSFECred. SQLite sirve a procesos de un host, no NFS ni multi-host; sin worker ni reenvío de estados inciertos |
-| Clientes SOAP por contrato ARCA | 108 operaciones en nueve fachadas; sin WCF. Los siete contratos anteriores se verificaron contra sus snapshots; WSCDC y WSFECred se generan desde snapshots de QA/producción coincidentes. La homologación fiscal autenticada se informa aparte |
+| Diario fiscal y coordinación durable | `SafeInvoiceService` + `IInvoiceJournal` / `InvoiceCoordinator` ofrecen autorización unitaria y reconciliación exacta en WSFE/WSFEX/WSMTXCA; implementación y suite local verificadas. No orquestan escrituras WSFECred ni WSCPE. SQLite sirve a procesos de un host, no NFS ni multi-host; sin worker ni reenvío de estados inciertos |
+| Clientes SOAP por contrato ARCA | 183 operaciones en diez fachadas; sin WCF. Los siete contratos anteriores se verificaron contra sus snapshots; WSCDC, WSFECred y WSCPE se generan desde snapshots de QA/producción coincidentes. La homologación fiscal autenticada se informa aparte |
 | Seguridad de contribuciones y releases | Revisión CODEOWNER, CI/CodeQL/dependencias, tags protegidos y publicación automática con OIDC; [controles y límites](Seguridad-y-publicacion) |
-| Wiki integral del repositorio | [Wiki publicada](https://github.com/ARSASWebDesign/NetArcaWs/wiki); catálogo por servicio, referencia de 108 operaciones, guías WSCDC/WSFECred, ejemplos compilables e inventario upstream trazable |
+| Wiki integral del repositorio | [Wiki publicada](https://github.com/ARSASWebDesign/NetArcaWs/wiki); catálogo por servicio, referencia de 183 operaciones, guías WSCDC/WSFECred/WSCPE, ejemplos compilables e inventario upstream trazable |
 
 Ver las decisiones de [multitenancy](Decisi%C3%B3n-2-Contexto-multitenant),
 [certificados en memoria](Decisi%C3%B3n-3-Certificados-en-memoria) y
@@ -58,7 +59,7 @@ El código generado ofrece una operación async por cada operación de los WSDL
 versionados. Los requests y responses son contratos tipados 1:1 con esos
 schemas; las llamadas autenticadas reciben un `ArcaTenantContext` y
 `CancellationToken`, y las operaciones `Dummy` toman el ambiente sin obtener
-ticket. La suite validó los mapeos de las 108 operaciones; 219 tipos raíz XML se
+ticket. La suite validó los mapeos de las 183 operaciones; 369 tipos raíz XML se
 comprobaron en round-trip. No se ejecutaron llamadas autenticadas de negocio en
 homologación por falta de certificados autorizados.
 
@@ -73,7 +74,8 @@ homologación por falta de certificados autorizados.
 | `PadronA13Service` | 4 | `dummy`, `getIdPersonaListByDocumento`, `getPersona`, `getPersonaV2` |
 | `WscdcService` | 6 | Constatación de comprobantes, modalidades, tablas de tipos y `ComprobanteDummy` |
 | `WsfecredService` | 21 | Ciclo posterior FCE MiPyME, cuentas corrientes, estados, consultas y `dummy` |
-| **Total** | **108** | Nueve contratos de negocio versionados; WSAA es autenticación compartida y no se cuenta aquí |
+| `WscpeService` | 75 | Carta de Porte Electrónica: automotor, ferrocarril, derivados granarios, ductos, destinos, contingencias y catálogos |
+| **Total** | **183** | Diez contratos de negocio versionados; WSAA es autenticación compartida y no se cuenta aquí |
 
 Las solicitudes y respuestas se derivan de los WSDL de producción fijados en
 [`docs/reference/contracts`](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/contracts), cotejados con los
@@ -87,8 +89,13 @@ solo todo el ciclo de Factura de Crédito Electrónica MiPyME. `WsfecredService`
 cubre ese contrato posterior, pero sus escrituras no están integradas con
 `SafeInvoiceService` ni con el diario. La API de servicio está disponible en
 `NetArcaWs.Services`; `AddNetArcaWs` registra WSAA, el transporte compartido,
-las nueve fachadas de negocio y la fachada agrupadora
+las diez fachadas de negocio y la fachada agrupadora
 `PadronService`.
+
+La [guía de WSCPE](WSCPE) explica el uso multitenant y las
+75 operaciones del contrato vigente. Las escrituras de cartas de porte tampoco
+están integradas con `SafeInvoiceService`: la aplicación debe registrar la
+intención y consultar el estado remoto ante una respuesta incierta.
 
 Ejemplo de consulta WSFEv1 por DI. La aplicación resuelve y autoriza `tenant`
 antes de construirlo; el método obtiene el ticket para esa llamada.

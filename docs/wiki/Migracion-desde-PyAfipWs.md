@@ -12,7 +12,7 @@ La matriz de archivos, páginas y alcance está en [Inventario upstream](../refe
 
 NetArcaWs implementa seis familias de servicio del alcance del port:
 WSFEv1, WSFEXv1, WSMTXCA y Padrón, que agrupa A4, Constancia (endpoint
-histórico A5), A10, A13, WSCDC y WSFECred. Los nueve contratos abarcan 108 operaciones SOAP según
+histórico A5), A10, A13, WSCDC, WSFECred y WSCPE. Los diez contratos abarcan 183 operaciones SOAP según
 los WSDL fijados en [proveniencia de contratos](../reference/contracts/sources.md).
 La presencia de una clase o contrato tipado no cubre las utilidades, interfaces,
 formatos de entrada/salida, aplicaciones ni servicios adicionales de PyAfipWs.
@@ -24,6 +24,7 @@ formatos de entrada/salida, aplicaciones ni servicios adicionales de PyAfipWs.
 | `wsfexv1.WSFEXv1` | `Wsfexv1Service` / `IWsfexv1Service` | Operaciones WSFEXv1 tipadas; el armado mutable `CrearFactura`/`AgregarItem` se representa con los DTO del contrato. |
 | `wsmtx.WSMTXCA` | `Wsmtxcav1Service` / `IWsmtxcav1Service` | Operaciones WSMTXCA con detalle y DTO tipados. No equivale a las herramientas WSFCE ni al ciclo integral de Factura de Crédito MiPyME. |
 | `wscdc.WSCDC` | `WscdcService` / `IWscdcService` | Constatación y consultas del contrato WSCDC. No emite ni modifica la factura constatada. |
+| `wscpe.WSCPE` | `WscpeService` / `IWscpeService` | Las 75 operaciones actuales de Carta de Porte Electrónica, derivadas del WSDL oficial; incluye modalidades y derivados granarios. Sin diario automático de escrituras. |
 | `wsfecred.WSFECred` | `WsfecredService` / `IWsfecredService` | Gestión posterior de comprobantes FCE MiPyME y cuentas corrientes. Complementa la autorización del comprobante en WSFEv1/WSMTXCA; no es una capacidad de WSMTXCA ni de `SafeInvoiceService`. |
 | `ws_sr_padron.PadronAFIP` (A4) y clase histórica A5 | `PadronService` y clientes `PadronA4Service`, `PadronA5Service`, `PadronA10Service`, `PadronA13Service` | Se implementan los contratos individualmente. La implementación upstream examinada no aporta los contratos A10/A13 actuales; estos se derivan de los WSDL/manuales ARCA versionados. A5 se conserva por la ruta contractual `personaServiceA5`, identificando Constancia con su `service` WSAA vigente. |
 | `rece1.py`, `recex1.py`, `recem.py`, archivos TXT/DBF/CSV y aplicaciones GUI | Sin reemplazo directo | La aplicación .NET debe decidir su propio modelo de negocio, almacenamiento e interfaz. El paquete no replica PyRece/PyFactura, conversores de archivos ni su proceso de emisión por lotes. |
@@ -90,8 +91,8 @@ de entregar datos válidos y de revisar normativa y respuestas ARCA.
 
 ## Lo que requiere una solución propia o sigue fuera del port
 
-- Servicios fuera de las cinco familias indicadas, incluidos WSAA como interfaz
-  COM, WSCT, WSBFE, WSCDC, WSCPE, WSCTG, WSLPG/WSLSP/WSLTV/WSLUM, COT/IIBB,
+- Servicios fuera de los contratos indicados, incluidos WSAA como interfaz
+  COM, WSCT, WSBFE, WSCTG, WSLPG/WSLSP/WSLTV/WSLUM, COT/IIBB,
   SIRE y trazabilidades sectoriales.
 - PyRece/PyFactura, GUI, PDF/QR, correo, códigos de barra, DBF, formatos de lote,
   wrappers ActiveX/COM, DLL, TypeLib, compatibilidad con Visual Basic/FOX/Cobol,

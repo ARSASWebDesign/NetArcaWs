@@ -1,6 +1,6 @@
 namespace NetArcaWs.HealthChecks;
 
-public enum ArcaService { Wsaa, Wsfev1, Wsfexv1, Wsmtxca, PadronA4, PadronA5, PadronA10, PadronA13, Wscdc, Wsfecred }
+public enum ArcaService { Wsaa, Wsfev1, Wsfexv1, Wsmtxca, PadronA4, PadronA5, PadronA10, PadronA13, Wscdc, Wsfecred, Wscpe }
 public enum ArcaEnvironment { Homologation, Production }
 
 public sealed class ArcaHealthCheckOptions

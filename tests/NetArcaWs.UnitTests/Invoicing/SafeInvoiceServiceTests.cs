@@ -320,6 +320,98 @@ public sealed class SafeInvoiceServiceTests
         transport.Calls.Select(call => call.Action).Should().ContainSingle(action => action.EndsWith("/FECompConsultar", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task ResumeAsync_recovers_authorization_after_journal_completion_failure_and_preserves_remote_evidence()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        var transport = new RecordingSoapTransport(call => call.ResponseType == typeof(FecaeSolicitarResponse)
+            ? WsfeResponse("A", "71234567890123")
+            : new FeCompConsultarResponse
+            {
+                FeCompConsultarResult = new FeCompConsultaResponse
+                {
+                    ResultGet = new FeCompConsResponse
+                    {
+                        Concepto = 1, DocTipo = 80, DocNro = CustomerNumber, CbteDesde = 12, CbteHasta = 12,
+                        CbteFch = "20261006", ImpTotal = 121, ImpTotConc = 0, ImpNeto = 100, ImpOpEx = 0,
+                        ImpIva = 21, ImpTrib = 0, MonId = "PES", MonCotiz = 1, PtoVta = 1, CbteTipo = 1,
+                        EmisionTipo = "CAE", Resultado = "A", CodAutorizacion = "71234567890123"
+                    }
+                }
+            });
+        var innerJournal = new SqliteInvoiceJournal(InvoiceTestData.NewDatabasePath(database, "completion-failure"));
+        var journal = new FailAuthorizedCompletionOnceJournal(innerJournal);
+        var coordinator = new InvoiceCoordinator(journal);
+        var service = new SafeInvoiceService(coordinator, new Wsfev1Service(transport,
+            new RecordingArcaTicketProvider(TicketTestData.Create())), new Wsfexv1Service(transport,
+            new RecordingArcaTicketProvider(TicketTestData.Create())), new Wsmtxcav1Service(transport,
+            new RecordingArcaTicketProvider(TicketTestData.Create())));
+
+        Func<Task> initial = () => service.AuthorizeWsfeAsync(CreateTenant(), "journal-failure", WsfeRequest(), cancellationToken);
+        await initial.Should().ThrowAsync<IOException>();
+
+        InvoiceOperation uncertain = (await innerJournal.FindAsync("tenant-safe", "journal-failure", cancellationToken))!;
+        uncertain.State.Should().Be(InvoiceState.Unknown);
+        uncertain.ResponseXml.Should().Contain("71234567890123", "the authorization response is evidence even when its terminal journal write fails");
+
+        InvoiceOperation recovered = await service.ResumeAsync(CreateTenant(), "journal-failure", cancellationToken);
+
+        recovered.State.Should().Be(InvoiceState.Authorized);
+        recovered.AuthorizationCode.Should().Be("71234567890123");
+        transport.CallCount.Should().Be(2);
+        transport.Calls.Select(call => call.Action).Should().ContainSingle(action => action.EndsWith("/FECAESolicitar", StringComparison.Ordinal));
+        transport.Calls.Select(call => call.Action).Should().ContainSingle(action => action.EndsWith("/FECompConsultar", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ResumeAsync_returns_committed_authorization_when_journal_acknowledgement_is_lost()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        var transport = new RecordingSoapTransport(_ => WsfeResponse("A", "71234567890123"));
+        var innerJournal = new SqliteInvoiceJournal(InvoiceTestData.NewDatabasePath(database, "lost-ack"));
+        var service = CreateServiceWithJournal(new CommitThenFailAuthorizedJournal(innerJournal), transport);
+
+        Func<Task> initial = () => service.AuthorizeWsfeAsync(CreateTenant(), "lost-ack", WsfeRequest(), cancellationToken);
+        await initial.Should().ThrowAsync<IOException>().WithMessage("The journal commit succeeded but its acknowledgement was lost.");
+
+        (await innerJournal.FindAsync("tenant-safe", "lost-ack", cancellationToken))!.State.Should().Be(InvoiceState.Authorized);
+        InvoiceOperation recovered = await service.ResumeAsync(CreateTenant(), "lost-ack", cancellationToken);
+
+        recovered.State.Should().Be(InvoiceState.Authorized);
+        recovered.AuthorizationCode.Should().Be("71234567890123");
+        transport.CallCount.Should().Be(1, "a committed authorization is returned from the journal without another SOAP request");
+    }
+
+    [Fact]
+    public async Task ResumeAsync_reconciles_after_both_completion_writes_fail_and_the_submission_lease_expires()
+    {
+        using var database = new TemporaryDatabase();
+        var clock = new AdjustableTimeProvider(DateTimeOffset.UtcNow);
+        var innerJournal = new SqliteInvoiceJournal(InvoiceTestData.NewDatabasePath(database, "double-completion-failure"), clock);
+        var journal = new FailBothCompletionAttemptsJournal(innerJournal);
+        var transport = new RecordingSoapTransport(call => call.ResponseType == typeof(FecaeSolicitarResponse)
+            ? WsfeResponse("A", "71234567890123")
+            : WsfeQueryResponse("71234567890123"));
+        var service = CreateServiceWithJournal(journal, transport, TimeSpan.FromSeconds(1));
+        ArcaTenantContext tenant = CreateTenant();
+
+        Func<Task> initial = () => service.AuthorizeWsfeAsync(tenant, "double-failure", WsfeRequest(), TestContext.Current.CancellationToken);
+        await initial.Should().ThrowAsync<IOException>().WithMessage("The authorization completion failed.");
+        (await innerJournal.FindAsync(tenant.TenantId, "double-failure", TestContext.Current.CancellationToken))!
+            .State.Should().Be(InvoiceState.Submitting);
+
+        clock.Advance(TimeSpan.FromSeconds(2));
+        InvoiceOperation recovered = await service.ResumeAsync(tenant, "double-failure", TestContext.Current.CancellationToken);
+
+        recovered.State.Should().Be(InvoiceState.Authorized);
+        recovered.AuthorizationCode.Should().Be("71234567890123");
+        transport.CallCount.Should().Be(2);
+        transport.Calls.Select(call => call.Action).Should().ContainSingle(action => action.EndsWith("/FECAESolicitar", StringComparison.Ordinal));
+        transport.Calls.Select(call => call.Action).Should().ContainSingle(action => action.EndsWith("/FECompConsultar", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData(false, InvoiceState.Authorized)]
     [InlineData(true, InvoiceState.Conflict)]
@@ -435,6 +527,73 @@ public sealed class SafeInvoiceServiceTests
         var wsfex = new Wsfexv1Service(transport, tickets);
         var wsmtxca = new Wsmtxcav1Service(transport, tickets);
         return new SafeInvoiceService(coordinator, wsfe, wsfex, wsmtxca);
+    }
+
+    private static SafeInvoiceService CreateServiceWithJournal(IInvoiceJournal journal, RecordingSoapTransport transport,
+        TimeSpan? leaseDuration = null)
+    {
+        var coordinator = new InvoiceCoordinator(journal, leaseDuration);
+        var tickets = new RecordingArcaTicketProvider(TicketTestData.Create());
+        return new SafeInvoiceService(coordinator, new Wsfev1Service(transport, tickets),
+            new Wsfexv1Service(transport, tickets), new Wsmtxcav1Service(transport, tickets));
+    }
+
+    private sealed class FailAuthorizedCompletionOnceJournal(IInvoiceJournal inner) : IInvoiceJournal
+    {
+        private int failed;
+        public Task<InvoiceOperation> PrepareAsync(InvoiceSubmission submission, CancellationToken cancellationToken = default)
+            => inner.PrepareAsync(submission, cancellationToken);
+        public Task<InvoiceOperation> ReviseRejectedAsync(InvoiceSubmission replacement, long expectedVersion, CancellationToken cancellationToken = default)
+            => inner.ReviseRejectedAsync(replacement, expectedVersion, cancellationToken);
+        public Task<IReadOnlyList<InvoiceOperation>> ListRevisionsAsync(string tenantId, string idempotencyKey, CancellationToken cancellationToken = default)
+            => inner.ListRevisionsAsync(tenantId, idempotencyKey, cancellationToken);
+        public Task<InvoiceOperation?> FindAsync(string tenantId, string idempotencyKey, CancellationToken cancellationToken = default)
+            => inner.FindAsync(tenantId, idempotencyKey, cancellationToken);
+        public Task<IReadOnlyList<InvoiceOperation>> ListPendingAsync(string tenantId, int limit = 100, CancellationToken cancellationToken = default)
+            => inner.ListPendingAsync(tenantId, limit, cancellationToken);
+        public Task<InvoiceLease?> TryAcquireAsync(string tenantId, string idempotencyKey, TimeSpan leaseDuration, bool reconciliation, CancellationToken cancellationToken = default)
+            => inner.TryAcquireAsync(tenantId, idempotencyKey, leaseDuration, reconciliation, cancellationToken);
+        public Task<InvoiceOperation> CompleteAsync(InvoiceLease lease, InvoiceDecision decision, CancellationToken cancellationToken = default)
+        {
+            if (decision.State == InvoiceState.Authorized && Interlocked.Exchange(ref failed, 1) == 0)
+                return Task.FromException<InvoiceOperation>(new IOException("Injected local journal failure after remote authorization."));
+            return inner.CompleteAsync(lease, decision, cancellationToken);
+        }
+    }
+
+    private sealed class CommitThenFailAuthorizedJournal(IInvoiceJournal inner) : IInvoiceJournal
+    {
+        public Task<InvoiceOperation> PrepareAsync(InvoiceSubmission submission, CancellationToken cancellationToken = default) => inner.PrepareAsync(submission, cancellationToken);
+        public Task<InvoiceOperation> ReviseRejectedAsync(InvoiceSubmission replacement, long expectedVersion, CancellationToken cancellationToken = default) => inner.ReviseRejectedAsync(replacement, expectedVersion, cancellationToken);
+        public Task<IReadOnlyList<InvoiceOperation>> ListRevisionsAsync(string tenantId, string idempotencyKey, CancellationToken cancellationToken = default) => inner.ListRevisionsAsync(tenantId, idempotencyKey, cancellationToken);
+        public Task<InvoiceOperation?> FindAsync(string tenantId, string idempotencyKey, CancellationToken cancellationToken = default) => inner.FindAsync(tenantId, idempotencyKey, cancellationToken);
+        public Task<IReadOnlyList<InvoiceOperation>> ListPendingAsync(string tenantId, int limit = 100, CancellationToken cancellationToken = default) => inner.ListPendingAsync(tenantId, limit, cancellationToken);
+        public Task<InvoiceLease?> TryAcquireAsync(string tenantId, string idempotencyKey, TimeSpan leaseDuration, bool reconciliation, CancellationToken cancellationToken = default) => inner.TryAcquireAsync(tenantId, idempotencyKey, leaseDuration, reconciliation, cancellationToken);
+        public async Task<InvoiceOperation> CompleteAsync(InvoiceLease lease, InvoiceDecision decision, CancellationToken cancellationToken = default)
+        {
+            InvoiceOperation result = await inner.CompleteAsync(lease, decision, cancellationToken);
+            if (decision.State == InvoiceState.Authorized)
+                throw new IOException("The journal commit succeeded but its acknowledgement was lost.");
+            return result;
+        }
+    }
+
+    private sealed class FailBothCompletionAttemptsJournal(IInvoiceJournal inner) : IInvoiceJournal
+    {
+        private int completionAttempts;
+        public Task<InvoiceOperation> PrepareAsync(InvoiceSubmission submission, CancellationToken cancellationToken = default) => inner.PrepareAsync(submission, cancellationToken);
+        public Task<InvoiceOperation> ReviseRejectedAsync(InvoiceSubmission replacement, long expectedVersion, CancellationToken cancellationToken = default) => inner.ReviseRejectedAsync(replacement, expectedVersion, cancellationToken);
+        public Task<IReadOnlyList<InvoiceOperation>> ListRevisionsAsync(string tenantId, string idempotencyKey, CancellationToken cancellationToken = default) => inner.ListRevisionsAsync(tenantId, idempotencyKey, cancellationToken);
+        public Task<InvoiceOperation?> FindAsync(string tenantId, string idempotencyKey, CancellationToken cancellationToken = default) => inner.FindAsync(tenantId, idempotencyKey, cancellationToken);
+        public Task<IReadOnlyList<InvoiceOperation>> ListPendingAsync(string tenantId, int limit = 100, CancellationToken cancellationToken = default) => inner.ListPendingAsync(tenantId, limit, cancellationToken);
+        public Task<InvoiceLease?> TryAcquireAsync(string tenantId, string idempotencyKey, TimeSpan leaseDuration, bool reconciliation, CancellationToken cancellationToken = default) => inner.TryAcquireAsync(tenantId, idempotencyKey, leaseDuration, reconciliation, cancellationToken);
+        public Task<InvoiceOperation> CompleteAsync(InvoiceLease lease, InvoiceDecision decision, CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref completionAttempts) <= 2)
+                return Task.FromException<InvoiceOperation>(new IOException(decision.State == InvoiceState.Authorized
+                    ? "The authorization completion failed." : "The uncertainty completion failed."));
+            return inner.CompleteAsync(lease, decision, cancellationToken);
+        }
     }
 
     private static ArcaTenantContext CreateTenant(long cuit = Cuit)
@@ -605,4 +764,18 @@ public sealed class SafeInvoiceServiceTests
         });
         return new FecaeSolicitarResponse { FecaeSolicitarResult = response };
     }
+
+    private static FeCompConsultarResponse WsfeQueryResponse(string authorizationCode) => new()
+    {
+        FeCompConsultarResult = new FeCompConsultaResponse
+        {
+            ResultGet = new FeCompConsResponse
+            {
+                Concepto = 1, DocTipo = 80, DocNro = CustomerNumber, CbteDesde = 12, CbteHasta = 12,
+                CbteFch = "20261006", ImpTotal = 121, ImpTotConc = 0, ImpNeto = 100, ImpOpEx = 0,
+                ImpIva = 21, ImpTrib = 0, MonId = "PES", MonCotiz = 1, PtoVta = 1, CbteTipo = 1,
+                EmisionTipo = "CAE", Resultado = "A", CodAutorizacion = authorizationCode
+            }
+        }
+    };
 }

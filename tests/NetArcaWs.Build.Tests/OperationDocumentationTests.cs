@@ -17,6 +17,7 @@ public sealed class OperationDocumentationTests
         ("wsmtxca-production.wsdl", "Wsmtxca", "Wsmtxcav1Service"),
         ("wscdc-production.wsdl", "Wscdc", "WscdcService"),
         ("wsfecred-production.wsdl", "WsfeCred", "WsfecredService"),
+        ("wscpe-production.wsdl", "Wscpe", "WscpeService"),
         ("padron-a4-production.wsdl", "PadronA4", "PadronA4Service"),
         ("padron-a5-production.wsdl", "PadronA5", "PadronA5Service"),
         ("padron-a10-production.wsdl", "PadronA10", "PadronA10Service"),
@@ -93,11 +94,13 @@ public sealed class OperationDocumentationTests
                     $"### `{Regex.Escape(name)}`\\s*(?<body>.*?)(?=\\n### `|\\n## |\\z)", RegexOptions.Singleline).Groups["body"].Value;
                 section.Should().Contain($"raíz XML `{requestRoot}`");
                 section.Should().Contain($"raíz XML `{responseRoot}`");
-                if (service.Contract is "Wscdc" or "WsfeCred")
+                if (service.Contract is "Wscdc" or "WsfeCred" or "Wscpe")
                 {
                     string expectedClass = name is "dummy" or "ComprobanteDummy"
                         ? "consulta técnica"
-                        : service.Contract == "WsfeCred" && WsfecredWrites.Contains(name) ? "escritura" : "consulta";
+                        : (service.Contract == "WsfeCred" && WsfecredWrites.Contains(name)) ||
+                          (service.Contract == "Wscpe" && !name.StartsWith("consulta", StringComparison.Ordinal))
+                            ? "escritura" : "consulta";
                     section.Should().Contain($"Clase: **{expectedClass}**", $"{service.Contract}.{name}");
                 }
                 if (service.Contract == "Wscdc" && name == "ComprobanteDummy")
@@ -122,7 +125,7 @@ public sealed class OperationDocumentationTests
             }
         }
 
-        total.Should().Be(108);
+        total.Should().Be(183);
         Directory.GetFiles(Path.Combine(workspace.Root, "docs", "reference", "operations"), "*.md")
             .Should().HaveCount(Services.Length);
 

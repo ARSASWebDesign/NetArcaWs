@@ -13,6 +13,10 @@ public static class HealthRegistrationExtensions
         ArcaEnvironment environment = ArcaEnvironment.Homologation, TimeSpan? timeout = null, Uri? endpoint = null, string? name = null)
         => builder.AddNetArcaWsService(ArcaService.Wsfecred, environment, timeout, endpoint, name);
 
+    public static IHealthChecksBuilder AddWscpeHealthCheck(this IHealthChecksBuilder builder,
+        ArcaEnvironment environment = ArcaEnvironment.Homologation, TimeSpan? timeout = null, Uri? endpoint = null, string? name = null)
+        => builder.AddNetArcaWsService(ArcaService.Wscpe, environment, timeout, endpoint, name);
+
     /// <summary>Registers only the selected WS. No credentials or WSAA authentication service are required.</summary>
     public static IHealthChecksBuilder AddNetArcaWsService(this IHealthChecksBuilder builder, ArcaService service,
         ArcaEnvironment environment = ArcaEnvironment.Homologation, TimeSpan? timeout = null, Uri? endpoint = null, string? name = null)

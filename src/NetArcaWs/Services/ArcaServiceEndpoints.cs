@@ -6,6 +6,8 @@ internal static class ArcaServiceEndpoints
 {
     public static readonly Uri WscdcHomologation = new("https://wswhomo.afip.gov.ar/WSCDC/service.asmx");
     public static readonly Uri WscdcProduction = new("https://servicios1.afip.gov.ar/WSCDC/service.asmx");
+    public static readonly Uri WscpeHomologation = new("https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap");
+    public static readonly Uri WscpeProduction = new("https://cpea-ws.afip.gob.ar/wscpe/services/soap");
     public static readonly Uri WsfecredHomologation = new("https://fwshomo.afip.gov.ar/wsfecred/FECredService");
     public static readonly Uri WsfecredProduction = new("https://serviciosjava.afip.gob.ar/wsfecred/FECredService");
     public static readonly Uri WsfeHomologation = new("https://wswhomo.afip.gov.ar/wsfev1/service.asmx");

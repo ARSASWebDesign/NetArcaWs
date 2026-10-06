@@ -40,6 +40,7 @@ public sealed class HealthRegistrationExtensionTests
     [InlineData(nameof(ArcaService.Wsmtxca))]
     [InlineData(nameof(ArcaService.Wscdc))]
     [InlineData(nameof(ArcaService.Wsfecred))]
+    [InlineData(nameof(ArcaService.Wscpe))]
     [InlineData(nameof(ArcaService.PadronA4))]
     [InlineData(nameof(ArcaService.PadronA5))]
     [InlineData(nameof(ArcaService.PadronA10))]
@@ -105,6 +106,7 @@ public sealed class HealthRegistrationExtensionTests
             case nameof(ArcaService.Wsmtxca): builder.AddWsmtxcaHealthCheck(name: "selected"); break;
             case nameof(ArcaService.Wscdc): builder.AddWscdcHealthCheck(name: "selected"); break;
             case nameof(ArcaService.Wsfecred): builder.AddWsfecredHealthCheck(name: "selected"); break;
+            case nameof(ArcaService.Wscpe): builder.AddWscpeHealthCheck(name: "selected"); break;
             case nameof(ArcaService.PadronA4): builder.AddPadronA4HealthCheck(name: "selected"); break;
             case nameof(ArcaService.PadronA5): builder.AddPadronA5HealthCheck(name: "selected"); break;
             case nameof(ArcaService.PadronA10): builder.AddPadronA10HealthCheck(name: "selected"); break;

@@ -70,6 +70,57 @@ public sealed class SoapTransportTests
         document.Root!.Element(XName.Get("Body", SoapNamespace))!.Elements().Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task SendAsync_deserializes_base64_binary_from_response()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        byte[] pdf = "%PDF-1.7\nsynthetic fixture"u8.ToArray();
+        string base64Pdf = Convert.ToBase64String(pdf);
+        var handler = new RecordingHttpMessageHandler((_, _) => Task.FromResult(
+            RecordingHttpMessageHandler.Response(HttpStatusCode.OK,
+                $"<s:Envelope xmlns:s=\"{SoapNamespace}\" xmlns:svc=\"{ContractNamespace}\"><s:Body><svc:PdfResponse><svc:Pdf>{base64Pdf}</svc:Pdf></svc:PdfResponse></s:Body></s:Envelope>")));
+        var transport = CreateTransport(handler);
+
+        PdfResponse response = await transport.SendAsync<EchoRequest, PdfResponse>(
+            Endpoint, "urn:pdf", new EchoRequest(), cancellationToken);
+
+        response.Pdf.Should().Equal(pdf);
+    }
+
+    [Fact]
+    public async Task SendAsync_reads_base64_response_from_soap_body_after_header_with_nested_body()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        byte[] pdf = "%PDF-1.7\nactual body"u8.ToArray();
+        string bodyPdf = Convert.ToBase64String(pdf);
+        const string headerPdf = "%PDF-1.0\nheader decoy";
+        string base64HeaderPdf = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(headerPdf));
+        var handler = new RecordingHttpMessageHandler((_, _) => Task.FromResult(
+            RecordingHttpMessageHandler.Response(HttpStatusCode.OK,
+                $"<s:Envelope xmlns:s=\"{SoapNamespace}\" xmlns:svc=\"{ContractNamespace}\"><s:Header><s:Body><svc:PdfResponse><svc:Pdf>{base64HeaderPdf}</svc:Pdf></svc:PdfResponse></s:Body></s:Header><s:Body><svc:PdfResponse><svc:Pdf>{bodyPdf}</svc:Pdf></svc:PdfResponse></s:Body></s:Envelope>")));
+        var transport = CreateTransport(handler);
+
+        PdfResponse response = await transport.SendAsync<EchoRequest, PdfResponse>(
+            Endpoint, "urn:pdf", new EchoRequest(), cancellationToken);
+
+        response.Pdf.Should().Equal(pdf, "a nested Header/Body must not be mistaken for the SOAP response body");
+    }
+
+    [Fact]
+    public async Task SendAsync_rejects_invalid_base64_response_as_invalid_soap_contract()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var handler = new RecordingHttpMessageHandler((_, _) => Task.FromResult(
+            RecordingHttpMessageHandler.Response(HttpStatusCode.OK,
+                $"<s:Envelope xmlns:s=\"{SoapNamespace}\" xmlns:svc=\"{ContractNamespace}\"><s:Body><svc:PdfResponse><svc:Pdf>%%%invalid%%%</svc:Pdf></svc:PdfResponse></s:Body></s:Envelope>")));
+        var transport = CreateTransport(handler);
+
+        Func<Task> send = () => transport.SendAsync<EchoRequest, PdfResponse>(
+            Endpoint, "urn:pdf", new EchoRequest(), cancellationToken);
+
+        await send.Should().ThrowAsync<FormatException>();
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.OK)]
     [InlineData(HttpStatusCode.InternalServerError)]
@@ -230,4 +281,11 @@ public sealed class EchoResponse
 {
     [XmlElement("Value", Namespace = "urn:netarcaws:soap-tests")]
     public string Value { get; set; } = string.Empty;
+}
+
+[XmlRoot("PdfResponse", Namespace = "urn:netarcaws:soap-tests")]
+public sealed class PdfResponse
+{
+    [XmlElement("Pdf", Namespace = "urn:netarcaws:soap-tests", DataType = "base64Binary")]
+    public byte[] Pdf { get; set; } = [];
 }
