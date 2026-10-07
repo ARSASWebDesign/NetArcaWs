@@ -171,6 +171,61 @@ jobs:
           if ((${#missing[@]})); then
             gh release upload "$RELEASE_TAG" --repo ARSASWebDesign/NetArcaWs "${missing[@]}"
           fi
+      - name: Verify existing NuGet packages before login
+        id: nuget-preflight
+        env:
+          PACKAGE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          packages=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer)
+          temporary="$(mktemp -d)"
+          trap 'rm -rf "$temporary"' EXIT
+          verified_existing=()
+          for package in "${packages[@]}"; do
+            id="$(printf '%s' "$package" | tr '[:upper:]' '[:lower:]')"
+            version="$(printf '%s' "$PACKAGE_VERSION" | tr '[:upper:]' '[:lower:]')"
+            url="https://api.nuget.org/v3-flatcontainer/$id/$version/$id.$version.nupkg"
+            status="$(curl --location --silent --show-error --output "$temporary/remote.nupkg" --write-out '%{http_code}' "$url")"
+            if [[ "$status" == 404 ]]; then
+              continue
+            fi
+            if [[ "$status" != 200 ]]; then
+              echo "NuGet preflight failed for $package $PACKAGE_VERSION: HTTP $status" >&2
+              exit 1
+            fi
+
+            local_package="artifacts/$package.$PACKAGE_VERSION.nupkg"
+            zipinfo -1 "$local_package" | LC_ALL=C sort > "$temporary/local-all.entries"
+            zipinfo -1 "$temporary/remote.nupkg" | LC_ALL=C sort > "$temporary/remote-all.entries"
+            if [[ -n "$(uniq -d "$temporary/local-all.entries")" || -n "$(uniq -d "$temporary/remote-all.entries")" ]]; then
+              echo "NuGet package $package contains duplicate ZIP entries; refusing to skip publication." >&2
+              exit 1
+            fi
+            sed '\|^\.signature\.p7s$|d' "$temporary/local-all.entries" > "$temporary/local.entries"
+            sed '\|^\.signature\.p7s$|d' "$temporary/remote-all.entries" > "$temporary/remote.entries"
+            if ! diff -u "$temporary/local.entries" "$temporary/remote.entries"; then
+              echo "Existing NuGet package $package $PACKAGE_VERSION has different archive entries; refusing to skip publication." >&2
+              exit 1
+            fi
+            while IFS= read -r entry; do
+              [[ -n "$entry" ]] || continue
+              escaped_entry="${entry//\[/[[]}"
+              escaped_entry="${escaped_entry//\*/[*]}"
+              escaped_entry="${escaped_entry//\?/[?]}"
+              local_hash="$(unzip -p "$local_package" "$escaped_entry" | sha256sum | cut -d ' ' -f 1)"
+              remote_hash="$(unzip -p "$temporary/remote.nupkg" "$escaped_entry" | sha256sum | cut -d ' ' -f 1)"
+              if [[ "$local_hash" != "$remote_hash" ]]; then
+                echo "Existing NuGet package $package $PACKAGE_VERSION differs at $entry; refusing to skip publication." >&2
+                exit 1
+              fi
+            done < "$temporary/local.entries"
+            verified_existing+=("$package")
+          done
+          verified_csv=""
+          if ((${#verified_existing[@]})); then
+            verified_csv="$(IFS=,; printf '%s' "${verified_existing[*]}")"
+          fi
+          printf 'verified_existing=%s\n' "$verified_csv" >> "$GITHUB_OUTPUT"
       - name: Require NuGet account setup
         env:
           NUGET_USER: ${{ vars.NUGET_USER }}
@@ -188,9 +243,14 @@ jobs:
         env:
           NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
           PACKAGE_VERSION: ${{ needs.build.outputs.version }}
+          VERIFIED_EXISTING: ${{ steps.nuget-preflight.outputs.verified_existing }}
         run: |
           set -euo pipefail
           packages=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer)
           for package in "${packages[@]}"; do
-            dotnet nuget push "artifacts/$package.$PACKAGE_VERSION.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+            if [[ ",${VERIFIED_EXISTING:-}," == *",$package,"* ]]; then
+              echo "Skipping previously verified identical package $package $PACKAGE_VERSION."
+            else
+              dotnet nuget push "artifacts/$package.$PACKAGE_VERSION.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json
+            fi
           done
