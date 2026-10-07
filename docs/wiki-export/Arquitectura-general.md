@@ -232,13 +232,16 @@ la garantía del ciclo fiscal completo.
 El paquete `NetArcaWs.EntityFrameworkCore` implementa `IInvoiceJournal` sobre
 un `DbContext` mediante `IDbContextFactory<TContext>`. El paquete base no
 depende de EF. `NetArcaWsModelOptions` habilita, de forma inmutable, facturación
-(WSFEv1, WSFEXv1 y/o WSMTXCA), tickets WSAA para servicios seleccionados o
-ambos. El modelo operativo conserva solo las tablas elegidas.
+(WSFEv1, WSFEXv1 y/o WSMTXCA), tickets WSAA para servicios seleccionados y/o el
+store independiente de certificados. El modelo operativo conserva solo las
+tablas elegidas.
 
 Los providers de stores MySQL, PostgreSQL y SQL Server son extras separados;
 MySQL/MariaDB requiere una versión explícita. Cinco extras de migraciones
 (`NetArcaWs.EntityFrameworkCore.Migrations.{Sqlite,MySql,MariaDb,PostgreSql,SqlServer}`)
-contienen contextos fijos e historias separadas por motor y módulo. La tarea de
+contienen contextos fijos e historias separadas por motor y módulo. Los tres
+módulos (facturación, tickets WSAA y certificados) se seleccionan por separado.
+La tarea de
 despliegue registra el paquete elegido, consulta `INetArcaWsMigrator.GetStatusAsync`,
 puede revisar SQL con `GenerateScript(module, fromMigration, toMigration,
 idempotent)` y llama `ApplyAsync` para avanzar. El modelo operativo del consumidor
@@ -248,8 +251,8 @@ contextos dedicados.
 El registro DI y el inicio normal de la API no conectan ni aplican migraciones.
 El actor de despliegue usa permisos de esquema; runtime usa permisos de datos
 mínimos. Serializá jobs externamente por base: el preflight ocurre antes del lock
-EF y no coordina otros actores. Ambos módulos se pueden aplicar en cualquier
-orden. Deshabilitarlos preserva tablas, historial y filas. Updates usan paquetes
+EF y no coordina otros actores. Los tres módulos se pueden aplicar en cualquiera
+de los seis órdenes posibles. Deshabilitarlos preserva tablas, historial y filas. Updates usan paquetes
 actualizados más migraciones oficiales pendientes; el consumidor no crea
 migraciones para esas tablas. Un cambio futuro añade una migración por módulo y
 motor, preserva las publicadas y prueba desde la anterior.
