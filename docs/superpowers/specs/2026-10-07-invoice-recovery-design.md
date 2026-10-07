@@ -137,7 +137,7 @@ Add `NetArcaWsModelOptionsBuilder.AddInvoiceRecovery(params ArcaService[] servic
 
 Add a new migration module `InvoiceRecovery`, new history table `__NetArcaWsInvoiceRecoveryMigrations`, and migration ID `20261007000400_InitialInvoiceRecovery`. The recovery-only context must generate only the queue table. Recovery-only migration context creates only the queue table. Existing migrations remain byte-identical. Update five provider packages (SQLite, MySQL, MariaDB, PostgreSQL, SQL Server), module ownership/preflight, migration generation/native DDL and snapshots. The current total changes from 20 to 25 native DDL artifacts and from 15 to 20 migration IDs. The five all-modules DDL artifacts change to add the queue table; the other 15 existing DDL artifacts and all 15 historical migration SQL/scripts remain byte-identical. No migration runs on DI registration or host startup.
 
-Add `Microsoft.Extensions.Hosting.Abstractions` 10.0.12 only to the optional EF package; check its MIT license and update its lockfile deliberately. Core remains independent of EF and Hosting. Do not introduce a second persistence library, paid service, Python, WCF or new provider.
+Add a direct `Microsoft.Extensions.Hosting.Abstractions` 10.0.12 reference only to the optional EF package for its hosted worker; check its MIT license and update its lockfile deliberately. Keep the worker and EF integration out of core, add no new direct Hosting reference or EF dependency to core, and preserve its existing dependency closure (which already includes Hosting.Abstractions transitively through Microsoft.Extensions.Http). Do not introduce a second persistence library, paid service, Python, WCF or new provider.
 
 ## Verificación y límites
 

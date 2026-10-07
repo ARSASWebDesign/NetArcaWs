@@ -21,7 +21,7 @@
 - The host resolver authorizes tenant/CUIT/environment and resolves the pinned credential version; recheck the queue fence after resolution.
 - Queue/workers and migrations are opt-in; never run DDL at registration/startup.
 - Support SQLite, MySQL, MariaDB, PostgreSQL, and SQL Server with independent migrations; retain existing migration artifacts byte-identical.
-- Keep core free of EF/Hosting dependencies; add Hosting.Abstractions 10.0.12 only to the EF package and review its MIT license/lockfile.
+- Keep EF integration and worker code out of core; add no new direct Hosting reference or EF dependency to core, and preserve the existing core dependency closure (which already includes Hosting.Abstractions transitively via Microsoft.Extensions.Http). Add a direct Hosting.Abstractions 10.0.12 reference only to the optional EF package and review its MIT license/lockfile.
 - Use synthetic data and SOAP only; do not call ARCA or configure real credentials.
 
 ## Review Focus
@@ -76,7 +76,7 @@
 - [ ] **Step 2: Add fake resolver and SOAP tests** proving only fresh Prepared is resumed; Unknown and expired Submitting/Reconciling reconcile; terminal/completed/suspended work does not poll-loop; max 10 inconclusive attempts suspend.
 - [ ] **Step 3: Add the resolver-delay test**: expire/reclaim the queue lease during `ResolveAsync`, then assert the stale processor fails its second `IsCurrentAsync` and makes zero SOAP calls.
 - [ ] **Step 4: Implement the processor using Task 1 queue claim/CAS APIs**. Do not change existing journal lease/fencing semantics or hold a DB transaction around SafeInvoiceService calls. Use only safe reason enums; never persist or log exception strings.
-- [ ] **Step 5: Add optional hosted loop and dependency** using `Microsoft.Extensions.Hosting.Abstractions` 10.0.12, review MIT terms, then run `dotnet restore NetArcaWs.slnx --force-evaluate` and inspect only expected project lockfile changes.
+- [ ] **Step 5: Add optional hosted loop and dependency** using a direct `Microsoft.Extensions.Hosting.Abstractions` 10.0.12 reference in the EF package, review MIT terms, then run `dotnet restore NetArcaWs.slnx --force-evaluate` and inspect only the EF package direct-reference/lockfile changes; preserve the already existing transitive core dependency.
 - [ ] **Step 6: Run targeted tests** for `EfInvoiceRecoveryQueueTests`, `InvoiceRecoveryProcessorTests`, and core `SafeInvoiceServiceTests`. Expect all synthetic tests to pass without ARCA configuration.
 - [ ] **Step 7: Commit** processor and hosting integration with a Conventional Commit message.
 
