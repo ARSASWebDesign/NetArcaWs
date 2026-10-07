@@ -23,6 +23,32 @@ namespace NetArcaWs.Persistence.Server.Tests;
 public sealed class OfficialServerMigrationTests
 {
     [Fact]
+    public void Certificate_migration_registration_and_script_generation_are_connection_free_for_server_providers()
+    {
+        NetArcaWsModelOptions certificates = NetArcaWsModelOptions.Configure(options => options.AddCertificates());
+        using ServiceProvider postgreSqlServices = new ServiceCollection()
+            .AddNetArcaWsPostgreSqlMigrations("Host=127.0.0.1;Port=1;Database=must_not_connect", certificates)
+            .BuildServiceProvider();
+        using ServiceProvider sqlServerServices = new ServiceCollection()
+            .AddNetArcaWsSqlServerMigrations("Server=127.0.0.1,1;Database=must_not_connect;Encrypt=True;TrustServerCertificate=True;Connect Timeout=1", certificates)
+            .BuildServiceProvider();
+
+        postgreSqlServices.GetRequiredService<INetArcaWsMigrationContextFactory>().Provider.Should().Be(NetArcaWsMigrationProvider.PostgreSql);
+        sqlServerServices.GetRequiredService<INetArcaWsMigrationContextFactory>().Provider.Should().Be(NetArcaWsMigrationProvider.SqlServer);
+        foreach (INetArcaWsMigrator migrator in new[]
+        {
+            postgreSqlServices.GetRequiredService<INetArcaWsMigrator>(),
+            sqlServerServices.GetRequiredService<INetArcaWsMigrator>()
+        })
+        {
+            string script = migrator.GenerateScript(NetArcaWsPersistenceModule.TenantCertificates);
+            script.Should().Contain("20261006000300_InitialTenantCertificates")
+                .And.Contain("NetArcaCertificateSlots").And.Contain("NetArcaCertificateVersions")
+                .And.NotContain("NetArcaInvoices").And.NotContain("NetArcaWsaaTickets");
+        }
+    }
+
+    [Fact]
     public async Task Add_certificate_module_after_invoice_and_ticket_migrations_preserves_existing_encrypted_data_and_opt_out_state()
     {
         PersistenceServerSettings? settings = PersistenceServerSettings.FromEnvironment();
@@ -135,57 +161,74 @@ public sealed class OfficialServerMigrationTests
     }
 
     [Theory]
-    [InlineData("untracked")]
-    [InlineData("unknown-history")]
-    public async Task Existing_unknown_schema_is_rejected_without_mutation(string setup)
+    [InlineData("invoicing", "untracked")]
+    [InlineData("invoicing", "unknown-history")]
+    [InlineData("certificates", "untracked")]
+    [InlineData("certificates", "unknown-history")]
+    public async Task Existing_unknown_schema_is_rejected_without_mutation(string moduleName, string setup)
     {
         PersistenceServerSettings? settings = PersistenceServerSettings.FromEnvironment();
         Assert.SkipWhen(settings is null, "Opt-in PostgreSQL/SQL Server migration preflight test.");
         PersistenceServerSettings selected = settings!;
         Assert.SkipWhen(selected.Kind is not ("postgresql" or "sqlserver"), "This suite targets PostgreSQL/SQL Server.");
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-        NetArcaWsModelOptions invoiceOptions = Options(NetArcaWsPersistenceModule.Invoicing);
+        NetArcaWsPersistenceModule module = moduleName == "certificates"
+            ? NetArcaWsPersistenceModule.TenantCertificates
+            : NetArcaWsPersistenceModule.Invoicing;
+        NetArcaWsModelOptions selectedOptions = Options(module);
         await using ServerTestDatabase database = await ServerTestDatabase.CreateAsync(selected,
-            builder => builder.AddInvoicing(ArcaService.Wsfev1), provision: false);
-        await CreateInvalidSchemaAsync(database, selected.Kind, setup, cancellationToken);
+            builder => Add(builder, module), provision: false);
+        await CreateInvalidSchemaAsync(database, selected.Kind, setup, module, cancellationToken);
 
-        INetArcaWsMigrator migrator = database.CreateOfficialMigrator(invoiceOptions);
+        INetArcaWsMigrator migrator = database.CreateOfficialMigrator(selectedOptions);
         NetArcaWsMigrationState expected = setup == "untracked"
             ? NetArcaWsMigrationState.UntrackedSchema
             : NetArcaWsMigrationState.UnknownAppliedMigration;
         NetArcaWsMigrationStatus before = await migrator.GetStatusAsync(cancellationToken);
         before.Modules.Should().ContainSingle().Which.State.Should().Be(expected);
+        string[] presentBefore = before.Modules.Single().PresentTables.ToArray();
         Func<Task> apply = () => migrator.ApplyAsync(cancellationToken);
         await apply.Should().ThrowAsync<NetArcaWsMigrationPreflightException>();
         NetArcaWsMigrationStatus after = await migrator.GetStatusAsync(cancellationToken);
         after.Modules.Should().ContainSingle().Which.State.Should().Be(expected);
         after.Modules.Single().Applied.Should().Equal(before.Modules.Single().Applied);
+        after.Modules.Single().PresentTables.Should().Equal(presentBefore);
         after.Modules.Single().Pending.Should().BeEquivalentTo(after.Modules.Single().Known);
+        if (setup == "untracked")
+            after.Modules.Single().PresentTables.Should().Contain(module == NetArcaWsPersistenceModule.TenantCertificates
+                ? "NetArcaCertificateSlots" : "NetArcaInvoices");
     }
 
-    [Fact]
-    public async Task Missing_tracked_table_fails_preflight_and_preserves_history()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Missing_tracked_table_fails_preflight_and_preserves_history(bool certificates)
     {
         PersistenceServerSettings? settings = PersistenceServerSettings.FromEnvironment();
         Assert.SkipWhen(settings is null, "Opt-in PostgreSQL/SQL Server migration preflight test.");
         PersistenceServerSettings selected = settings!;
         Assert.SkipWhen(selected.Kind is not ("postgresql" or "sqlserver"), "This suite targets PostgreSQL/SQL Server.");
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-        NetArcaWsModelOptions invoiceOptions = Options(NetArcaWsPersistenceModule.Invoicing);
+        NetArcaWsPersistenceModule module = certificates ? NetArcaWsPersistenceModule.TenantCertificates : NetArcaWsPersistenceModule.Invoicing;
+        NetArcaWsModelOptions selectedOptions = Options(module);
         await using ServerTestDatabase database = await ServerTestDatabase.CreateAsync(selected,
-            builder => builder.AddInvoicing(ArcaService.Wsfev1));
+            builder => Add(builder, module));
         await ExecuteSchemaCommandAsync(database, selected.Kind,
-            selected.Kind == "sqlserver" ? "DROP TABLE [dbo].[NetArcaInvoiceRevisions]" : "DROP TABLE \"NetArcaInvoiceRevisions\"",
+            selected.Kind == "sqlserver"
+                ? certificates ? "DROP TABLE [dbo].[NetArcaCertificateVersions]" : "DROP TABLE [dbo].[NetArcaInvoiceRevisions]"
+                : certificates ? "DROP TABLE \"NetArcaCertificateVersions\"" : "DROP TABLE \"NetArcaInvoiceRevisions\"",
             cancellationToken);
 
-        INetArcaWsMigrator migrator = database.CreateOfficialMigrator(invoiceOptions);
+        INetArcaWsMigrator migrator = database.CreateOfficialMigrator(selectedOptions);
         NetArcaWsMigrationStatus before = await migrator.GetStatusAsync(cancellationToken);
         before.Modules.Should().ContainSingle().Which.State.Should().Be(NetArcaWsMigrationState.TrackedSchemaIncomplete);
+        string[] presentBefore = before.Modules.Single().PresentTables.ToArray();
         Func<Task> apply = () => migrator.ApplyAsync(cancellationToken);
         await apply.Should().ThrowAsync<NetArcaWsMigrationPreflightException>();
         NetArcaWsMigrationStatus after = await migrator.GetStatusAsync(cancellationToken);
         after.Modules.Single().Applied.Should().Equal(before.Modules.Single().Applied);
         after.Modules.Single().State.Should().Be(NetArcaWsMigrationState.TrackedSchemaIncomplete);
+        after.Modules.Single().PresentTables.Should().Equal(presentBefore);
     }
 
     [Theory]
@@ -323,16 +366,21 @@ public sealed class OfficialServerMigrationTests
         }
     }
 
-    private static async Task CreateInvalidSchemaAsync(ServerTestDatabase database, string kind, string setup, CancellationToken cancellationToken)
+    private static async Task CreateInvalidSchemaAsync(ServerTestDatabase database, string kind, string setup,
+        NetArcaWsPersistenceModule module, CancellationToken cancellationToken)
     {
+        string appTable = module == NetArcaWsPersistenceModule.TenantCertificates ? "NetArcaCertificateSlots" : "NetArcaInvoices";
+        string historyName = module == NetArcaWsPersistenceModule.TenantCertificates
+            ? "__NetArcaWsCertificateMigrations"
+            : "__NetArcaWsInvoiceMigrations";
         if (setup == "untracked")
         {
-            string table = kind == "sqlserver" ? "[dbo].[NetArcaInvoices]" : "\"NetArcaInvoices\"";
+            string table = kind == "sqlserver" ? $"[dbo].[{appTable}]" : $"\"{appTable}\"";
             await ExecuteSchemaCommandAsync(database, kind, $"CREATE TABLE {table} (SyntheticTrap int NOT NULL)", cancellationToken);
             return;
         }
 
-        string history = kind == "sqlserver" ? "[dbo].[__NetArcaWsInvoiceMigrations]" : "\"__NetArcaWsInvoiceMigrations\"";
+        string history = kind == "sqlserver" ? $"[dbo].[{historyName}]" : $"\"{historyName}\"";
         string columns = kind == "sqlserver" ? "[MigrationId] varchar(150) NOT NULL PRIMARY KEY, [ProductVersion] varchar(32) NOT NULL" : "\"MigrationId\" varchar(150) PRIMARY KEY, \"ProductVersion\" varchar(32) NOT NULL";
         await ExecuteSchemaCommandAsync(database, kind, $"CREATE TABLE {history} ({columns})", cancellationToken);
         await ExecuteSchemaCommandAsync(database, kind, $"INSERT INTO {history} ({(kind == "sqlserver" ? "[MigrationId], [ProductVersion]" : "\"MigrationId\", \"ProductVersion\"")}) VALUES ('29990101000000_Future', '10.0.12')", cancellationToken);

@@ -98,6 +98,24 @@ public sealed class OfficialMySqlMigrationMetadataTests
             .Should().Contain("IF NOT EXISTS").And.Contain("20261006000100_InitialInvoicing");
         mariaDbMigrator.GenerateScript(NetArcaWsPersistenceModule.WsaaTickets, idempotent: true)
             .Should().Contain("IF NOT EXISTS").And.Contain("20261006000200_InitialWsaaTickets");
+
+        NetArcaWsModelOptions certificates = NetArcaWsModelOptions.Configure(options => options.AddCertificates());
+        using ServiceProvider certificateMySql = new ServiceCollection()
+            .AddNetArcaWsMySqlMigrations(connectionString, new MySqlServerVersion(new Version(8, 4, 11)), certificates)
+            .BuildServiceProvider();
+        using ServiceProvider certificateMariaDb = new ServiceCollection()
+            .AddNetArcaWsMariaDbMigrations(connectionString, new MariaDbServerVersion(new Version(11, 4, 13)), certificates)
+            .BuildServiceProvider();
+        INetArcaWsMigrator certificateMySqlMigrator = certificateMySql.GetRequiredService<INetArcaWsMigrator>();
+        INetArcaWsMigrator certificateMariaDbMigrator = certificateMariaDb.GetRequiredService<INetArcaWsMigrator>();
+        certificateMySqlMigrator.GenerateScript(NetArcaWsPersistenceModule.TenantCertificates)
+            .Should().Contain("NetArcaCertificateSlots").And.Contain("NetArcaCertificateVersions")
+            .And.Contain("__NetArcaWsCertificateMigrations").And.NotContain("NetArcaInvoices");
+        certificateMariaDbMigrator.GenerateScript(NetArcaWsPersistenceModule.TenantCertificates)
+            .Should().Contain("NetArcaCertificateSlots").And.Contain("NetArcaCertificateVersions")
+            .And.Contain("__NetArcaWsCertificateMigrations").And.NotContain("NetArcaWsaaTickets");
+        certificateMySqlMigrator.GenerateScript(NetArcaWsPersistenceModule.TenantCertificates, idempotent: true)
+            .Should().Contain("20261006000300_InitialTenantCertificates");
     }
 
     [Fact]

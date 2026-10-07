@@ -159,6 +159,42 @@ public sealed class OfficialSqliteMigrationsTests
         (await db.Tables()).Should().NotContain("NetArcaInvoiceRevisions");
     }
 
+    [Theory]
+    [InlineData("untracked")]
+    [InlineData("unknown-history")]
+    [InlineData("missing-table")]
+    public async Task CertificateModulePreflightFailsClosedWithoutChangingItsSchemaOrHistory(string setup)
+    {
+        await using var db = new TestDatabase(CertificateOptions());
+        if (setup == "untracked")
+            await db.Execute("CREATE TABLE NetArcaCertificateSlots (SyntheticTrap INTEGER NOT NULL)");
+        else if (setup == "unknown-history")
+            await db.Execute("CREATE TABLE __NetArcaWsCertificateMigrations (MigrationId TEXT PRIMARY KEY, ProductVersion TEXT NOT NULL); INSERT INTO __NetArcaWsCertificateMigrations VALUES ('29990101000000_FutureCertificateMigration', '10.0.12')");
+        else
+        {
+            await db.Migrator.ApplyAsync(TestContext.Current.CancellationToken);
+            await db.Execute("DROP TABLE NetArcaCertificateVersions");
+        }
+
+        string[] tablesBefore = await db.Tables();
+        NetArcaWsMigrationStatus before = await db.Migrator.GetStatusAsync(TestContext.Current.CancellationToken);
+        NetArcaWsMigrationState expected = setup switch
+        {
+            "untracked" => NetArcaWsMigrationState.UntrackedSchema,
+            "unknown-history" => NetArcaWsMigrationState.UnknownAppliedMigration,
+            _ => NetArcaWsMigrationState.TrackedSchemaIncomplete
+        };
+        before.Modules.Should().ContainSingle().Which.State.Should().Be(expected);
+        Func<Task> apply = () => db.Migrator.ApplyAsync(TestContext.Current.CancellationToken);
+        await apply.Should().ThrowAsync<NetArcaWsMigrationPreflightException>();
+
+        NetArcaWsMigrationStatus after = await db.Migrator.GetStatusAsync(TestContext.Current.CancellationToken);
+        after.Modules.Should().ContainSingle().Which.State.Should().Be(expected);
+        after.Modules.Single().Applied.Should().Equal(before.Modules.Single().Applied);
+        after.Modules.Single().PresentTables.Should().Equal(before.Modules.Single().PresentTables);
+        (await db.Tables()).Should().Equal(tablesBefore);
+    }
+
     [Fact]
     public async Task NonPrefixHistoryFails()
     {
@@ -325,6 +361,14 @@ public sealed class OfficialSqliteMigrationsTests
         INetArcaWsMigrator migrator = services.GetRequiredService<INetArcaWsMigrator>();
         migrator.GenerateScript(NetArcaWsPersistenceModule.Invoicing).Should().Contain("CREATE TABLE");
         File.Exists("/this/path/must/not/be/created.db").Should().BeFalse();
+
+        string certificatePath = Path.Combine(Path.GetTempPath(), $"netarcaws-cert-offline-{Guid.NewGuid():N}.db");
+        using var certificateServices = new ServiceCollection()
+            .AddNetArcaWsSqliteMigrations($"Data Source={certificatePath}", CertificateOptions()).BuildServiceProvider();
+        certificateServices.GetRequiredService<INetArcaWsMigrator>().GenerateScript(NetArcaWsPersistenceModule.TenantCertificates)
+            .Should().Contain("NetArcaCertificateSlots").And.Contain("NetArcaCertificateVersions")
+            .And.Contain("__NetArcaWsCertificateMigrations");
+        File.Exists(certificatePath).Should().BeFalse("registration and offline script generation must not open or migrate the database");
     }
 
     [Fact]
