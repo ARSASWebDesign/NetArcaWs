@@ -16,16 +16,16 @@ prueba de homologación requiere variables de entorno con credenciales válidas;
 sin ellas se omite. No guardar credenciales en fixtures, logs o commits y no
 ejecutar prueba productiva.
 
-Verificación registrada el 2026-10-06: build Release con 0 warnings y 0 errores;
-suite con 256 casos (253 aprobados, 3 omitidos). Los tres omitidos corresponden
-a credenciales autenticadas no disponibles y a la habilitación opt-in de pruebas
-Dummy. La corrida real de QA anterior a WSCPE aprobó los nueve Dummies y omitió las dos pruebas
-autenticadas. No se ejecutaron operaciones fiscales autenticadas con credenciales
-autorizadas. NuGet aceptó e indexó ambos paquetes 0.5.0 mediante OIDC. Ver
-[publicación y recuperación de releases](../releases.md).
+La [corrida de CI de referencia](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37555719696)
+registra build, suite local, motores de persistencia, migraciones, paquetes y
+consumer/CLI. Las pruebas usan datos sintéticos. CI no acredita autenticación ni
+homologación fiscal; los badges de [Inicio](Home.md) muestran las versiones
+publicadas y la [disponibilidad por paquete](../releases.md#estado-de-activación)
+permite comprobar cada ID de NuGet. La primera release 0.5.0 fue aceptada e
+indexada mediante OIDC.
 
-La CI realiza restore, build Release, suite completa, pack de ambos proyectos e
-instalación de prueba de la herramienta desde el feed local. No publica paquetes
+La CI realiza restore, build Release, suite completa, empaquetado y smoke tests
+de los paquetes NuGet y la herramienta desde el feed local. No publica paquetes
 ni requiere permisos de registry para una contribución.
 
 ## Pull request desde un fork

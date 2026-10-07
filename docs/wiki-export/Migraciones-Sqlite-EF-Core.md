@@ -33,4 +33,4 @@ Updating means installing the new package and applying its pending official migr
 
 No hay scripts idempotentes de SQLite; usá un rango explícito. El motor puede crear `__EFMigrationsLock` durante la migración. SQLite está pensado para un archivo local en un host.
 
-This package adds no ARCA calls, certificate storage, startup migrations, retry worker, or exactly-once guarantee. Local and engine verification is reported separately from ARCA homologation. The package version is currently 0.5.0 and is not published on NuGet.
+This package adds no ARCA calls, certificate storage, startup migrations, retry worker, or exactly-once guarantee. Local and engine verification is reported separately from ARCA homologation. Check the current NuGet version and package availability: [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite).

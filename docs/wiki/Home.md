@@ -1,5 +1,15 @@
 # NetArcaWs
 
+[![Última release](https://img.shields.io/github/v/release/ARSASWebDesign/NetArcaWs?label=GitHub%20release)](https://github.com/ARSASWebDesign/NetArcaWs/releases)
+[![NetArcaWs en NuGet](https://img.shields.io/nuget/v/NetArcaWs?label=NuGet%20biblioteca)](https://www.nuget.org/packages/NetArcaWs)
+[![NetArcaWs.Tool en NuGet](https://img.shields.io/nuget/v/NetArcaWs.Tool?label=NuGet%20tool)](https://www.nuget.org/packages/NetArcaWs.Tool)
+[![CI](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/ci.yml/badge.svg)](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/ci.yml)
+[![Release](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/release.yml/badge.svg)](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/release.yml)
+
+Los indicadores de NuGet muestran las versiones aceptadas e indexadas por el
+feed. Consultá [Inicio rápido](Inicio-rapido.md) para ver los comandos de
+instalación de la versión 0.6.0 y la [disponibilidad por paquete](../releases.md#estado-de-activación).
+
 NetArcaWs es una biblioteca .NET para integrar servicios web de ARCA desde
 aplicaciones C#. Consulta [los servicios implementados](Servicios-implementados.md)
 para conocer el alcance de esta biblioteca y el

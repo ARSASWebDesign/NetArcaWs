@@ -1,5 +1,14 @@
 # NetArcaWs para .NET 10
 
+[![Última release](https://img.shields.io/github/v/release/ARSASWebDesign/NetArcaWs?label=GitHub%20release)](https://github.com/ARSASWebDesign/NetArcaWs/releases)
+[![NetArcaWs en NuGet](https://img.shields.io/nuget/v/NetArcaWs?label=NuGet%20biblioteca)](https://www.nuget.org/packages/NetArcaWs)
+[![NetArcaWs.Tool en NuGet](https://img.shields.io/nuget/v/NetArcaWs.Tool?label=NuGet%20tool)](https://www.nuget.org/packages/NetArcaWs.Tool)
+[![CI](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/ci.yml/badge.svg)](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/ci.yml)
+[![Release](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/release.yml/badge.svg)](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/release.yml)
+
+Los badges de GitHub y NuGet indican la última release y los paquetes
+aceptados por el feed. Los ejemplos de esta revisión usan la versión `0.6.0`.
+
 Port .NET 10 de [PyAfipWs](https://github.com/reingart/pyafipws), de Mariano
 Reingart. Licencia **LGPL-3.0-or-later**. Además de WSAA y health checks opt-in,
 el código contiene contratos tipados y fachadas de transporte para 183
@@ -10,27 +19,11 @@ Los contratos y las fachadas de Hitos 2–5, su suite, mapeos QName/action y
 roundtrips de serialización fueron verificados. Esto no afirma paridad funcional
 completa con el repositorio Python ni homologación de operaciones autenticadas.
 
-La verificación de migraciones en CI 37547645296 corrió sobre el base exacto:
-510 pruebas (491 aprobadas, 19 skips opt-in, 0 fallos), build Release con 0
-warnings, y los motores reales MySQL 8.4.11 (20/20), MariaDB 11.4.13 (20/20),
-PostgreSQL 17.6 (19/19) y SQL Server Developer 16.0.4295.3 (19/19), todos sin
-skips de motor. Además pasó 10 scripts de migración, 15 DDL, 11 packs y un
-consumer/CLI nuevo. Se verificaron las 183
-operaciones contra sus WSDL y 369 tipos raíz XML en round-trip; los 56 tipos
-con campos `DateTime` (`xs:date` y `xs:dateTime`) conservaron sus valores. Los
-snapshots QA/producción de WSCDC, WSFECred y WSCPE coinciden en sus schemas. En QA real,
-los nueve probes `Dummy` respondieron y dos pruebas autenticadas se omitieron
-por falta de certificados. Esa corrida precede a WSCPE; su nuevo Dummy solo
-se probó con SOAP simulado en este bloque. Los Dummies prueban disponibilidad, no autorización
-fiscal.
-
-Los escenarios de motores se ejecutaron en MySQL 8.4.11 (20/20), MariaDB
-11.4.13 (20/20), PostgreSQL 17.6 (19/19) y SQL Server Developer 16.0.4295.3
-(19/19), incluidos casos entre procesos y migraciones; son versiones y
-escenarios concretos, sin garantía universal ni homologación ARCA. La corrida
-CI de referencia es [37547645296](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37547645296).
-Los 11 paquetes se empaquetaron y el consumer/CLI local fue probado en esa
-corrida, sin llamadas a ARCA ni publicación de los extras.
+La [corrida de CI de referencia](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37555719696)
+registra build, suite local, motores de persistencia, migraciones, paquetes y
+consumer/CLI. Las pruebas usan datos sintéticos; sus resultados no demuestran
+homologación fiscal ni publicación en NuGet. Los badges enlazados arriba
+muestran el estado actual de las acciones y versiones publicadas.
 
 ## Extras y adaptaciones propias respecto de PyAfipWs
 
@@ -42,14 +35,14 @@ contrastan con el [upstream](https://github.com/reingart/pyafipws) y la
 
 | Extra o adaptación .NET | Estado y alcance |
 | --- | --- |
-| Biblioteca .NET 10 y empaquetado NuGet | Implementado; sin runtime Python ni wrappers COM. NetArcaWs 0.5.0 y NetArcaWs.Tool 0.5.0 publicados e indexados en NuGet |
+| Biblioteca .NET 10 y empaquetado NuGet | Implementado; sin runtime Python ni wrappers COM. La release 0.5.0 fue aceptada e indexada en NuGet; los badges muestran la versión publicada vigente |
 | Criptografía nativa de .NET | CMS/TRA, RSA y CSR con `System.Security.Cryptography.Pkcs` y `System.Formats.Asn1`; sin procesos OpenSSL ni BouncyCastle |
 | API asíncrona e inyección de dependencias | `Task`, `CancellationToken`, `IHttpClientFactory`, opciones y `TimeProvider`; SOAP con `HttpClient` y `XmlSerializer` |
 | Certificados como contenido | `WsaaCertificateContent`: PEM, PFX/P12 en bytes o Base64, configuración o parámetro por operación; apto para secretos obtenidos de vault/BD por la aplicación |
 | Contexto multitenant explícito | `ArcaTenantContext`: tenant, CUIT representada, entorno y certificado; usado por WSAA y las operaciones autenticadas de las fachadas SOAP actuales; autorización del tenant sigue a cargo de la aplicación |
 | Caché compartida dentro del proceso | `IMemoryCache`, vencimiento real del TA y coordinación de logins concurrentes; rotación separada por huella; no es caché distribuida |
 | Persistencia EF Core opt-in | `NetArcaWs.EntityFrameworkCore` agrega el diario fiscal y, si se selecciona, tickets WSAA cifrados compartidos; el core no depende de EF. Cinco paquetes opcionales de migraciones oficiales versionadas permiten a una tarea de despliegue consultar estado, generar SQL y aplicar los módulos seleccionados |
-| Proveedores relacionales EF opt-in | SQLite usa el provider del consumidor; paquetes separados para MySQL/MariaDB, PostgreSQL y SQL Server. El core sigue sin EF. Paquetes opcionales 0.5.0 sin publicar; ver [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19) |
+| Proveedores relacionales EF opt-in | SQLite usa el provider del consumidor; paquetes separados para MySQL/MariaDB, PostgreSQL y SQL Server. El core sigue sin EF. Los paquetes opcionales usan versión 0.6.0; consultá los [indicadores por paquete](docs/releases.md#estado-de-activación) para verificar su disponibilidad en NuGet y el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19) para el estado de entrega |
 | Health checks integrables en ASP.NET Core | `IHealthCheck`, registro opt-in por WS/entorno, timeout, tags y estado de componentes; sin certificados ni login |
 | Herramienta instalable con `dotnet tool` | `cert-dev`, `cert-prod`, `cert-info`; manifiesto local o instalación global, contraseña por variable de entorno y protección contra sobrescrituras |
 | Manejo de recursos y errores | Certificados importados liberados por operación, claves PFX efímeras donde se soportan, XML sin DTD, límites configurables de 4 MiB para request/response y timeout de lectura; secretos ocultos en `ToString` |
@@ -74,7 +67,7 @@ cifrados con un contexto EF del consumidor. El paquete principal no depende de
 EF. Los providers se distribuyen por separado como
 `NetArcaWs.EntityFrameworkCore.MySql`,
 `NetArcaWs.EntityFrameworkCore.PostgreSql` y
-`NetArcaWs.EntityFrameworkCore.SqlServer`; esos cuatro paquetes optativos y los cinco paquetes `NetArcaWs.EntityFrameworkCore.Migrations.{Sqlite,MySql,MariaDb,PostgreSql,SqlServer}` usan versión 0.5.0 y todavía no están publicados en NuGet.
+`NetArcaWs.EntityFrameworkCore.SqlServer`; esos cuatro paquetes optativos y los cinco paquetes `NetArcaWs.EntityFrameworkCore.Migrations.{Sqlite,MySql,MariaDb,PostgreSql,SqlServer}` usan versión 0.6.0. Consultá los [indicadores NuGet de los once paquetes](docs/releases.md#estado-de-activación) para verificar las versiones publicadas.
 
 La aplicación selecciona de forma inmutable sus módulos y servicios al iniciar:
 
@@ -234,8 +227,8 @@ dotnet pack src/NetArcaWs.EntityFrameworkCore.MySql/NetArcaWs.EntityFrameworkCor
 dotnet pack src/NetArcaWs.EntityFrameworkCore.PostgreSql/NetArcaWs.EntityFrameworkCore.PostgreSql.csproj --configuration Release --no-build --output artifacts
 dotnet pack src/NetArcaWs.EntityFrameworkCore.SqlServer/NetArcaWs.EntityFrameworkCore.SqlServer.csproj --configuration Release --no-build --output artifacts
 dotnet run --project tools/NetArcaWs.Build -- persistence-schema --check
-NUGET_PACKAGES=/tmp/netarcaws-package-smoke-packages dotnet restore tests/NetArcaWs.Persistence.PackageSmoke/NetArcaWs.Persistence.PackageSmoke.csproj --configfile tests/NetArcaWs.Persistence.PackageSmoke/NuGet.config -p:PersistencePackageVersion=0.5.0
-NUGET_PACKAGES=/tmp/netarcaws-package-smoke-packages dotnet run --project tests/NetArcaWs.Persistence.PackageSmoke/NetArcaWs.Persistence.PackageSmoke.csproj --configuration Release --no-restore -p:PersistencePackageVersion=0.5.0
+NUGET_PACKAGES=/tmp/netarcaws-package-smoke-packages dotnet restore tests/NetArcaWs.Persistence.PackageSmoke/NetArcaWs.Persistence.PackageSmoke.csproj --configfile tests/NetArcaWs.Persistence.PackageSmoke/NuGet.config -p:PersistencePackageVersion=0.6.0
+NUGET_PACKAGES=/tmp/netarcaws-package-smoke-packages dotnet run --project tests/NetArcaWs.Persistence.PackageSmoke/NetArcaWs.Persistence.PackageSmoke.csproj --configuration Release --no-restore -p:PersistencePackageVersion=0.6.0
 ```
 
 Los tests usan xUnit v3 y AwesomeAssertions 9.6.0, con Microsoft.Testing.Platform.
@@ -243,11 +236,11 @@ Las pruebas unitarias no se conectan a ARCA. El paquete compilado localmente
 puede instalarse desde una carpeta NuGet:
 
 ```sh
-dotnet add package NetArcaWs --version 0.5.0 --source /ruta/absoluta/a/artifacts
+dotnet add package NetArcaWs --version 0.6.0 --source /ruta/absoluta/a/artifacts
 ```
 
 Los cuatro paquetes `NetArcaWs.EntityFrameworkCore*` también usan versión
-0.5.0; todavía no forman parte de la release pública. Su guía de selección de
+0.6.0. Su guía de selección de
 módulos y migraciones está en [Diario fiscal](docs/wiki/Diario-fiscal.md), y el
 diccionario del esquema está en [Modelo relacional](docs/wiki/Modelo-relacional.md).
 Las pruebas usan cargas y tickets sintéticos; no demuestran homologación fiscal.
@@ -392,7 +385,7 @@ los servicios. Ver [instalación y guía de la CLI](docs/certificates-cli.md).
 ```sh
 dotnet pack src/NetArcaWs.Tool/NetArcaWs.Tool.csproj --configuration Release --no-build --output artifacts
 dotnet new tool-manifest
-dotnet tool install --local NetArcaWs.Tool --add-source ./artifacts --version 0.5.0
+dotnet tool install --local NetArcaWs.Tool --add-source ./artifacts --version 0.6.0
 dotnet tool run netarcaws cert-dev --cuit "$ARCA_CUIT" --organization "Mi Empresa" --name "Mi App" --output ./certificados/dev --password-env NETARCA_KEY_PASSWORD
 ```
 
@@ -576,8 +569,11 @@ datos fiscales reales en issues o ejemplos.
 
 ## Releases
 
-El workflow [Release](.github/workflows/release.yml) genera y publica la biblioteca
-`NetArcaWs` y el tool `NetArcaWs.Tool` al publicar una release GitHub. Permite un
+El workflow [Release](.github/workflows/release.yml) genera y publica los once
+paquetes NuGet de la biblioteca, la herramienta y los extras de persistencia al
+publicar una release GitHub. Permite un
 ensayo manual sin publicar. La primera release v0.5.0 completó Trusted
 Publishing mediante OIDC y ambos paquetes fueron aceptados e indexados en NuGet.
+La versión 0.6.0 incluye paquetes opcionales de persistencia, además de la
+biblioteca y el tool.
 Ver [publicación y recuperación de releases](docs/releases.md).
