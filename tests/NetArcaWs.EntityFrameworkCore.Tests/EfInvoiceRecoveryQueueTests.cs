@@ -27,6 +27,36 @@ public sealed class EfInvoiceRecoveryQueueTests
     }
 
     [Fact]
+    public async Task Concurrent_identical_prepare_and_enqueue_returns_the_same_atomically_queued_operation()
+    {
+        using var db = new RecoveryDatabase();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        InvoiceSubmission submission = Submission();
+        using var start = new ManualResetEventSlim();
+        Task<InvoiceOperation> first = Task.Run(async () =>
+        {
+            start.Wait(cancellationToken);
+            return await db.Queue.PrepareAndEnqueueAsync(submission, "credential-v1", cancellationToken);
+        }, cancellationToken);
+        Task<InvoiceOperation> second = Task.Run(async () =>
+        {
+            start.Wait(cancellationToken);
+            return await db.Queue.PrepareAndEnqueueAsync(submission, "credential-v1", cancellationToken);
+        }, cancellationToken);
+        start.Set();
+
+        InvoiceOperation[] operations = await Task.WhenAll(first, second);
+
+        operations.Should().HaveCount(2);
+        operations[0].Should().BeEquivalentTo(operations[1]);
+        operations[0].Submission.Should().BeEquivalentTo(submission);
+        InvoiceRecoveryMetadata metadata = (await db.Queue.FindAsync(Scope(submission.TenantId), submission.IdempotencyKey, cancellationToken))!;
+        metadata.State.Should().Be(InvoiceRecoveryState.Scheduled);
+        metadata.Attempt.Should().Be(0);
+        metadata.Generation.Should().Be(0);
+    }
+
+    [Fact]
     public async Task Identical_replay_preserves_attempt_schedule_and_credential_reference()
     {
         using var db = new RecoveryDatabase();

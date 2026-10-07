@@ -52,9 +52,8 @@ public sealed partial class EfInvoiceJournal<TContext> : IInvoiceRecoveryQueue w
         }
         catch (Exception exception) when (IsConstraintFailure(exception))
         {
-            InvoiceOperation? winner = await FindAsync(submission.TenantId, submission.IdempotencyKey, cancellationToken).ConfigureAwait(false);
-            if (winner is not null && winner.Submission != submission)
-                throw new InvoiceRecoveryConflictException("The idempotency key is bound to a different immutable submission.");
+            InvoiceOperation? winner = await FindQueuedWinnerAsync(submission, credentialReference, cancellationToken).ConfigureAwait(false);
+            if (winner is not null) return winner;
             throw new InvoiceRecoveryConflictException("The fiscal identity, series, or recovery job is already reserved.");
         }
         catch (InvoiceConflictException)
@@ -286,6 +285,46 @@ public sealed partial class EfInvoiceJournal<TContext> : IInvoiceRecoveryQueue w
         VoucherNumber = invoice.VoucherNumber, CredentialReference = credentialReference, NextAvailableMilliseconds = now,
         LastReason = (int)InvoiceRecoverySafeReason.None
     };
+
+    private async Task<InvoiceOperation?> FindQueuedWinnerAsync(InvoiceSubmission submission, string? credentialReference,
+        CancellationToken cancellationToken)
+    {
+        await using TContext context = await CreateContextAsync(cancellationToken).ConfigureAwait(false);
+        await using IDbContextTransaction transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken).ConfigureAwait(false);
+        (string tenantHash, string keyHash) = GetOperationKeys(submission.TenantId, submission.IdempotencyKey);
+        InvoiceJournalEntity? invoice = await context.Set<InvoiceJournalEntity>()
+            .SingleOrDefaultAsync(x => x.TenantHash == tenantHash && x.KeyHash == keyHash, cancellationToken).ConfigureAwait(false);
+        if (invoice is null)
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
+        EnsureIdentifierMatch(invoice, submission.TenantId, submission.IdempotencyKey);
+        InvoiceOperation winner = ToOperation(invoice);
+        if (winner.Submission != submission)
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
+        InvoiceRecoveryJobEntity? job = await context.Set<InvoiceRecoveryJobEntity>()
+            .SingleOrDefaultAsync(x => x.TenantHash == tenantHash && x.KeyHash == keyHash, cancellationToken).ConfigureAwait(false);
+        if (job is null)
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+        EnsureJobIdentifiers(job, submission.TenantId, submission.IdempotencyKey);
+        if (job.CredentialReference != credentialReference || !FiscalSnapshotMatches(job, invoice) || job.InvoiceVersion > invoice.Version)
+        {
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return null;
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return winner;
+    }
 
     private static void CopyIdentity(InvoiceRecoveryJobEntity job, InvoiceJournalEntity invoice)
     { job.Environment = invoice.Environment; job.Cuit = invoice.Cuit; job.PointOfSale = invoice.PointOfSale; job.VoucherType = invoice.VoucherType; job.VoucherNumber = invoice.VoucherNumber; }
