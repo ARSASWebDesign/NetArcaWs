@@ -48,15 +48,16 @@ release de GitHub no demuestra que los once IDs hayan sido aceptados e
 indexados. La publicación de once paquetes tampoco es una transacción; una
 falla parcial requiere verificar cada ID y versión.
 
-El alcance previsto incluye persistencia relacional optativa para diario fiscal
-y tickets WSAA, providers para MySQL/MariaDB, PostgreSQL y SQL Server, cinco
-paquetes de migraciones oficiales y ejemplos/documentación de consumo. El
-consumidor conserva la responsabilidad de autorizar tenants, proteger claves,
-programar la recuperación y aplicar migraciones explícitamente. La release no
-incorpora almacenamiento de certificados ni un worker de recuperación; las
-migraciones no adoptan automáticamente tablas previas sin historial. Las
-pruebas locales y de motores relacionales no equivalen a homologación fiscal
-completa contra ARCA.
+El alcance de la release 0.6.0 incluye persistencia relacional optativa para
+diario fiscal y tickets WSAA, providers para MySQL/MariaDB, PostgreSQL y SQL
+Server, cinco paquetes de migraciones oficiales y ejemplos/documentación de
+consumo. Los paquetes públicos 0.6.0 no incluyen el store de certificados ni la
+cola/worker de recuperación que ahora están en el código posterior de esta rama;
+ambas APIs esperan una publicación futura. El consumidor conserva la
+responsabilidad de autorizar tenants, proteger claves y aplicar migraciones
+explícitamente. Las migraciones no adoptan automáticamente tablas previas sin
+historial. Las pruebas locales y de motores relacionales no equivalen a
+homologación fiscal completa contra ARCA.
 
 ## Configuración inicial del mantenedor
 
