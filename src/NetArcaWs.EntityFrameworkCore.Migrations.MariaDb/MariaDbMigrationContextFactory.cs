@@ -11,7 +11,7 @@ public sealed class MariaDbMigrationContextFactory(string connectionString, Mari
     private static readonly HashSet<string> OwnedTables = new(StringComparer.Ordinal)
     {
         "NetArcaInvoices", "NetArcaInvoiceRevisions", "NetArcaInvoiceSeriesReservations", "NetArcaWsaaTickets",
-        "__NetArcaWsInvoiceMigrations", "__NetArcaWsTicketMigrations"
+        "NetArcaCertificateSlots", "NetArcaCertificateVersions", "__NetArcaWsInvoiceMigrations", "__NetArcaWsTicketMigrations", "__NetArcaWsCertificateMigrations"
     };
 
     public NetArcaWsMigrationProvider Provider => NetArcaWsMigrationProvider.MariaDb;
@@ -22,12 +22,14 @@ public sealed class MariaDbMigrationContextFactory(string connectionString, Mari
             .UseMySql(connectionString, serverVersion, options => options.MigrationsAssembly(typeof(MariaDbMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsInvoiceMigrations")).Options),
         NetArcaWsPersistenceModule.WsaaTickets => new MariaDbWsaaTicketsMigrationsDbContext(new DbContextOptionsBuilder<MariaDbWsaaTicketsMigrationsDbContext>()
             .UseMySql(connectionString, serverVersion, options => options.MigrationsAssembly(typeof(MariaDbMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsTicketMigrations")).Options),
+        NetArcaWsPersistenceModule.TenantCertificates => new MariaDbTenantCertificatesMigrationsDbContext(new DbContextOptionsBuilder<MariaDbTenantCertificatesMigrationsDbContext>()
+            .UseMySql(connectionString, serverVersion, options => options.MigrationsAssembly(typeof(MariaDbMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsCertificateMigrations")).Options),
         _ => throw new ArgumentOutOfRangeException(nameof(module))
     };
 
     public async Task<IReadOnlyList<string>> GetPresentTablesAsync(DbContext context, IReadOnlyList<string> names, CancellationToken cancellationToken)
     {
-        if (context is not (MariaDbInvoicingMigrationsDbContext or MariaDbWsaaTicketsMigrationsDbContext))
+        if (context is not (MariaDbInvoicingMigrationsDbContext or MariaDbWsaaTicketsMigrationsDbContext or MariaDbTenantCertificatesMigrationsDbContext))
             throw new ArgumentException("A MariaDB migrations context is required.", nameof(context));
         ArgumentNullException.ThrowIfNull(names);
         if (names.Count == 0) return Array.Empty<string>();

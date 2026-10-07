@@ -17,22 +17,23 @@ public sealed record PersistenceMigrationsCheckResult(bool IsCurrent, IReadOnlyL
 public static class PersistenceMigrations
 {
     private const string RelativeDirectory = "docs/reference/persistence-migrations";
-    private static readonly (string Provider, Func<DbContext> Invoicing, Func<DbContext> WsaaTickets)[] Contexts =
+    private static readonly (string Provider, Func<DbContext> Invoicing, Func<DbContext> WsaaTickets, Func<DbContext> TenantCertificates)[] Contexts =
     [
-        ("sqlite", SqliteInvoice, SqliteTickets),
-        ("mysql", MySqlInvoice, MySqlTickets),
-        ("mariadb", MariaDbInvoice, MariaDbTickets),
-        ("postgresql", PostgreSqlInvoice, PostgreSqlTickets),
-        ("sqlserver", SqlServerInvoice, SqlServerTickets)
+        ("sqlite", SqliteInvoice, SqliteTickets, SqliteCertificates),
+        ("mysql", MySqlInvoice, MySqlTickets, MySqlCertificates),
+        ("mariadb", MariaDbInvoice, MariaDbTickets, MariaDbCertificates),
+        ("postgresql", PostgreSqlInvoice, PostgreSqlTickets, PostgreSqlCertificates),
+        ("sqlserver", SqlServerInvoice, SqlServerTickets, SqlServerCertificates)
     ];
 
     public static IReadOnlyDictionary<string, string> GenerateScripts()
     {
         var scripts = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        foreach ((string provider, Func<DbContext> invoicing, Func<DbContext> wsaaTickets) in Contexts)
+        foreach ((string provider, Func<DbContext> invoicing, Func<DbContext> wsaaTickets, Func<DbContext> tenantCertificates) in Contexts)
         {
             scripts.Add($"{provider}/invoicing/0-latest.sql", Generate(provider, "invoicing", invoicing));
             scripts.Add($"{provider}/wsaa-tickets/0-latest.sql", Generate(provider, "wsaa-tickets", wsaaTickets));
+            scripts.Add($"{provider}/tenant-certificates/0-latest.sql", Generate(provider, "tenant-certificates", tenantCertificates));
         }
         return scripts;
     }
@@ -68,7 +69,7 @@ public static class PersistenceMigrations
         {
             if (!result.IsCurrent)
                 throw new InvalidOperationException("Persistence migration SQL drift detected: " + string.Join(", ", result.Drifted));
-            Console.WriteLine("Persistence migration SQL is current (10 provider/module combinations).");
+            Console.WriteLine("Persistence migration SQL is current (15 provider/module combinations).");
             return;
         }
 
@@ -96,17 +97,25 @@ public static class PersistenceMigrations
 
         IMigrationsAssembly assembly = context.GetService<IMigrationsAssembly>();
         KeyValuePair<string, TypeInfo>[] migrations = assembly.Migrations.OrderBy(entry => entry.Key, StringComparer.Ordinal).ToArray();
-        string initialMigrationId = module == "invoicing"
-            ? "20261006000100_InitialInvoicing"
-            : "20261006000200_InitialWsaaTickets";
+        string initialMigrationId = module switch
+        {
+            "invoicing" => "20261006000100_InitialInvoicing",
+            "wsaa-tickets" => "20261006000200_InitialWsaaTickets",
+            "tenant-certificates" => "20261006000300_InitialTenantCertificates",
+            _ => throw new ArgumentOutOfRangeException(nameof(module))
+        };
         if (migrations.Length == 0 || !string.Equals(migrations[0].Key, initialMigrationId, StringComparison.Ordinal))
             throw new InvalidOperationException($"The {provider}/{module} migration chain must start with {initialMigrationId}.");
         Migration migration = assembly.CreateMigration(migrations[0].Value, context.Database.ProviderName!);
         IReadOnlyList<MigrationOperation> operations = migration.UpOperations;
         int createTables = operations.OfType<CreateTableOperation>().Count();
-        string[] expectedTables = module == "invoicing"
-            ? ["NetArcaInvoices", "NetArcaInvoiceRevisions", "NetArcaInvoiceSeriesReservations"]
-            : ["NetArcaWsaaTickets"];
+        string[] expectedTables = module switch
+        {
+            "invoicing" => ["NetArcaInvoices", "NetArcaInvoiceRevisions", "NetArcaInvoiceSeriesReservations"],
+            "wsaa-tickets" => ["NetArcaWsaaTickets"],
+            "tenant-certificates" => ["NetArcaCertificateSlots", "NetArcaCertificateVersions"],
+            _ => throw new ArgumentOutOfRangeException(nameof(module))
+        };
         string[] created = operations.OfType<CreateTableOperation>().Select(operation => operation.Name).ToArray();
         if (createTables != expectedTables.Length || expectedTables.Except(created, StringComparer.Ordinal).Any()
             || operations.OfType<RenameTableOperation>().Any())
@@ -123,20 +132,31 @@ public static class PersistenceMigrations
     private static DbContext SqliteTickets() => new SqliteWsaaTicketsMigrationsDbContext(new DbContextOptionsBuilder<SqliteWsaaTicketsMigrationsDbContext>()
         .UseSqlite("Data Source=:memory:", options => options.MigrationsAssembly(typeof(SqliteMigrationContextFactory).Assembly.FullName)
             .MigrationsHistoryTable("__NetArcaWsTicketMigrations")).Options);
+    private static DbContext SqliteCertificates() => new SqliteTenantCertificatesMigrationsDbContext(new DbContextOptionsBuilder<SqliteTenantCertificatesMigrationsDbContext>()
+        .UseSqlite("Data Source=:memory:", options => options.MigrationsAssembly(typeof(SqliteMigrationContextFactory).Assembly.FullName)
+            .MigrationsHistoryTable("__NetArcaWsCertificateMigrations")).Options);
     private static DbContext MySqlInvoice() => new MySqlInvoicingMigrationsDbContext(new DbContextOptionsBuilder<MySqlInvoicingMigrationsDbContext>()
         .UseMySql("Server=localhost;Database=offline", new MySqlServerVersion(new Version(8, 4, 11)), options => options.MigrationsHistoryTable("__NetArcaWsInvoiceMigrations")).Options);
     private static DbContext MySqlTickets() => new MySqlWsaaTicketsMigrationsDbContext(new DbContextOptionsBuilder<MySqlWsaaTicketsMigrationsDbContext>()
         .UseMySql("Server=localhost;Database=offline", new MySqlServerVersion(new Version(8, 4, 11)), options => options.MigrationsHistoryTable("__NetArcaWsTicketMigrations")).Options);
+    private static DbContext MySqlCertificates() => new MySqlTenantCertificatesMigrationsDbContext(new DbContextOptionsBuilder<MySqlTenantCertificatesMigrationsDbContext>()
+        .UseMySql("Server=localhost;Database=offline", new MySqlServerVersion(new Version(8, 4, 11)), options => options.MigrationsHistoryTable("__NetArcaWsCertificateMigrations")).Options);
     private static DbContext MariaDbInvoice() => new MariaDbInvoicingMigrationsDbContext(new DbContextOptionsBuilder<MariaDbInvoicingMigrationsDbContext>()
         .UseMySql("Server=localhost;Database=offline", new MariaDbServerVersion(new Version(11, 4, 13)), options => options.MigrationsHistoryTable("__NetArcaWsInvoiceMigrations")).Options);
     private static DbContext MariaDbTickets() => new MariaDbWsaaTicketsMigrationsDbContext(new DbContextOptionsBuilder<MariaDbWsaaTicketsMigrationsDbContext>()
         .UseMySql("Server=localhost;Database=offline", new MariaDbServerVersion(new Version(11, 4, 13)), options => options.MigrationsHistoryTable("__NetArcaWsTicketMigrations")).Options);
+    private static DbContext MariaDbCertificates() => new MariaDbTenantCertificatesMigrationsDbContext(new DbContextOptionsBuilder<MariaDbTenantCertificatesMigrationsDbContext>()
+        .UseMySql("Server=localhost;Database=offline", new MariaDbServerVersion(new Version(11, 4, 13)), options => options.MigrationsHistoryTable("__NetArcaWsCertificateMigrations")).Options);
     private static DbContext PostgreSqlInvoice() => new PostgreSqlInvoicingMigrationsDbContext(new DbContextOptionsBuilder<PostgreSqlInvoicingMigrationsDbContext>()
         .UseNpgsql("Host=localhost;Database=offline", options => options.MigrationsHistoryTable("__NetArcaWsInvoiceMigrations", "public")).Options);
     private static DbContext PostgreSqlTickets() => new PostgreSqlWsaaTicketsMigrationsDbContext(new DbContextOptionsBuilder<PostgreSqlWsaaTicketsMigrationsDbContext>()
         .UseNpgsql("Host=localhost;Database=offline", options => options.MigrationsHistoryTable("__NetArcaWsTicketMigrations", "public")).Options);
+    private static DbContext PostgreSqlCertificates() => new PostgreSqlTenantCertificatesMigrationsDbContext(new DbContextOptionsBuilder<PostgreSqlTenantCertificatesMigrationsDbContext>()
+        .UseNpgsql("Host=localhost;Database=offline", options => options.MigrationsHistoryTable("__NetArcaWsCertificateMigrations", "public")).Options);
     private static DbContext SqlServerInvoice() => new SqlServerInvoicingMigrationsDbContext(new DbContextOptionsBuilder<SqlServerInvoicingMigrationsDbContext>()
         .UseSqlServer("Server=localhost;Database=offline;Encrypt=True;TrustServerCertificate=True", options => options.MigrationsHistoryTable("__NetArcaWsInvoiceMigrations", "dbo")).Options);
     private static DbContext SqlServerTickets() => new SqlServerWsaaTicketsMigrationsDbContext(new DbContextOptionsBuilder<SqlServerWsaaTicketsMigrationsDbContext>()
         .UseSqlServer("Server=localhost;Database=offline;Encrypt=True;TrustServerCertificate=True", options => options.MigrationsHistoryTable("__NetArcaWsTicketMigrations", "dbo")).Options);
+    private static DbContext SqlServerCertificates() => new SqlServerTenantCertificatesMigrationsDbContext(new DbContextOptionsBuilder<SqlServerTenantCertificatesMigrationsDbContext>()
+        .UseSqlServer("Server=localhost;Database=offline;Encrypt=True;TrustServerCertificate=True", options => options.MigrationsHistoryTable("__NetArcaWsCertificateMigrations", "dbo")).Options);
 }

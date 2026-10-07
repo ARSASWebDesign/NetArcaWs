@@ -10,7 +10,7 @@ public sealed class PostgreSqlMigrationContextFactory(string connectionString) :
     private static readonly HashSet<string> OwnedTables = new(StringComparer.Ordinal)
     {
         "NetArcaInvoices", "NetArcaInvoiceRevisions", "NetArcaInvoiceSeriesReservations", "NetArcaWsaaTickets",
-        "__NetArcaWsInvoiceMigrations", "__NetArcaWsTicketMigrations"
+        "NetArcaCertificateSlots", "NetArcaCertificateVersions", "__NetArcaWsInvoiceMigrations", "__NetArcaWsTicketMigrations", "__NetArcaWsCertificateMigrations"
     };
 
     public NetArcaWsMigrationProvider Provider => NetArcaWsMigrationProvider.PostgreSql;
@@ -21,6 +21,8 @@ public sealed class PostgreSqlMigrationContextFactory(string connectionString) :
             .UseNpgsql(connectionString, options => options.MigrationsAssembly(typeof(PostgreSqlMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsInvoiceMigrations", "public")).Options),
         NetArcaWsPersistenceModule.WsaaTickets => new PostgreSqlWsaaTicketsMigrationsDbContext(new DbContextOptionsBuilder<PostgreSqlWsaaTicketsMigrationsDbContext>()
             .UseNpgsql(connectionString, options => options.MigrationsAssembly(typeof(PostgreSqlMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsTicketMigrations", "public")).Options),
+        NetArcaWsPersistenceModule.TenantCertificates => new PostgreSqlTenantCertificatesMigrationsDbContext(new DbContextOptionsBuilder<PostgreSqlTenantCertificatesMigrationsDbContext>()
+            .UseNpgsql(connectionString, options => options.MigrationsAssembly(typeof(PostgreSqlMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsCertificateMigrations", "public")).Options),
         _ => throw new ArgumentOutOfRangeException(nameof(module))
     };
 

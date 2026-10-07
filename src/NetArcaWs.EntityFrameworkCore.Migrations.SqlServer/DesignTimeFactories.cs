@@ -14,3 +14,9 @@ public sealed class WsaaTicketsDesignTimeFactory : IDesignTimeDbContextFactory<S
     public SqlServerWsaaTicketsMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<SqlServerWsaaTicketsMigrationsDbContext>()
         .UseSqlServer("Server=localhost;Database=netarcaws_design_time;Integrated Security=true;TrustServerCertificate=true", options => options.MigrationsAssembly(typeof(WsaaTicketsDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsTicketMigrations", "dbo")).Options);
 }
+
+public sealed class TenantCertificatesDesignTimeFactory : IDesignTimeDbContextFactory<SqlServerTenantCertificatesMigrationsDbContext>
+{
+    public SqlServerTenantCertificatesMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<SqlServerTenantCertificatesMigrationsDbContext>()
+        .UseSqlServer("Server=localhost;Database=netarcaws_design_time;Integrated Security=true;TrustServerCertificate=true", options => options.MigrationsAssembly(typeof(TenantCertificatesDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsCertificateMigrations", "dbo")).Options);
+}

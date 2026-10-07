@@ -13,9 +13,10 @@ public static class SqliteMigrationsServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(modelOptions);
         if (services.Any(x => x.ServiceType == typeof(INetArcaWsMigrator)))
             throw new InvalidOperationException("Only one NetArcaWs migration provider may be registered in a service collection.");
-        var modules = new List<NetArcaWsPersistenceModule>(2);
+        var modules = new List<NetArcaWsPersistenceModule>(3);
         if (modelOptions.InvoicingEnabled) modules.Add(NetArcaWsPersistenceModule.Invoicing);
         if (modelOptions.WsaaTicketsEnabled) modules.Add(NetArcaWsPersistenceModule.WsaaTickets);
+        if (modelOptions.CertificatesEnabled) modules.Add(NetArcaWsPersistenceModule.TenantCertificates);
         var factory = new SqliteMigrationContextFactory(connectionString);
         services.AddSingleton<INetArcaWsMigrationContextFactory>(factory);
         services.AddSingleton<INetArcaWsMigrator>(new NetArcaWsMigrator(factory, Array.AsReadOnly(modules.ToArray())));

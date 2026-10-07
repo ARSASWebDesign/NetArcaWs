@@ -14,3 +14,9 @@ public sealed class WsaaTicketsDesignTimeFactory : IDesignTimeDbContextFactory<S
     public SqliteWsaaTicketsMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<SqliteWsaaTicketsMigrationsDbContext>()
         .UseSqlite("Data Source=:memory:", x => x.MigrationsAssembly(typeof(WsaaTicketsDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsTicketMigrations")).Options);
 }
+
+public sealed class TenantCertificatesDesignTimeFactory : IDesignTimeDbContextFactory<SqliteTenantCertificatesMigrationsDbContext>
+{
+    public SqliteTenantCertificatesMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<SqliteTenantCertificatesMigrationsDbContext>()
+        .UseSqlite("Data Source=:memory:", x => x.MigrationsAssembly(typeof(TenantCertificatesDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsCertificateMigrations")).Options);
+}

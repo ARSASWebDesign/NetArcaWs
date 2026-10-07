@@ -26,3 +26,13 @@ public sealed class PostgreSqlWsaaTicketsMigrationsDbContext(DbContextOptions<Po
             ArcaService.PadronA10, ArcaService.PadronA13, ArcaService.Wscdc, ArcaService.Wsfecred, ArcaService.Wscpe)));
     }
 }
+
+public sealed class PostgreSqlTenantCertificatesMigrationsDbContext(DbContextOptions<PostgreSqlTenantCertificatesMigrationsDbContext> options) : DbContext(options)
+{
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) => optionsBuilder.ReplaceService<IModelCacheKeyFactory, NetArcaWsModelCacheKeyFactory>();
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.HasDefaultSchema("public");
+        modelBuilder.AddNetArcaWs(NetArcaWsModelOptions.Configure(x => x.AddCertificates()));
+    }
+}

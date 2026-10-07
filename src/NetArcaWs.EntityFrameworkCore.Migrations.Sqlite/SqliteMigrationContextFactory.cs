@@ -12,6 +12,7 @@ public sealed class SqliteMigrationContextFactory(string connectionString) : INe
     {
         NetArcaWsPersistenceModule.Invoicing => new SqliteInvoicingMigrationsDbContext(new DbContextOptionsBuilder<SqliteInvoicingMigrationsDbContext>().UseSqlite(connectionString, x => x.MigrationsAssembly(typeof(SqliteMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsInvoiceMigrations")).Options),
         NetArcaWsPersistenceModule.WsaaTickets => new SqliteWsaaTicketsMigrationsDbContext(new DbContextOptionsBuilder<SqliteWsaaTicketsMigrationsDbContext>().UseSqlite(connectionString, x => x.MigrationsAssembly(typeof(SqliteMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsTicketMigrations")).Options),
+        NetArcaWsPersistenceModule.TenantCertificates => new SqliteTenantCertificatesMigrationsDbContext(new DbContextOptionsBuilder<SqliteTenantCertificatesMigrationsDbContext>().UseSqlite(connectionString, x => x.MigrationsAssembly(typeof(SqliteMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsCertificateMigrations")).Options),
         _ => throw new ArgumentOutOfRangeException(nameof(module))
     };
 
