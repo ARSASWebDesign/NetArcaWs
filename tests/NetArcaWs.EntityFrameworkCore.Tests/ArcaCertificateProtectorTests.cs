@@ -73,4 +73,45 @@ public sealed class ArcaCertificateProtectorTests
         byte[] copy = payload.Ciphertext; copy[0] ^= 0x80;
         protector.Unprotect(payload, "aad"u8).Should().Equal("secret"u8.ToArray());
     }
+
+    [Fact]
+    public void ConstructorRequiresExactActiveKeyIdFromOrdinalKeyRing()
+    {
+        byte[] key = RandomNumberGenerator.GetBytes(32);
+        var caseInsensitiveKeyRing = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Active"] = key
+        };
+
+        Action mismatchedCase = () => new AesGcmArcaCertificateProtector("active", caseInsensitiveKeyRing);
+        mismatchedCase.Should().Throw<ArgumentException>();
+
+        using var exactMatch = new AesGcmArcaCertificateProtector("Active", caseInsensitiveKeyRing);
+        exactMatch.Protect("certificate"u8, ReadOnlySpan<byte>.Empty).KeyId.Should().Be("Active");
+    }
+
+    [Fact]
+    public void KeyIdsRejectUnpairedSurrogatesAndAcceptValidUnicode()
+    {
+        string[] invalidKeyIds = ["high\uD800", "low\uDC00", "mixed\uD800x\uDC00"];
+        foreach (string invalidKeyId in invalidKeyIds)
+        {
+            Action activeId = () => new AesGcmArcaCertificateProtector(invalidKeyId, new Dictionary<string, byte[]> { [invalidKeyId] = new byte[32] });
+            activeId.Should().Throw<ArgumentException>();
+
+            Action keyRingId = () => new AesGcmArcaCertificateProtector("active", new Dictionary<string, byte[]>
+            {
+                ["active"] = new byte[32], [invalidKeyId] = new byte[32]
+            });
+            keyRingId.Should().Throw<ArgumentException>();
+        }
+
+        using var protector = new AesGcmArcaCertificateProtector("clave-🔐", new Dictionary<string, byte[]> { ["clave-🔐"] = RandomNumberGenerator.GetBytes(32) });
+        ArcaProtectedCertificate payload = protector.Protect("certificate"u8, "scope"u8);
+        payload.KeyId.Should().Be("clave-🔐");
+        protector.Unprotect(payload, "scope"u8).Should().Equal("certificate"u8.ToArray());
+
+        Action invalidPayloadKeyId = () => new ArcaProtectedCertificate("bad\uD800", new byte[12], new byte[0], new byte[16]);
+        invalidPayloadKeyId.Should().Throw<ArgumentException>();
+    }
 }

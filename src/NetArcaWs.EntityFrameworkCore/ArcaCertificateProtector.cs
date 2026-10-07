@@ -44,7 +44,6 @@ public sealed class AesGcmArcaCertificateProtector : IArcaCertificateProtector, 
     {
         ArcaCertificateValidation.ValidateKeyId(activeKeyId);
         ArgumentNullException.ThrowIfNull(keyRing);
-        if (!keyRing.ContainsKey(activeKeyId)) throw new ArgumentException("The active encryption key is unavailable.", nameof(activeKeyId));
         try
         {
             foreach ((string id, byte[] key) in keyRing)
@@ -54,6 +53,7 @@ public sealed class AesGcmArcaCertificateProtector : IArcaCertificateProtector, 
                 if (key.Length != 32) throw new ArgumentException("AES-256-GCM keys must contain exactly 32 bytes.", nameof(keyRing));
                 if (!keys.TryAdd(id, key.ToArray())) throw new ArgumentException("Key IDs must be unique.", nameof(keyRing));
             }
+            if (!keys.ContainsKey(activeKeyId)) throw new ArgumentException("The active encryption key is unavailable.", nameof(activeKeyId));
             this.activeKeyId = activeKeyId;
         }
         catch { ClearKeys(); throw; }
@@ -109,5 +109,20 @@ internal static class ArcaCertificateValidation
     {
         if (string.IsNullOrWhiteSpace(keyId) || keyId.Length > 128 || keyId.Any(char.IsControl))
             throw new ArgumentException("Key ID must contain 1 to 128 characters without controls.", nameof(keyId));
+
+        for (int index = 0; index < keyId.Length; index++)
+        {
+            char current = keyId[index];
+            if (char.IsHighSurrogate(current))
+            {
+                if (index + 1 >= keyId.Length || !char.IsLowSurrogate(keyId[index + 1]))
+                    throw new ArgumentException("Key ID must contain valid Unicode text.", nameof(keyId));
+                index++;
+            }
+            else if (char.IsLowSurrogate(current))
+            {
+                throw new ArgumentException("Key ID must contain valid Unicode text.", nameof(keyId));
+            }
+        }
     }
 }
