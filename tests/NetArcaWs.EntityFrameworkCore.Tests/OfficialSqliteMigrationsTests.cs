@@ -36,6 +36,60 @@ public sealed class OfficialSqliteMigrationsTests
     }
 
     [Fact]
+    public async Task TenantCertificatesOnlyCreatesItsTwoTablesAndIndependentHistory()
+    {
+        await using var db = new TestDatabase(CertificateOptions());
+        NetArcaWsMigrationStatus status = await db.Migrator.ApplyAsync(TestContext.Current.CancellationToken);
+
+        status.Modules.Should().ContainSingle().Which.Module.Should().Be(NetArcaWsPersistenceModule.TenantCertificates);
+        status.Modules.Single().State.Should().Be(NetArcaWsMigrationState.Current);
+        status.Modules.Single().Applied.Should().ContainSingle().Which.Should().Be("20261006000300_InitialTenantCertificates");
+        (await db.Tables()).Should().BeEquivalentTo("NetArcaCertificateSlots", "NetArcaCertificateVersions",
+            "__NetArcaWsCertificateMigrations", "__EFMigrationsLock");
+        (await db.Migrator.GetStatusAsync(TestContext.Current.CancellationToken)).Modules.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task AddingCertificateHistoryToExistingInvoiceAndTicketDataIsAdditiveAndOptOutIsANoOp()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"arca-certificate-migration-{Guid.NewGuid():N}.db");
+        string connectionString = $"Data Source={path};Pooling=False";
+        var factory = new SqliteMigrationContextFactory(connectionString);
+        var invoiceAndTickets = new NetArcaWsMigrator(factory,
+            [NetArcaWsPersistenceModule.Invoicing, NetArcaWsPersistenceModule.WsaaTickets]);
+        var certificates = new NetArcaWsMigrator(factory, [NetArcaWsPersistenceModule.TenantCertificates]);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        try
+        {
+            (await invoiceAndTickets.ApplyAsync(cancellationToken)).Modules.Should().HaveCount(2);
+            await ExecuteSqliteAsync(connectionString,
+                "INSERT INTO NetArcaInvoices (TenantHash, KeyHash, TenantId, IdempotencyKey, Service, ServiceHash, Environment, Cuit, PointOfSale, VoucherType, VoucherNumber, FiscalHash, Payload, PayloadHash, CanonicalVersion, State, Version, Attempt, CreatedUtcTicks) VALUES ('t','k','tenant','idem','WSFEv1','s',1,1,1,1,1,'f','<synthetic>invoice</synthetic>','p',1,1,1,1,1)", cancellationToken);
+            await ExecuteSqliteAsync(connectionString,
+                "INSERT INTO NetArcaWsaaTickets (KeyHash, CertificateHash, Endpoint, Service, State, Fence, Version, Nonce, Ciphertext, Tag, UpdatedUtcTicks) VALUES ('k','c','https://synthetic.invalid/wsaa','wsfev1',3,4,5,X'010203',X'0B16212C37',X'060708',123456789)", cancellationToken);
+            byte[] ticketCiphertext = await ReadSqliteBlobAsync(connectionString,
+                "SELECT Ciphertext FROM NetArcaWsaaTickets WHERE KeyHash='k'", cancellationToken);
+
+            (await certificates.ApplyAsync(cancellationToken)).Modules.Should().ContainSingle()
+                .Which.Applied.Should().ContainSingle().Which.Should().Be("20261006000300_InitialTenantCertificates");
+            (await ReadSqliteIntAsync(connectionString, "SELECT COUNT(*) FROM NetArcaInvoices", cancellationToken)).Should().Be(1);
+            (await ReadSqliteBlobAsync(connectionString, "SELECT Ciphertext FROM NetArcaWsaaTickets WHERE KeyHash='k'", cancellationToken))
+                .Should().Equal(ticketCiphertext);
+
+            var disabled = new NetArcaWsMigrator(factory, []);
+            (await disabled.ApplyAsync(cancellationToken)).Modules.Should().BeEmpty();
+            (await certificates.GetStatusAsync(cancellationToken)).Modules.Should().ContainSingle()
+                .Which.Applied.Should().ContainSingle().Which.Should().Be("20261006000300_InitialTenantCertificates");
+            (await ReadSqliteBlobAsync(connectionString, "SELECT Ciphertext FROM NetArcaWsaaTickets WHERE KeyHash='k'", cancellationToken))
+                .Should().Equal(ticketCiphertext);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task RepeatApplyPreservesHistory()
     {
         await using var db = new TestDatabase(InvoiceOptions());
@@ -76,6 +130,21 @@ public sealed class OfficialSqliteMigrationsTests
         await using var db = new TestDatabase(InvoiceOptions());
         await db.Migrator.ApplyAsync(TestContext.Current.CancellationToken);
         (await db.Tables()).Should().NotContain("NetArcaWsaaTickets").And.NotContain("__NetArcaWsTicketMigrations");
+    }
+
+    [Fact]
+    public async Task DisabledCertificateModuleDoesNotCreateOrChangeItsHistoryOrTables()
+    {
+        await using var db = new TestDatabase(CertificateOptions());
+        await db.Migrator.ApplyAsync(TestContext.Current.CancellationToken);
+        string[] before = await db.Tables();
+
+        var disabled = new TestDatabase(db.ConnectionString, NetArcaWsModelOptions.Configure(_ => { }));
+        await using (disabled)
+        {
+            (await disabled.Migrator.ApplyAsync(TestContext.Current.CancellationToken)).Modules.Should().BeEmpty();
+            (await disabled.Tables()).Should().Equal(before);
+        }
     }
 
     [Theory]
@@ -334,11 +403,37 @@ public sealed class OfficialSqliteMigrationsTests
 
     private static NetArcaWsModelOptions InvoiceOptions() => NetArcaWsModelOptions.Configure(x => x.AddInvoicing(ArcaService.Wsfev1));
     private static NetArcaWsModelOptions TicketOptions() => NetArcaWsModelOptions.Configure(x => x.AddWsaaTickets(ArcaService.Wsfev1));
+    private static NetArcaWsModelOptions CertificateOptions() => NetArcaWsModelOptions.Configure(x => x.AddCertificates());
     private static NetArcaWsModelOptions BothOptions(bool invoicesFirst = true) => NetArcaWsModelOptions.Configure(x =>
     {
         if (invoicesFirst) x.AddInvoicing(ArcaService.Wsfev1).AddWsaaTickets(ArcaService.Wsfev1);
         else x.AddWsaaTickets(ArcaService.Wsfev1).AddInvoicing(ArcaService.Wsfev1);
     });
+
+    private static async Task ExecuteSqliteAsync(string connectionString, string sql, CancellationToken cancellationToken)
+    {
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand(); command.CommandText = sql;
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task<byte[]> ReadSqliteBlobAsync(string connectionString, string sql, CancellationToken cancellationToken)
+    {
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand(); command.CommandText = sql;
+        return (byte[])(await command.ExecuteScalarAsync(cancellationToken)
+            ?? throw new InvalidOperationException("Synthetic SQLite binary fixture was not found."));
+    }
+
+    private static async Task<int> ReadSqliteIntAsync(string connectionString, string sql, CancellationToken cancellationToken)
+    {
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand(); command.CommandText = sql;
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken), System.Globalization.CultureInfo.InvariantCulture);
+    }
 
     private sealed class TestDatabase : IAsyncDisposable
     {
