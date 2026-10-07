@@ -429,4 +429,3 @@ public sealed record ProtectedHomologationLoginGuardState(string IdentityKey, Da
 {
     public override string ToString() => "ProtectedHomologationLoginGuardState { redacted }";
 }
-
