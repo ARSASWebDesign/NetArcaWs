@@ -1,7 +1,9 @@
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Data.Common;
 using NetArcaWs.Cryptography;
 using NetArcaWs.Contracts.WsfeV1;
 using NetArcaWs.EntityFrameworkCore;
@@ -217,10 +219,52 @@ public sealed class InvoiceRecoveryProcessorTests
     }
 
     [Fact]
-    public async Task Ten_inconclusive_queries_suspend_with_capped_backoff()
+    public async Task Repeated_canceled_queries_reach_max_attempts_without_authorizing_again()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         using var fixture = new ProcessorFixture(maxAttempts: 10);
+        InvoiceSubmission submission = SafeInvoiceService.CreateWsfeSubmission(CreateContext(), "processor-query-cancel", Request());
+        await fixture.Queue.PrepareAndEnqueueAsync(submission, "credential-pinned", cancellationToken);
+        InvoiceLease journalLease = (await fixture.Journal.TryAcquireAsync(submission.TenantId,
+            submission.IdempotencyKey, TimeSpan.FromMinutes(1), reconciliation: false, cancellationToken))!;
+        await fixture.Journal.CompleteAsync(journalLease, new InvoiceDecision(InvoiceState.Unknown), cancellationToken);
+        InvoiceRecoveryScope scope = new(submission.TenantId, [ArcaService.Wsfev1]);
+        fixture.SoapProxy.BlockQueries = true;
+        fixture.SoapProxy.SynchronousCancellation = true;
+
+        for (int attempt = 1; attempt <= 10; attempt++)
+        {
+            fixture.SoapProxy.QueryEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var cancellation = new CancellationTokenSource();
+            Task<bool> processing = Task.Run(() => fixture.Processor.RunOnceAsync(scope, cancellation.Token));
+            await fixture.SoapProxy.QueryEntered.Task.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
+            cancellation.Cancel();
+            fixture.SoapProxy.LastSoapToken.IsCancellationRequested.Should().BeTrue();
+            try { await processing; }
+            catch (OperationCanceledException) { }
+            InvoiceRecoveryMetadata metadata = (await fixture.Queue.FindAsync(scope,
+                submission.IdempotencyKey, cancellationToken))!;
+            if (attempt < 10)
+            {
+                metadata.State.Should().Be(InvoiceRecoveryState.Scheduled);
+                fixture.Clock.Advance(TimeSpan.FromDays(1));
+            }
+            else
+            {
+                metadata.State.Should().Be(InvoiceRecoveryState.Suspended);
+                metadata.LastReason.Should().Be(InvoiceRecoverySafeReason.MaxAttemptsReached);
+            }
+        }
+
+        fixture.SoapProxy.Calls.Count(call => call == "FECompConsultarAsync").Should().Be(10);
+        fixture.SoapProxy.Calls.Should().NotContain("FECAESolicitarAsync");
+    }
+
+    [Fact]
+    public async Task Ten_inconclusive_queries_suspend_with_capped_backoff()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var fixture = new ProcessorFixture(maxAttempts: 10, jitterRatio: 0.2);
         InvoiceSubmission submission = SafeInvoiceService.CreateWsfeSubmission(CreateContext(), "processor-max-attempts", Request());
         await fixture.Queue.PrepareAndEnqueueAsync(submission, "credential-pinned", cancellationToken);
         InvoiceLease journalLease = (await fixture.Journal.TryAcquireAsync(submission.TenantId,
@@ -234,12 +278,14 @@ public sealed class InvoiceRecoveryProcessorTests
             if (attempt == 0)
             {
                 InvoiceRecoveryMetadata first = (await fixture.Queue.FindAsync(scope, submission.IdempotencyKey, cancellationToken))!;
-                (first.NextAvailable - fixture.Clock.GetUtcNow()).Should().BeCloseTo(TimeSpan.FromSeconds(4), TimeSpan.FromMilliseconds(1));
+                TimeSpan firstDelay = first.NextAvailable - fixture.Clock.GetUtcNow();
+                (firstDelay >= TimeSpan.FromMilliseconds(3200) && firstDelay <= TimeSpan.FromMilliseconds(4800)).Should().BeTrue();
             }
             if (attempt == 7)
             {
                 InvoiceRecoveryMetadata capped = (await fixture.Queue.FindAsync(scope, submission.IdempotencyKey, cancellationToken))!;
-                (capped.NextAvailable - fixture.Clock.GetUtcNow()).Should().BeCloseTo(TimeSpan.FromMinutes(5), TimeSpan.FromMilliseconds(1));
+                TimeSpan cappedDelay = capped.NextAvailable - fixture.Clock.GetUtcNow();
+                (cappedDelay >= TimeSpan.FromMinutes(4) && cappedDelay <= TimeSpan.FromMinutes(5)).Should().BeTrue();
             }
             if (attempt < 9) fixture.Clock.Advance(TimeSpan.FromDays(1));
         }
@@ -348,15 +394,17 @@ public sealed class InvoiceRecoveryProcessorTests
         private readonly ServiceProvider provider;
 
         public ProcessorFixture(ArcaTenantContext? resolverContext = null, int maxAttempts = 10,
-            bool failAuthorizedCompletion = false, Exception? resolverFailure = null)
+            bool failAuthorizedCompletion = false, Exception? resolverFailure = null, double jitterRatio = 0)
         {
             Clock = new AdjustableTimeProvider(DateTimeOffset.UtcNow);
             Logs = new CapturingLoggerProvider();
+            Transactions = new ActiveTransactionTracker();
             NetArcaWsModelOptions modelOptions = NetArcaWsModelOptions.Configure(builder =>
                 builder.AddInvoicing(ArcaService.Wsfev1).AddInvoiceRecovery(ArcaService.Wsfev1));
             var services = new ServiceCollection();
             services.AddLogging(builder => builder.AddProvider(Logs));
-            services.AddDbContextFactory<ArcaWsDbContext>(options => options.UseSqlite($"Data Source={path};Pooling=False"));
+            services.AddDbContextFactory<ArcaWsDbContext>(options => options.UseSqlite($"Data Source={path};Pooling=False")
+                .AddInterceptors(new TransactionTrackingInterceptor(Transactions)));
             services.AddNetArcaWsEntityFrameworkStores<ArcaWsDbContext>(modelOptions);
             services.AddSingleton<IInvoiceJournal>(sp => new FailingOnceJournal(
                 sp.GetRequiredService<EfInvoiceJournal<ArcaWsDbContext>>(), failAuthorizedCompletion));
@@ -371,7 +419,7 @@ public sealed class InvoiceRecoveryProcessorTests
             services.AddScoped(sp => new SafeInvoiceService(new InvoiceCoordinator(sp.GetRequiredService<IInvoiceJournal>()),
                 sp.GetRequiredService<IWsfev1Service>(), null!, null!));
             services.AddNetArcaWsInvoiceRecoveryWorker(new InvoiceRecoveryScope("tenant-a", [ArcaService.Wsfev1]),
-                options => { options.JitterRatio = 0; options.MaxAttempts = maxAttempts; });
+                options => { options.JitterRatio = jitterRatio; options.MaxAttempts = maxAttempts; });
             provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
             using ArcaWsDbContext context = provider.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>().CreateDbContext();
             context.Database.EnsureCreated();
@@ -379,6 +427,8 @@ public sealed class InvoiceRecoveryProcessorTests
             Journal = provider.GetRequiredService<IInvoiceJournal>();
             using IServiceScope scope = provider.CreateScope();
             Processor = scope.ServiceProvider.GetRequiredService<IInvoiceRecoveryProcessor>();
+            SoapProxy.TransactionCheck = () => Transactions.ActiveCount.Should().Be(0,
+                "the durable transaction must be closed before SOAP begins");
         }
 
         public IInvoiceRecoveryQueue Queue { get; }
@@ -387,6 +437,7 @@ public sealed class InvoiceRecoveryProcessorTests
         public CountingSoapProxy SoapProxy { get; private set; } = null!;
         public AdjustableTimeProvider Clock { get; }
         public CapturingLoggerProvider Logs { get; }
+        public ActiveTransactionTracker Transactions { get; }
 
         public void Dispose()
         {
@@ -424,17 +475,32 @@ public sealed class InvoiceRecoveryProcessorTests
     {
         public List<string> Calls { get; } = [];
         public bool BlockAuthorization { get; set; }
+        public bool BlockQueries { get; set; }
+        public bool SynchronousCancellation { get; set; }
         public TaskCompletionSource AuthorizeEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource QueryEntered { get; set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Func<string, object?>? ResponseFactory { get; set; }
+        public Action? TransactionCheck { get; set; }
+        public CancellationToken LastSoapToken { get; private set; }
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
             Calls.Add(targetMethod!.Name);
+            TransactionCheck?.Invoke();
             Type responseType = targetMethod.ReturnType.GenericTypeArguments[0];
-            if (BlockAuthorization && targetMethod.Name == "FECAESolicitarAsync")
+            if ((BlockAuthorization && targetMethod.Name == "FECAESolicitarAsync") ||
+                (BlockQueries && targetMethod.Name == "FECompConsultarAsync"))
             {
-                AuthorizeEntered.TrySetResult();
                 CancellationToken token = args!.OfType<CancellationToken>().Single();
+                LastSoapToken = token;
+                if (targetMethod.Name == "FECAESolicitarAsync") AuthorizeEntered.TrySetResult();
+                else QueryEntered.TrySetResult();
+                if (SynchronousCancellation)
+                {
+                    if (!token.WaitHandle.WaitOne(TimeSpan.FromSeconds(10)))
+                        throw new TimeoutException("The synthetic cancellation signal was not received.");
+                    token.ThrowIfCancellationRequested();
+                }
                 return GetType().GetMethod(nameof(WaitForCancellation), BindingFlags.NonPublic | BindingFlags.Static)!
                     .MakeGenericMethod(responseType).Invoke(null, [token]);
             }
@@ -447,6 +513,38 @@ public sealed class InvoiceRecoveryProcessorTests
         {
             await Task.Delay(Timeout.InfiniteTimeSpan, token);
             return default!;
+        }
+    }
+
+    private sealed class ActiveTransactionTracker
+    {
+        private int activeCount;
+        public int ActiveCount => Volatile.Read(ref activeCount);
+        public void Started() => Interlocked.Increment(ref activeCount);
+        public void Ended() => Interlocked.Decrement(ref activeCount);
+    }
+
+    private sealed class TransactionTrackingInterceptor(ActiveTransactionTracker tracker) : DbTransactionInterceptor
+    {
+        public override ValueTask<DbTransaction> TransactionStartedAsync(DbConnection connection,
+            TransactionEndEventData eventData, DbTransaction result, CancellationToken cancellationToken = default)
+        {
+            tracker.Started();
+            return ValueTask.FromResult(result);
+        }
+
+        public override Task TransactionCommittedAsync(DbTransaction transaction, TransactionEndEventData eventData,
+            CancellationToken cancellationToken = default)
+        {
+            tracker.Ended();
+            return Task.CompletedTask;
+        }
+
+        public override Task TransactionRolledBackAsync(DbTransaction transaction, TransactionEndEventData eventData,
+            CancellationToken cancellationToken = default)
+        {
+            tracker.Ended();
+            return Task.CompletedTask;
         }
     }
 

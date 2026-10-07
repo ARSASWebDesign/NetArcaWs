@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using NetArcaWs.EntityFrameworkCore;
 using NetArcaWs.HealthChecks;
 using NetArcaWs.Invoicing;
@@ -115,6 +116,39 @@ public sealed class InvoiceRecoveryHostedServiceTests
         resolverLifecycle.DisposeCalls.Should().Be(1);
     }
 
+    [Fact]
+    public async Task Hosted_loop_logs_safe_failure_signal_without_exception_details()
+    {
+        var services = new ServiceCollection();
+        var logs = new CapturingLoggerProvider();
+        services.AddLogging(builder => builder.AddProvider(logs));
+        var queue = new NoWorkQueue { Failure = new InvalidOperationException("SENSITIVE-HOST-ERROR") };
+        services.AddSingleton<IInvoiceRecoveryQueue>(queue);
+        services.AddScoped<IInvoiceRecoveryContextResolver, UnusedResolver>();
+        services.AddScoped(_ => new SafeInvoiceService(null!, null!, null!, null!));
+        services.AddScoped<IWsfev1Service>(_ => null!);
+        services.AddNetArcaWsInvoiceRecoveryWorker(new InvoiceRecoveryScope("tenant-a", [ArcaService.Wsfev1]),
+            options => options.IdleInterval = TimeSpan.FromDays(1));
+
+        using ServiceProvider provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        IHostedService hosted = provider.GetServices<IHostedService>().Should().ContainSingle().Subject;
+        await hosted.StartAsync(TestContext.Current.CancellationToken);
+        using var stopTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        try
+        {
+            await queue.Claimed.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            await logs.Written.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            await hosted.StopAsync(stopTimeout.Token);
+        }
+
+        string captured = string.Join("\n", logs.Messages);
+        captured.Should().NotBeEmpty();
+        captured.Should().NotContain("SENSITIVE-HOST-ERROR");
+    }
+
     private sealed class ResolverLifecycle { public int DisposeCalls; }
 
     private sealed class TrackingResolver(ResolverLifecycle lifecycle) : IInvoiceRecoveryContextResolver, IDisposable
@@ -134,11 +168,13 @@ public sealed class InvoiceRecoveryHostedServiceTests
     {
         private int claimCalls;
         public TaskCompletionSource Claimed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Exception? Failure { get; init; }
         public int ClaimCalls => Volatile.Read(ref claimCalls);
         public Task<InvoiceRecoveryLease?> TryClaimAsync(InvoiceRecoveryScope scope, TimeSpan leaseDuration, CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref claimCalls);
             Claimed.TrySetResult();
+            if (Failure is not null) return Task.FromException<InvoiceRecoveryLease?>(Failure);
             return Task.FromResult<InvoiceRecoveryLease?>(null);
         }
         public Task<bool> IsCurrentAsync(InvoiceRecoveryLease lease, CancellationToken cancellationToken = default) => throw new NotImplementedException();
@@ -147,5 +183,25 @@ public sealed class InvoiceRecoveryHostedServiceTests
         public Task<InvoiceOperation> PrepareAndEnqueueAsync(InvoiceSubmission submission, string? credentialReference, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<InvoiceOperation> ScheduleAsync(string tenantId, string idempotencyKey, long expectedInvoiceVersion, string? credentialReference, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<InvoiceRecoveryMetadata?> FindAsync(InvoiceRecoveryScope scope, string idempotencyKey, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+    }
+
+    private sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        public List<string> Messages { get; } = [];
+        public TaskCompletionSource Written { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public ILogger CreateLogger(string categoryName) => new CapturingLogger(this);
+        public void Dispose() { }
+
+        private sealed class CapturingLogger(CapturingLoggerProvider owner) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+            public bool IsEnabled(LogLevel logLevel) => true;
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+                Func<TState, Exception?, string> formatter)
+            {
+                lock (owner.Messages) owner.Messages.Add(formatter(state, exception) + exception?.Message);
+                owner.Written.TrySetResult();
+            }
+        }
     }
 }
