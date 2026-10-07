@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using NetArcaWs.Cryptography;
 using NetArcaWs.HealthChecks;
 
@@ -7,10 +8,14 @@ namespace NetArcaWs.EntityFrameworkCore;
 /// <summary>Identity descriptor for certificate storage. Creating it does not authorize access to the identity.</summary>
 public sealed record ArcaCertificateScope
 {
+    private static readonly UTF8Encoding StrictUtf8 = new(false, true);
+
     public ArcaCertificateScope(string tenantId, long cuit, ArcaEnvironment environment)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
         if (tenantId.Length > 128 || tenantId.Any(char.IsControl)) throw new ArgumentException("Tenant identity must contain at most 128 characters without controls.", nameof(tenantId));
+        try { _ = StrictUtf8.GetByteCount(tenantId); }
+        catch (EncoderFallbackException) { throw new ArgumentException("Tenant identity must contain well-formed Unicode.", nameof(tenantId)); }
         if (cuit is < 10_000_000_000 or > 99_999_999_999) throw new ArgumentOutOfRangeException(nameof(cuit), "CUIT must contain eleven digits.");
         if (!Enum.IsDefined(environment)) throw new ArgumentOutOfRangeException(nameof(environment));
         TenantId = tenantId; Cuit = cuit; Environment = environment;
