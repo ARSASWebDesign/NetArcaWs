@@ -25,11 +25,28 @@ borrador no inicia la publicación.
 La versión 0.6.0 agrupa once paquetes: `NetArcaWs`, `NetArcaWs.Tool`,
 `NetArcaWs.EntityFrameworkCore`, sus providers `MySql`, `PostgreSql` y
 `SqlServer`, y los paquetes de migraciones `Sqlite`, `MySql`, `MariaDb`,
-`PostgreSql` y `SqlServer`. Sus proyectos y el workflow están preparados con la
-misma versión; **la release 0.6.0 aún está pendiente de publicación**. Hasta
-que la publicación termine, no se debe afirmar que estos paquetes estén
-aceptados o indexados en NuGet. La publicación de once paquetes tampoco es una
-transacción: una falla parcial requiere verificar cada ID y versión.
+`PostgreSql` y `SqlServer`. Consultá la disponibilidad actual de cada ID y
+versión en NuGet; estos enlaces y badges reflejan el feed, sin depender del
+estado de una release de GitHub:
+
+| Paquete | Versión 0.6.0 en NuGet |
+| --- | --- |
+| `NetArcaWs` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs/0.6.0)](https://www.nuget.org/packages/NetArcaWs/0.6.0) |
+| `NetArcaWs.Tool` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.Tool/0.6.0)](https://www.nuget.org/packages/NetArcaWs.Tool/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore.MySql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.MySql/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.MySql/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore.PostgreSql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.PostgreSql/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.PostgreSql/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore.SqlServer` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.SqlServer/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.SqlServer/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore.Migrations.Sqlite` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore.Migrations.MySql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.MySql/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.MySql/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore.Migrations.MariaDb` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore.Migrations.SqlServer` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer/0.6.0) |
+
+La publicación se verifica por separado para cada paquete: el éxito de la
+release de GitHub no demuestra que los once IDs hayan sido aceptados e
+indexados. La publicación de once paquetes tampoco es una transacción; una
+falla parcial requiere verificar cada ID y versión.
 
 El alcance previsto incluye persistencia relacional optativa para diario fiscal
 y tickets WSAA, providers para MySQL/MariaDB, PostgreSQL y SQL Server, cinco
