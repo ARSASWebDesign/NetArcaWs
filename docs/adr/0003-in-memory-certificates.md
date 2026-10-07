@@ -1,6 +1,6 @@
 # ADR 0003: Certificados en memoria y origen de secretos
 
-- Estado: Aceptado e implementado para WSAA y las fachadas autenticadas actuales;
+- Estado: Aceptado e implementado para contenido en memoria y store EF opt-in;
   suite local verificada y homologación autenticada pendiente de certificados
 - Fecha: 2026-10-06
 - Complementa: [ADR 0002: contexto multitenant](0002-arca-tenant-context.md)
@@ -23,8 +23,12 @@ tenant y la rotación. El origen del secreto no debe condicionar el cliente SOAP
 | PFX/P12 en Base64 | `FromPkcs12Base64` | Texto Base64 y contraseña si corresponde |
 
 La aplicación consulta su almacén, resuelve y autoriza la identidad y entrega el
-contenido. La biblioteca no incluye un SDK específico de vault ni acceso a bases
-de datos. Base64 es una representación, no un mecanismo de cifrado.
+contenido. El paquete principal no incluye un SDK de vault ni acceso a bases de
+datos. El paquete EF opcional ofrece un store versionado cifrado, con keyring
+externo del consumidor y migraciones explícitas; no se habilita por registrar
+servicios ARCA. La decisión y operación se detallan en el
+[ADR 0007](0007-tenant-certificate-store.md). Base64 es una representación, no
+un mecanismo de cifrado.
 
 Para una identidad fija, `WsaaOptions.Certificate` configura el contenido y
 `AuthenticateAsync(service, cancellationToken)` lo utiliza. El singleton captura
@@ -61,10 +65,11 @@ semánticas de almacenamiento. Ver la [documentación oficial de .NET](https://l
 
 ## Consecuencias y límites
 
-La misma credencial puede obtenerse desde un almacén compartido por varias
-instancias. Eso **no comparte el TA ni coordina los logins**: IMemoryCache y sus
-semáforos siguen siendo locales al proceso. Una solución distribuida de tickets
-requiere un diseño e implementación adicionales; no forma parte de esta entrega.
+El store de certificados puede usar una base compartida entre instancias, pero
+no comparte tickets ni coordina logins. La caché local de WSAA conserva tickets
+solo dentro del proceso; el store distribuido y la caché local tienen propósitos
+distintos. El módulo de tickets compartidos y sus límites se describen en el
+[ADR 0006](0006-shared-wsaa-tickets.md).
 
 Una rotación que cambia el certificado separa la caché por su huella; cambiar
 solo la representación del mismo certificado no crea una identidad nueva.

@@ -34,6 +34,7 @@ PyAfipWs ni homologación fiscal de una instalación.
 
 - [WSAA y certificados](WSAA-y-certificados.md) — autenticación, tickets y material criptográfico en memoria.
 - [Contexto multitenant](Contexto-multitenant.md) — cómo seleccionar CUIT, certificado y entorno por operación.
+- [Store de certificados multitenant](Certificados-multitenant.md) — persistencia EF opcional, autorización, keyring externo y rotación versionada.
 - [Emisión durable y reconciliación](Diario-fiscal.md) — diario, claves de idempotencia y tratamiento de resultados inciertos.
 - [Arquitectura y reintentos](Arquitectura-y-reintentos.md) — límites del transporte y política para fallas fiscales.
 - [Transporte SOAP](Transporte-SOAP.md) — serialización, límites, faults y cancelación.

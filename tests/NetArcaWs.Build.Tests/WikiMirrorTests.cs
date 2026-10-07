@@ -185,6 +185,23 @@ public sealed class WikiMirrorTests
     }
 
     [Fact]
+    public void Run_excludes_superpowers_plans_and_specs_from_public_wiki_pages_and_manifest()
+    {
+        using var workspace = new BuildTestWorkspace();
+        workspace.Write("docs/wiki/Home.md", "# Home\n");
+        workspace.Write("docs/superpowers/plans/internal-plan.md", "implementation plan\n");
+        workspace.Write("docs/superpowers/specs/internal-design.md", "implementation design\n");
+
+        WikiMirror.Run(workspace.Root);
+
+        string sources = workspace.Read("docs/wiki-export/Fuentes-documentales.md");
+        sources.Should().Contain("docs/wiki/Home.md");
+        sources.Should().NotContain("docs/superpowers/");
+        workspace.Exists("docs/wiki-export/Documento-internal-plan.md").Should().BeFalse();
+        workspace.Exists("docs/wiki-export/Documento-internal-design.md").Should().BeFalse();
+    }
+
+    [Fact]
     public void Run_does_not_mirror_markdown_reached_through_file_or_directory_symlinks()
     {
         using var workspace = new BuildTestWorkspace();

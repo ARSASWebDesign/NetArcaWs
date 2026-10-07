@@ -1,4 +1,4 @@
-# ADR 0005: Persistencia EF Core opt-in para diario fiscal y tickets WSAA
+# ADR 0005: Persistencia EF Core opt-in por módulo
 
 - Estado: Aceptado; MySQL/MariaDB/PostgreSQL/SQL Server verificados en engines reales, con evidencia acotada por versión
 - Fecha: 2026-10-06
@@ -123,9 +123,9 @@ incluyen lotes durables, WSFECred, WSCPE ni asignación automática de números.
 - Seleccionar solo tickets o solo facturación crea únicamente las tablas del
   módulo elegido; seleccionar ambos agrega ambas familias de tablas al mismo
   contexto.
-- El [modelo relacional](../wiki/Modelo-relacional.md) describe cuatro tablas
-  operativas y 15 DDL actuales (cinco motores × tres selecciones). Por separado,
-  hay 10 scripts de migración versionados (cinco motores × dos módulos) para el
+- El [modelo relacional](../wiki/Modelo-relacional.md) describe seis tablas
+  operativas y 20 DDL actuales (cinco motores × cuatro selecciones). Por separado,
+  hay 15 scripts de migración versionados (cinco motores × tres módulos) para el
   upgrade inicial `0`→`latest`; no son idempotentes ni adoptan esquemas previos.
   SQLite puede crear además su tabla interna `__EFMigrationsLock`. Las relaciones actuales son lógicas por hashes; no
   hay FKs físicas, cascadas ni restricciones CHECK de enums.
@@ -148,6 +148,19 @@ incluyen lotes durables, WSFECred, WSCPE ni asignación automática de números.
   con ese motor y versión. No implica worker, scheduler o reintentos SOAP.
 - Los tickets compartidos, sus claves y límites se especifican en el
   [ADR 0006](0006-shared-wsaa-tickets.md).
+
+## Módulo independiente de certificados
+
+El paquete EF también incluye `TenantCertificates`, un tercer módulo de
+persistencia opt-in, independiente de facturación y tickets. No modifica el
+comportamiento ni los historiales publicados de los módulos anteriores. Su
+decisión de autorización, protección criptográfica, historial inmutable y
+operación se encuentra en el [ADR 0007](0007-tenant-certificate-store.md).
+Seleccionar `AddCertificates()` solo agrega sus dos entidades y requiere un
+`IArcaCertificateProtector` configurado por la aplicación. No registra servicios
+ARCA, no comparte tickets y no migra al inicio. La aplicación conserva el
+`VersionId` seleccionado junto a su propia operación; el diario fiscal y su
+hash canónico no cambian.
 
 El seguimiento y las capacidades diferidas asociadas a esta integración se
 mantienen en el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19).
