@@ -197,6 +197,56 @@ public sealed class OfficialMySqlMigrationTests
         (await ReadScalarAsync(database, "SELECT HEX(`Ciphertext`) FROM `NetArcaCertificateVersions` WHERE `VersionId`='00000000-0000-0000-0000-000000000001'")).Should().Be(certificateBefore);
     }
 
+    [Fact]
+    public async Task Recovery_DDL_cancellation_leaves_untracked_schema_without_success_history_or_data_loss()
+    {
+        bool anyOptInSetting = new[] { "NETARCA_PERSISTENCE_DB", "NETARCA_PERSISTENCE_DB_KIND", "NETARCA_PERSISTENCE_DB_VERSION" }
+            .Any(name => Environment.GetEnvironmentVariable(name) is not null);
+        Assert.SkipWhen(!anyOptInSetting, "Opt-in MySQL/MariaDB recovery migration cancellation test.");
+        PersistenceDbSettings settings = PersistenceDbSettings.ReadRequired();
+        Assert.SkipWhen(settings.Kind is not ("mysql" or "mariadb"), "This suite targets MySQL/MariaDB.");
+
+        byte[] certificateProtectionKey = RandomNumberGenerator.GetBytes(32);
+        await using MySqlTestDatabase database = await MySqlTestDatabase.CreateAsync(settings, builder =>
+            builder.AddInvoicing(ArcaService.Wsfev1).AddWsaaTickets(ArcaService.Wsfev1).AddCertificates()
+                .AddInvoiceRecovery(ArcaService.Wsfev1), provision: false,
+            certificateProtectionKey: certificateProtectionKey);
+        NetArcaWsModelOptions oldOptions = NetArcaWsModelOptions.Configure(builder =>
+            builder.AddInvoicing(ArcaService.Wsfev1).AddWsaaTickets(ArcaService.Wsfev1).AddCertificates());
+        (await database.ApplyOfficialMigrationsAsync(oldOptions, TestContext.Current.CancellationToken)).Modules.Should().HaveCount(3);
+        InvoiceSubmission invoice = new("recovery-cancel", "existing-invoice", "wsfe",
+            new InvoiceIdentity(ArcaEnvironment.Homologation, 20999888777, 63, 1, 82), "<synthetic>existing-invoice</synthetic>");
+        IInvoiceJournal journal = database.Services.GetRequiredService<IInvoiceJournal>();
+        await journal.PrepareAsync(invoice, TestContext.Current.CancellationToken);
+        await ExecuteAsync(database, "INSERT INTO `NetArcaWsaaTickets` (`KeyHash`,`CertificateHash`,`Endpoint`,`Service`,`State`,`Fence`,`Version`,`Nonce`,`Ciphertext`,`Tag`,`UpdatedUtcTicks`) VALUES ('ticket-key','cert-hash','https://synthetic.invalid/wsaa','wsfev1',3,4,5,0x010203,0x0B16212C37,0x060708,123456789)");
+        await ExecuteAsync(database, "INSERT INTO `NetArcaCertificateVersions` (`TenantHash`,`Cuit`,`Environment`,`VersionId`,`CreatedAtUtcTicks`,`ThumbprintSha256`,`NotBeforeUtcTicks`,`NotAfterUtcTicks`,`KeyId`,`Nonce`,`Ciphertext`,`Tag`) VALUES ('cert-tenant',20999888777,1,'00000000-0000-0000-0000-000000000001',1,'thumbprint',1,2,'key-1',0x0102,0x0304,0x0506)");
+        await ExecuteAsync(database, "INSERT INTO `NetArcaCertificateSlots` (`TenantHash`,`Cuit`,`Environment`,`ActiveVersionId`,`Generation`) VALUES ('cert-tenant',20999888777,1,'00000000-0000-0000-0000-000000000001',1)");
+        string ticketBefore = await ReadScalarAsync(database, "SELECT HEX(`Ciphertext`) FROM `NetArcaWsaaTickets` WHERE `KeyHash`='ticket-key'");
+        string certificateBefore = await ReadScalarAsync(database, "SELECT HEX(`Ciphertext`) FROM `NetArcaCertificateVersions` WHERE `VersionId`='00000000-0000-0000-0000-000000000001'");
+
+        using var cancellation = new CancellationTokenSource();
+        var interceptor = new CreateRecoveryTableThenCancelInterceptor(database.DatabaseConnectionString, cancellation);
+        var migrator = CreateRecoveryInstrumentedMigrator(settings, database.DatabaseConnectionString, interceptor);
+        NetArcaWsMigrationStatus empty = await migrator.GetStatusAsync(TestContext.Current.CancellationToken);
+        empty.Modules.Should().ContainSingle().Which.State.Should().Be(NetArcaWsMigrationState.Empty);
+        Func<Task> apply = () => migrator.ApplyAsync(cancellation.Token);
+        await apply.Should().ThrowAsync<OperationCanceledException>();
+        interceptor.CancelledAfterCreate.Should().BeTrue();
+
+        NetArcaWsMigrationStatus partial = await migrator.GetStatusAsync(TestContext.Current.CancellationToken);
+        partial.Modules.Should().ContainSingle().Which.State.Should().Be(NetArcaWsMigrationState.UntrackedSchema);
+        partial.Modules.Single().Applied.Should().BeEmpty();
+        partial.Modules.Single().PresentTables.Should().Contain("NetArcaInvoiceRecoveryJobs");
+        Func<Task> blindRetry = () => migrator.ApplyAsync(TestContext.Current.CancellationToken);
+        await blindRetry.Should().ThrowAsync<NetArcaWsMigrationPreflightException>();
+        NetArcaWsMigrationStatus afterRetry = await migrator.GetStatusAsync(TestContext.Current.CancellationToken);
+        afterRetry.Modules.Single().Applied.Should().BeEmpty();
+        afterRetry.Modules.Single().PresentTables.Should().Equal(partial.Modules.Single().PresentTables);
+        (await journal.FindAsync(invoice.TenantId, invoice.IdempotencyKey, TestContext.Current.CancellationToken))!.Submission.Should().BeEquivalentTo(invoice);
+        (await ReadScalarAsync(database, "SELECT HEX(`Ciphertext`) FROM `NetArcaWsaaTickets` WHERE `KeyHash`='ticket-key'")).Should().Be(ticketBefore);
+        (await ReadScalarAsync(database, "SELECT HEX(`Ciphertext`) FROM `NetArcaCertificateVersions` WHERE `VersionId`='00000000-0000-0000-0000-000000000001'")).Should().Be(certificateBefore);
+    }
+
     private static INetArcaWsMigrator CreateInstrumentedMigrator(PersistenceDbSettings settings, string connectionString,
         DbCommandInterceptor interceptor)
     {
@@ -337,6 +387,28 @@ public sealed class OfficialMySqlMigrationTests
             trap.CommandText = "CREATE TABLE `NetArcaInvoiceRecoveryJobs` (`SyntheticTrap` int NOT NULL)";
             await trap.ExecuteNonQueryAsync(cancellationToken);
             return result;
+        }
+    }
+
+    private sealed class CreateRecoveryTableThenCancelInterceptor(string adminConnectionString, CancellationTokenSource cancellation) : DbCommandInterceptor
+    {
+        private int cancelled;
+        public bool CancelledAfterCreate => Volatile.Read(ref cancelled) != 0;
+
+        public override async ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (!command.CommandText.Contains("CREATE TABLE", StringComparison.OrdinalIgnoreCase) ||
+                !command.CommandText.Contains("NetArcaInvoiceRecoveryJobs", StringComparison.Ordinal) ||
+                Interlocked.Exchange(ref cancelled, 1) != 0)
+                return result;
+            await using var admin = new MySqlConnection(adminConnectionString);
+            await admin.OpenAsync(cancellationToken);
+            await using var create = admin.CreateCommand();
+            create.CommandText = command.CommandText;
+            await create.ExecuteNonQueryAsync(cancellationToken);
+            cancellation.Cancel();
+            return InterceptionResult<int>.SuppressWithResult(0);
         }
     }
 
