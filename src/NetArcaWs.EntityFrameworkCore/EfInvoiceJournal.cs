@@ -523,8 +523,10 @@ public static class NetArcaWsEntityFrameworkServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(modelOptions);
-        if (!modelOptions.InvoicingEnabled && !modelOptions.WsaaTicketsEnabled)
+        if (!modelOptions.InvoicingEnabled && !modelOptions.WsaaTicketsEnabled && !modelOptions.CertificatesEnabled)
             throw new ArgumentException("Select at least one EF-backed NetArcaWs capability before registering stores.", nameof(modelOptions));
+        if (modelOptions.CertificatesEnabled && !services.Any(x => x.ServiceType == typeof(IArcaCertificateProtector)))
+            throw new InvalidOperationException("Register an application-managed IArcaCertificateProtector before selecting tenant certificates.");
         services.TryAddSingleton(modelOptions);
         services.TryAddSingleton<TimeProvider>(TimeProvider.System);
         if (modelOptions.InvoicingEnabled)
@@ -532,6 +534,10 @@ public static class NetArcaWsEntityFrameworkServiceCollectionExtensions
                 provider.GetRequiredService<IDbContextFactory<TContext>>(), modelOptions, provider.GetRequiredService<TimeProvider>()));
         if (modelOptions.WsaaTicketsEnabled)
             services.AddWsaaTicketStores<TContext>(modelOptions);
+        if (modelOptions.CertificatesEnabled)
+            services.AddSingleton<IArcaCertificateStore>(provider => new EfArcaCertificateStore<TContext>(
+                provider.GetRequiredService<IDbContextFactory<TContext>>(), modelOptions,
+                provider.GetRequiredService<IArcaCertificateProtector>(), provider.GetRequiredService<TimeProvider>()));
         return services;
     }
 }

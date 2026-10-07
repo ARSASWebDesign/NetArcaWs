@@ -18,7 +18,7 @@ public static class NetArcaWsSqlServerServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         ArgumentNullException.ThrowIfNull(modelOptions);
-        if (!modelOptions.InvoicingEnabled && !modelOptions.WsaaTicketsEnabled)
+        if (!modelOptions.InvoicingEnabled && !modelOptions.WsaaTicketsEnabled && !modelOptions.CertificatesEnabled)
             throw new ArgumentException("Select at least one NetArcaWs persistence capability before registering SQL Server stores.", nameof(modelOptions));
 
         services.TryAddSingleton(modelOptions);
