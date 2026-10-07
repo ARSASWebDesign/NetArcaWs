@@ -8,7 +8,7 @@ if [[ "${GITHUB_REPOSITORY:-}" != 'ARSASWebDesign/NetArcaWs' || "${GITHUB_REF:-}
   echo 'Homologación requiere una ejecución manual desde main del repositorio oficial.' >&2
   exit 1
 fi
-for required in HOMO_CERTIFICATE_PEM HOMO_PRIVATE_KEY_PEM ARCA_CUIT RUNNER_TEMP; do
+for required in HOMO_CERTIFICATE_PEM HOMO_PRIVATE_KEY_PEM HOMOLOGATION_STATE_TOKEN ARCA_CUIT RUNNER_TEMP; do
   if [[ -z "${!required:-}" ]]; then
     echo "Falta configuración obligatoria: $required." >&2
     exit 1
@@ -24,14 +24,16 @@ ARCA_HOMOLOGY_SERVICES="${ARCA_HOMOLOGY_SERVICES-wsfe}"
 ARCA_HOMOLOGY_POINT_OF_SALE="${ARCA_HOMOLOGY_POINT_OF_SALE:-}"
 ARCA_HOMOLOGY_VOUCHER_TYPE="${ARCA_HOMOLOGY_VOUCHER_TYPE:-11}"
 ARCA_HOMOLOGY_VOUCHER_NUMBER="${ARCA_HOMOLOGY_VOUCHER_NUMBER:-}"
+ARCA_HOMOLOGY_VOUCHER_NUMBER_B="${ARCA_HOMOLOGY_VOUCHER_NUMBER_B:-}"
+ARCA_HOMOLOGY_VOUCHER_NUMBER_C="${ARCA_HOMOLOGY_VOUCHER_NUMBER_C:-}"
 
-if [[ "$ARCA_HOMOLOGY_MODE" != 'consultas' && "$ARCA_HOMOLOGY_MODE" != 'emision' ]]; then
-  echo 'ARCA_HOMOLOGY_MODE debe ser consultas o emision.' >&2
+if [[ "$ARCA_HOMOLOGY_MODE" != 'consultas' && "$ARCA_HOMOLOGY_MODE" != 'emision' && "$ARCA_HOMOLOGY_MODE" != 'completa' ]]; then
+  echo 'ARCA_HOMOLOGY_MODE debe ser consultas, emision o completa.' >&2
   exit 1
 fi
 
-if [[ "$ARCA_HOMOLOGY_MODE" == 'emision' ]]; then
-  if [[ "$ARCA_HOMOLOGY_SERVICES" != 'wsfe' ]]; then
+if [[ "$ARCA_HOMOLOGY_MODE" == 'emision' || "$ARCA_HOMOLOGY_MODE" == 'completa' ]]; then
+  if [[ "$ARCA_HOMOLOGY_MODE" == 'emision' && "$ARCA_HOMOLOGY_SERVICES" != 'wsfe' ]]; then
     echo 'La emisión solo admite ARCA_HOMOLOGY_SERVICES=wsfe.' >&2
     exit 1
   fi
@@ -40,14 +42,25 @@ if [[ "$ARCA_HOMOLOGY_MODE" == 'emision' ]]; then
     echo 'ARCA_HOMOLOGY_POINT_OF_SALE debe ser un entero entre 1 y 99999 para emisión.' >&2
     exit 1
   fi
-  if [[ "$ARCA_HOMOLOGY_VOUCHER_TYPE" != '6' && "$ARCA_HOMOLOGY_VOUCHER_TYPE" != '11' ]]; then
-    echo 'ARCA_HOMOLOGY_VOUCHER_TYPE debe ser 6 u 11 para emisión.' >&2
-    exit 1
-  fi
-  if [[ ! "$ARCA_HOMOLOGY_VOUCHER_NUMBER" =~ ^[0-9]+$ || ${#ARCA_HOMOLOGY_VOUCHER_NUMBER} -gt 8 ]] ||
-     (( 10#$ARCA_HOMOLOGY_VOUCHER_NUMBER < 1 || 10#$ARCA_HOMOLOGY_VOUCHER_NUMBER > 99999999 )); then
-    echo 'ARCA_HOMOLOGY_VOUCHER_NUMBER debe ser un entero explícito entre 1 y 99999999 para emisión.' >&2
-    exit 1
+  if [[ "$ARCA_HOMOLOGY_MODE" == 'emision' ]]; then
+    if [[ "$ARCA_HOMOLOGY_VOUCHER_TYPE" != '6' && "$ARCA_HOMOLOGY_VOUCHER_TYPE" != '11' ]]; then
+      echo 'ARCA_HOMOLOGY_VOUCHER_TYPE debe ser 6 u 11 para emisión.' >&2
+      exit 1
+    fi
+    if [[ ! "$ARCA_HOMOLOGY_VOUCHER_NUMBER" =~ ^[0-9]+$ || ${#ARCA_HOMOLOGY_VOUCHER_NUMBER} -gt 8 ]] ||
+       (( 10#$ARCA_HOMOLOGY_VOUCHER_NUMBER < 1 || 10#$ARCA_HOMOLOGY_VOUCHER_NUMBER > 99999999 )); then
+      echo 'ARCA_HOMOLOGY_VOUCHER_NUMBER debe ser un entero explícito entre 1 y 99999999 para emisión.' >&2
+      exit 1
+    fi
+  else
+    for setting in ARCA_HOMOLOGY_VOUCHER_NUMBER_B ARCA_HOMOLOGY_VOUCHER_NUMBER_C; do
+      value="${!setting}"
+      if [[ ! "$value" =~ ^[0-9]+$ || ${#value} -gt 8 ]] ||
+         (( 10#$value < 1 || 10#$value > 99999999 )); then
+        echo "$setting debe ser un entero explícito entre 1 y 99999999 para modo completa." >&2
+        exit 1
+      fi
+    done
   fi
 else
   if [[ -z "$ARCA_HOMOLOGY_SERVICES" ]]; then
@@ -66,8 +79,29 @@ else
   done
 fi
 
+if [[ "$ARCA_HOMOLOGY_MODE" == 'completa' ]]; then
+  ARCA_HOMOLOGY_SERVICES='wsfe,wsfex,wsmtxca,wscdc,wsfecred,padron-a4,padron-a5,padron-a10,padron-a13'
+fi
+
+if [[ "$ARCA_HOMOLOGY_MODE" == 'consultas' && -n "$ARCA_HOMOLOGY_POINT_OF_SALE" ]]; then
+  if [[ "$ARCA_HOMOLOGY_SERVICES" != 'wsfe' ]]; then
+    echo 'El descubrimiento de numeración solo admite ARCA_HOMOLOGY_SERVICES=wsfe.' >&2
+    exit 1
+  fi
+  if [[ ! "$ARCA_HOMOLOGY_POINT_OF_SALE" =~ ^[0-9]+$ || ${#ARCA_HOMOLOGY_POINT_OF_SALE} -gt 5 ]] ||
+     (( 10#$ARCA_HOMOLOGY_POINT_OF_SALE < 1 || 10#$ARCA_HOMOLOGY_POINT_OF_SALE > 99999 )); then
+    echo 'ARCA_HOMOLOGY_POINT_OF_SALE debe ser un entero entre 1 y 99999.' >&2
+    exit 1
+  fi
+  if [[ "$ARCA_HOMOLOGY_VOUCHER_TYPE" != '6' && "$ARCA_HOMOLOGY_VOUCHER_TYPE" != '11' ]]; then
+    echo 'ARCA_HOMOLOGY_VOUCHER_TYPE debe ser 6 u 11.' >&2
+    exit 1
+  fi
+fi
+
 export ARCA_HOMOLOGY_MODE ARCA_HOMOLOGY_SERVICES ARCA_HOMOLOGY_POINT_OF_SALE
 export ARCA_HOMOLOGY_VOUCHER_TYPE ARCA_HOMOLOGY_VOUCHER_NUMBER
+export ARCA_HOMOLOGY_VOUCHER_NUMBER_B ARCA_HOMOLOGY_VOUCHER_NUMBER_C
 umask 077
 credentials_dir=$(mktemp -d "$RUNNER_TEMP/netarcaws-homologacion.XXXXXX")
 trap 'rm -rf -- "$credentials_dir"' EXIT

@@ -25,11 +25,12 @@ public sealed class AuthenticatedLookupValidationTests
         IWsfev1Service client = DispatchProxy.Create<IWsfev1Service, WsfeCatalogProxy>();
         var fake = (WsfeCatalogProxy)(object)client;
         fake.IncludePointOfSale = true;
-        IReadOnlyList<NetArcaWs.Contracts.WsfeV1.PtoVenta> points = await AuthenticatedLookupValidation.ValidateWsfeAsync(
+        AuthenticatedLookupValidation.WsfeLookupResult lookup = await AuthenticatedLookupValidation.ValidateWsfeAsync(
             client, Tenant(ArcaEnvironment.Homologation), CancellationToken.None);
 
-        Assert.Single(points);
-        Assert.Equal(4321, points[0].Nro);
+        Assert.Single(lookup.PointsOfSale);
+        Assert.Equal(4321, lookup.PointsOfSale[0].Nro);
+        Assert.False(lookup.PointOfSaleListingPending);
         Assert.Equal(8, fake.CallCount);
     }
 
@@ -38,7 +39,7 @@ public sealed class AuthenticatedLookupValidationTests
     {
         IWsfev1Service client = DispatchProxy.Create<IWsfev1Service, WsfeCatalogProxy>();
         var fake = (WsfeCatalogProxy)(object)client;
-        Assert.Empty(await AuthenticatedLookupValidation.ValidateWsfeAsync(client, Tenant(ArcaEnvironment.Homologation), CancellationToken.None));
+        Assert.Empty((await AuthenticatedLookupValidation.ValidateWsfeAsync(client, Tenant(ArcaEnvironment.Homologation), CancellationToken.None)).PointsOfSale);
         Assert.Equal(8, fake.CallCount);
 
         IWsfev1Service productionClient = DispatchProxy.Create<IWsfev1Service, WsfeCatalogProxy>();
@@ -46,6 +47,27 @@ public sealed class AuthenticatedLookupValidationTests
         await Assert.ThrowsAnyAsync<XunitException>(() => AuthenticatedLookupValidation.ValidateWsfeAsync(
             productionClient, Tenant(ArcaEnvironment.Production), CancellationToken.None));
         Assert.Equal(0, productionFake.CallCount);
+    }
+
+    [Fact]
+    public async Task Wsfe_probe_treats_only_an_empty_602_point_listing_as_pending_in_homologation()
+    {
+        IWsfev1Service client = DispatchProxy.Create<IWsfev1Service, WsfeCatalogProxy>();
+        var fake = (WsfeCatalogProxy)(object)client;
+        fake.PointOfSaleErrorCode = 602;
+        var lookup = await AuthenticatedLookupValidation.ValidateWsfeAsync(client, Tenant(ArcaEnvironment.Homologation), CancellationToken.None);
+        Assert.Empty(lookup.PointsOfSale);
+        Assert.True(lookup.PointOfSaleListingPending);
+
+        IWsfev1Service invalid = DispatchProxy.Create<IWsfev1Service, WsfeCatalogProxy>();
+        ((WsfeCatalogProxy)(object)invalid).PointOfSaleErrorCode = 603;
+        await Assert.ThrowsAnyAsync<XunitException>(() => AuthenticatedLookupValidation.ValidateWsfeAsync(
+            invalid, Tenant(ArcaEnvironment.Homologation), CancellationToken.None));
+
+        IWsfev1Service production = DispatchProxy.Create<IWsfev1Service, WsfeCatalogProxy>();
+        ((WsfeCatalogProxy)(object)production).PointOfSaleErrorCode = 602;
+        await Assert.ThrowsAnyAsync<XunitException>(() => AuthenticatedLookupValidation.ValidateWsfeAsync(
+            production, Tenant(ArcaEnvironment.Production), CancellationToken.None));
     }
 
     [Fact]
@@ -209,6 +231,7 @@ public sealed class AuthenticatedLookupValidationTests
     {
         public int CallCount { get; private set; }
         public bool IncludePointOfSale { get; set; }
+        public int? PointOfSaleErrorCode { get; set; }
         public bool CurrencyError { get; set; }
         public bool MissingMaximumResponse { get; set; }
 
@@ -255,6 +278,8 @@ public sealed class AuthenticatedLookupValidationTests
             var result = new FePtoVentaResponse();
             if (IncludePointOfSale)
                 result.ResultGet.Add(new PtoVenta { Nro = 4321, EmisionTipo = "CAE", Bloqueado = "N" });
+            if (PointOfSaleErrorCode is int code)
+                result.Errors.Add(new Err { Code = code, Msg = "synthetic error" });
             return new NetArcaWs.Contracts.WsfeV1.FeParamGetPtosVentaResponse { FeParamGetPtosVentaResult = result };
         }
     }

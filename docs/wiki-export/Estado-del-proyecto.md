@@ -21,7 +21,7 @@
 - [x] Incremento EF del issue #19: persistencia opt-in y migraciones oficiales por módulo/proveedor; migración inicial independiente para SQLite, MySQL, MariaDB, PostgreSQL y SQL Server. Una tarea de despliegue debe consultar, revisar y aplicar; API startup no migra. Paquetes extras 0.5.0 sin publicar. CI 37547645296: 510 tests (491 aprobados, 19 skips opt-in, 0 fallos), build Release 0 warnings; MySQL 8.4.11 20/20, MariaDB 11.4.13 20/20, PostgreSQL 17.6 19/19 y SQL Server Developer 16.0.4295.3 19/19, sin skips; 10 migration SQL, 15 DDL, 11 packs y consumer/CLI nuevo. Evidencia por versión/escenario, sin homologación ARCA ni compatibilidad universal.
 - [x] Issue #23: store EF opt-in de certificados versionados con keyring externo, compare-and-swap al rotar e historiales de migración independientes para los cinco motores. Verificados SQLite 78/78; MySQL, MariaDB, PostgreSQL y SQL Server 26/26 cada uno; además, 20 DDL y 15 SQL de migración generados. La API se incorporó después de los paquetes publicados 0.6.0 y queda pendiente de la siguiente publicación; no hubo llamadas ARCA. La aplicación autoriza el alcance, conserva su propio `VersionId` por operación y programa avisos; este store no renueva certificados ni publica cambios automáticamente. Consultar la [guía](Certificados-multitenant), [ADR 0007](ADR-0007-tenant-certificate-store) e [issue #23](https://github.com/ARSASWebDesign/NetArcaWs/issues/23).
 - [x] Issue #24: cola durable y worker opt-in para recuperación CAE unitaria en WSFEv1, WSFEXv1 y WSMTXCA; módulo y migraciones separados por SQLite, MySQL, MariaDB, PostgreSQL y SQL Server. La extensión está en el código posterior a los paquetes públicos 0.6.0 y requiere una publicación futura. La matriz inicial local reportada cubre SQLite 131/131, MySQL 29/29, MariaDB 29/29, PostgreSQL 28/28 y SQL Server 28/28; metadata offline: PostgreSQL 8/8 y SQL Server 19/19. Las comprobaciones focalizadas posteriores del módulo recovery aprobaron SQLite 5, MySQL 8, MariaDB 8, PostgreSQL 9 y SQL Server 9 casos; las verificaciones dedicadas de cancelación DDL MySQL y MariaDB aprobaron 1/1 cada una. Algunos filtros repiten casos de la matriz y los conteos no deben sumarse como únicos. La suite actual completa aprobó 588 de 630 pruebas, omitió 42 opt-in y no tuvo fallos. También se verificaron 25 DDL y 20 cadenas de migración y se preservaron los artefactos históricos según el informe de Task 3. No hubo llamadas ARCA. El consumer smoke restaurado desde un feed local/cache nueva, CLI y pack secuencial de 11 proyectos 0.6.0 pasaron. La revisión de solución completa aprobó restore locked, build Release (0 warnings/0 errors) y los chequeos de 25 DDL y 20 scripts de migración. El repack final de los 11 paquetes 0.6.0 tras actualizar sus README aprobó en todos los proyectos, con 0 warnings. Los resultados por motor no prueban homologación ni compatibilidad universal.
-- [ ] WSAA: ejecutar homologación real con certificados autorizados.
+- [x] WSAA: autenticación y consultas fiscales seleccionadas verificadas en homologación con certificado autorizado; falta la ejecución protegida integral del modo `completa`.
 - [x] Hito 2: WSFEv1 — 22 operaciones, contrato SOAP y suite verificados.
 - [x] Hito 3: WSFEXv1 — 19 operaciones, contrato SOAP y suite verificados.
 - [x] Hito 4: WSMTXCA — 27 operaciones, contrato SOAP y suite verificados; no equivale al ciclo integral de Factura de Crédito Electrónica MiPyME.
@@ -49,8 +49,9 @@ omitidas. En la suite normal, cuatro casos dependen de credenciales/opt-in de
 ARCA y tres de la configuración opt-in de engines de base. Ningún resultado
 acredita una autorización de negocio con certificado real.
 
-La autenticación WSAA de homologación y las llamadas autenticadas fiscales siguen
-pendientes de certificados autorizados. Tests opt-in de persistencia ejecutados
+La autenticación WSAA y varias llamadas autenticadas fiscales ya se verificaron en
+homologación con certificado autorizado; no se declara una homologación integral.
+Tests opt-in de persistencia ejecutados
 con MySQL 8.4.11 (20/20), MariaDB 11.4.13 (20/20), PostgreSQL 17.6 (19/19) y SQL
 Server Developer 16.0.4295.3 (19/19) cubren
 esas versiones y casos entre procesos; no prueban otras versiones ni
@@ -104,3 +105,27 @@ Decisiones: [contexto multitenant](Decisi%C3%B3n-2-Contexto-multitenant) y
 [tickets WSAA compartidos](ADR-0006-shared-wsaa-tickets).
 Las fuentes de la wiki se mantienen en `docs/wiki/` y `docs/wiki-export/`; la
 revisión del repositorio publicada se registra en `SOURCE_COMMIT` del repositorio wiki.
+
+El nuevo workflow agrega el modo `completa`: nueve selectores autenticados, más
+comprobantes B/C WSFE con números explícitos. Ticket WSAA y diario SQLite se
+restauran y persisten mediante el secreto privado del environment. El TA se renueva
+al vencer; las operaciones inciertas se reconcilian sin reenviar, y solo un snapshot
+`Prepared` puede reanudarse bajo la validación explícita de numeración. La
+implementación quedó verificada offline: restore locked y build Release de la solución
+pasaron sin advertencias; la suite completa aprobó 644 pruebas, omitió 42 opt-in y
+no tuvo fallos (686 total, 17 s). La ejecución protegida integral desde `main` queda
+pendiente de integrar este cambio y configurar `HOMOLOGATION_STATE_TOKEN` en el
+environment. `HOMOLOGATION_STATE` se inicializa automáticamente y debe conservarse
+sin edición manual.
+
+La evidencia protegida reciente en el [`main` de `a0b07d6`](https://github.com/ARSASWebDesign/NetArcaWs/commit/a0b07d689796de14aa2d43f3173c98bf03de1250),
+el 7 de octubre de 2026, cubre piezas separadas, no el nuevo modo completo: la
+[corrida 37681638822](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37681638822)
+aprobó los doce casos de padrón pero falló después al validar el listado de puntos
+WSFE; la [corrida 37682017128](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37682017128)
+aprobó las cuatro consultas autenticadas restantes seleccionadas. En una verificación
+local equivalente a ese `main`, los 11 probes públicos y los 10 Dummy respondieron,
+y las facturas B6 y C11 en POS 1, número explícito 1 cada una, fueron autorizadas y
+confirmadas por consulta exacta, usando el mismo TA WSFE y un diario SQLite privado;
+cada identidad tuvo un solo intento. Ninguna de estas evidencias sustituye la
+ejecución protegida del modo `completa` tras integrar el workflow.

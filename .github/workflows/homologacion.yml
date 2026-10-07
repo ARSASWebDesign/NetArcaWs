@@ -11,8 +11,9 @@ on:
         options:
           - consultas
           - emision
+          - completa
       services:
-        description: Servicios de consulta separados por comas (sin espacios)
+        description: Selectores de consultas (no aplica en modo completa)
         type: string
         required: true
         default: wsfe
@@ -32,6 +33,14 @@ on:
         description: Número explícito requerido para emisión
         type: string
         required: false
+      voucher_number_b:
+        description: Número explícito de factura B para modo completa
+        type: string
+        required: false
+      voucher_number_c:
+        description: Número explícito de factura C para modo completa
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -44,7 +53,9 @@ jobs:
   homologacion:
     if: github.repository == 'ARSASWebDesign/NetArcaWs' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
+    permissions:
+      contents: read
     environment: homologacion
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -70,4 +81,8 @@ jobs:
           ARCA_HOMOLOGY_POINT_OF_SALE: ${{ inputs.point_of_sale }}
           ARCA_HOMOLOGY_VOUCHER_TYPE: ${{ inputs.voucher_type }}
           ARCA_HOMOLOGY_VOUCHER_NUMBER: ${{ inputs.voucher_number }}
+          ARCA_HOMOLOGY_VOUCHER_NUMBER_B: ${{ inputs.voucher_number_b }}
+          ARCA_HOMOLOGY_VOUCHER_NUMBER_C: ${{ inputs.voucher_number_c }}
+          HOMOLOGATION_STATE: ${{ secrets.HOMOLOGATION_STATE }}
+          HOMOLOGATION_STATE_TOKEN: ${{ secrets.HOMOLOGATION_STATE_TOKEN }}
         run: bash scripts/run-homologacion.sh
