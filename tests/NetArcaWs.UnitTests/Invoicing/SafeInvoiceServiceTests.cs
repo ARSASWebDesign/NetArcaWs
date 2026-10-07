@@ -26,6 +26,34 @@ public sealed class SafeInvoiceServiceTests
     private const string TicketSign = "SERVER-ONLY-TICKET-SIGN";
 
     [Fact]
+    public async Task Typed_submission_builders_match_the_authorize_snapshot_without_sending_soap()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        var transport = new RecordingSoapTransport(_ => WsfeResponse(result: "A", authorizationCode: "71234567890123"));
+        var service = CreateService(database, transport, new RecordingArcaTicketProvider(TicketTestData.Create()));
+        ArcaTenantContext tenant = CreateTenant();
+        FecaeRequest wsfe = WsfeRequest().FeCaeReq;
+        ClsFexRequest wsfex = FexRequest(4567);
+        ComprobanteType wsmtxca = MtxRequest(CivilIssueDate());
+
+        InvoiceSubmission wsfeSubmission = SafeInvoiceService.CreateWsfeSubmission(tenant, "wsfe-builder", wsfe);
+        InvoiceSubmission wsfexSubmission = SafeInvoiceService.CreateWsfexSubmission(tenant, "fex-builder", wsfex);
+        InvoiceSubmission wsmtxcaSubmission = SafeInvoiceService.CreateWsmtxcaSubmission(tenant, "mtx-builder", wsmtxca);
+        InvoiceOperation authorized = await service.AuthorizeWsfeAsync(tenant, "wsfe-builder", new FecaeSolicitar { FeCaeReq = wsfe }, cancellationToken);
+
+        wsfeSubmission.Should().BeEquivalentTo(authorized.Submission);
+        wsfeSubmission.Payload.Should().Be(authorized.Submission.Payload);
+        wsfeSubmission.Payload.Should().Be(SerializeXml(wsfe));
+        wsfexSubmission.Identity.Should().Be(new InvoiceIdentity(tenant.Environment, tenant.Cuit, wsfex.PuntoVta, wsfex.CbteTipo, wsfex.CbteNro));
+        wsfexSubmission.Payload.Should().Be(SerializeXml(wsfex));
+        wsfexSubmission.RemoteRequestId.Should().Be(wsfex.Id);
+        wsmtxcaSubmission.Identity.Should().Be(new InvoiceIdentity(tenant.Environment, tenant.Cuit, wsmtxca.NumeroPuntoVenta, wsmtxca.CodigoTipoComprobante, wsmtxca.NumeroComprobante));
+        wsmtxcaSubmission.Payload.Should().Be(SerializeXml(wsmtxca));
+        transport.CallCount.Should().Be(1);
+    }
+
+    [Fact]
     public async Task AuthorizeWsfeAsync_freezes_payload_without_credentials_and_replay_does_not_send_again()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;

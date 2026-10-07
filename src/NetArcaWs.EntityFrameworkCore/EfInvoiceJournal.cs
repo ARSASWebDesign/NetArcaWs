@@ -15,7 +15,7 @@ using NetArcaWs.Invoicing;
 namespace NetArcaWs.EntityFrameworkCore;
 
 /// <summary>Relational journal that creates an independent context for every operation.</summary>
-public sealed class EfInvoiceJournal<TContext> : IInvoiceJournal where TContext : DbContext
+public sealed partial class EfInvoiceJournal<TContext> : IInvoiceJournal where TContext : DbContext
 {
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
     private readonly IDbContextFactory<TContext> contextFactory;
@@ -57,6 +57,16 @@ public sealed class EfInvoiceJournal<TContext> : IInvoiceJournal where TContext 
     {
         await using TContext context = await CreateContextAsync(cancellationToken).ConfigureAwait(false);
         await using IDbContextTransaction transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken).ConfigureAwait(false);
+        InvoiceOperation operation = await PrepareInContextAsync(context, submission, cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return operation;
+    }
+
+    private async Task<InvoiceOperation> PrepareInContextAsync(TContext context, InvoiceSubmission submission,
+        CancellationToken cancellationToken)
+    {
+        Validate(submission);
+        EnsureServiceEnabled(submission.Service);
         (string tenantHash, string keyHash) = GetOperationKeys(submission.TenantId, submission.IdempotencyKey);
         InvoiceJournalEntity? existing = await context.Set<InvoiceJournalEntity>()
             .SingleOrDefaultAsync(x => x.TenantHash == tenantHash && x.KeyHash == keyHash, cancellationToken).ConfigureAwait(false);
@@ -66,19 +76,14 @@ public sealed class EfInvoiceJournal<TContext> : IInvoiceJournal where TContext 
             InvoiceOperation restored = ToOperation(existing);
             if (restored.Submission != submission)
                 throw new InvoiceConflictException("The idempotency key is already bound to a different immutable submission.");
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return restored;
         }
 
-        var reservation = new InvoiceSeriesReservationEntity
-        {
-            SeriesHash = GetSeriesHash(submission.Identity), TenantHash = tenantHash, KeyHash = keyHash
-        };
-        var operation = CreateEntity(submission, clock.GetUtcNow());
-        context.Add(reservation);
+        context.Add(new InvoiceSeriesReservationEntity
+        { SeriesHash = GetSeriesHash(submission.Identity), TenantHash = tenantHash, KeyHash = keyHash });
+        InvoiceJournalEntity operation = CreateEntity(submission, clock.GetUtcNow());
         context.Add(operation);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return ToOperation(operation);
     }
 
@@ -523,15 +528,23 @@ public static class NetArcaWsEntityFrameworkServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(modelOptions);
-        if (!modelOptions.InvoicingEnabled && !modelOptions.WsaaTicketsEnabled && !modelOptions.CertificatesEnabled)
+        if (!modelOptions.InvoicingEnabled && !modelOptions.WsaaTicketsEnabled && !modelOptions.CertificatesEnabled && !modelOptions.InvoiceRecoveryEnabled)
             throw new ArgumentException("Select at least one EF-backed NetArcaWs capability before registering stores.", nameof(modelOptions));
+        if (modelOptions.InvoiceRecoveryEnabled && (!modelOptions.InvoicingEnabled ||
+            modelOptions.InvoiceRecoveryServices.Any(service => !modelOptions.InvoicingServices.Contains(service))))
+            throw new InvalidOperationException("Every invoice recovery service must also be selected for invoicing.");
         if (modelOptions.CertificatesEnabled && !services.Any(x => x.ServiceType == typeof(IArcaCertificateProtector)))
             throw new InvalidOperationException("Register an application-managed IArcaCertificateProtector before selecting tenant certificates.");
         services.TryAddSingleton(modelOptions);
         services.TryAddSingleton<TimeProvider>(TimeProvider.System);
         if (modelOptions.InvoicingEnabled)
-            services.AddSingleton<IInvoiceJournal>(provider => new EfInvoiceJournal<TContext>(
+        {
+            services.AddSingleton(provider => new EfInvoiceJournal<TContext>(
                 provider.GetRequiredService<IDbContextFactory<TContext>>(), modelOptions, provider.GetRequiredService<TimeProvider>()));
+            services.AddSingleton<IInvoiceJournal>(provider => provider.GetRequiredService<EfInvoiceJournal<TContext>>());
+            if (modelOptions.InvoiceRecoveryEnabled)
+                services.AddSingleton<IInvoiceRecoveryQueue>(provider => provider.GetRequiredService<EfInvoiceJournal<TContext>>());
+        }
         if (modelOptions.WsaaTicketsEnabled)
             services.AddWsaaTicketStores<TContext>(modelOptions);
         if (modelOptions.CertificatesEnabled)

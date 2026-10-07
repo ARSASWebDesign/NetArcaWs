@@ -26,15 +26,10 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
     public Task<InvoiceOperation> AuthorizeWsfeAsync(ArcaTenantContext tenant, string key, FecaeRequest request,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(tenant); ArgumentNullException.ThrowIfNull(request);
-        var payload = Serialize(request);
-        var frozen = Deserialize<FecaeRequest>(payload);
-        if (frozen.FeCabReq is not { CantReg: 1 } header || frozen.FeDetReq.Count != 1)
-            throw new ArgumentException("Durable issuance requires exactly one voucher; use the typed client for batches.", nameof(request));
+        InvoiceSubmission submission = CreateWsfeSubmission(tenant, key, request);
+        var frozen = Deserialize<FecaeRequest>(submission.Payload);
+        var header = frozen.FeCabReq!;
         var detail = frozen.FeDetReq[0];
-        if (detail.CbteDesde != detail.CbteHasta || string.IsNullOrWhiteSpace(detail.CbteFch) || detail.MonCotiz is null)
-            throw new ArgumentException("Provide one voucher number, an explicit issue date and exchange rate.", nameof(request));
-        var submission = Submission(tenant, key, "wsfe", header.PtoVta, header.CbteTipo, detail.CbteDesde, payload);
         return coordinator.SubmitAsync(submission, async ct =>
         {
             var response = await wsfe.FECAESolicitarAsync(tenant, new FecaeSolicitar { FeCaeReq = frozen }, ct).ConfigureAwait(false);
@@ -54,12 +49,8 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
     public Task<InvoiceOperation> AuthorizeWsfexAsync(ArcaTenantContext tenant, string key, ClsFexRequest request,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(tenant); ArgumentNullException.ThrowIfNull(request);
-        var payload = Serialize(request);
-        var frozen = Deserialize<ClsFexRequest>(payload);
-        if (frozen.Id <= 0 || string.IsNullOrWhiteSpace(frozen.FechaCbte) || frozen.MonedaCtz is null)
-            throw new ArgumentException("Provide a positive request Id, explicit issue date and exchange rate.", nameof(request));
-        var submission = Submission(tenant, key, "wsfex", frozen.PuntoVta, frozen.CbteTipo, frozen.CbteNro, payload) with { RemoteRequestId = frozen.Id };
+        InvoiceSubmission submission = CreateWsfexSubmission(tenant, key, request);
+        var frozen = Deserialize<ClsFexRequest>(submission.Payload);
         return coordinator.SubmitAsync(submission, async ct =>
         {
             var response = await wsfex.FEXAuthorizeAsync(tenant, new FexAuthorize { Cmp = frozen }, ct).ConfigureAwait(false);
@@ -75,13 +66,8 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
     public Task<InvoiceOperation> AuthorizeWsmtxcaAsync(ArcaTenantContext tenant, string key, ComprobanteType request,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(tenant); ArgumentNullException.ThrowIfNull(request);
-        var payload = Serialize(request);
-        var frozen = Deserialize<ComprobanteType>(payload);
-        if (frozen.FechaEmision is null || frozen.CotizacionMoneda is null || frozen.CodigoAutorizacion is not null ||
-            frozen.CodigoTipoAutorizacion is not null || frozen.FechaVencimiento is not null)
-            throw new ArgumentException("CAE issuance requires an explicit issue date and exchange rate, without a preexisting authorization.", nameof(request));
-        var submission = Submission(tenant, key, "wsmtxca", frozen.NumeroPuntoVenta, frozen.CodigoTipoComprobante, frozen.NumeroComprobante, payload);
+        InvoiceSubmission submission = CreateWsmtxcaSubmission(tenant, key, request);
+        var frozen = Deserialize<ComprobanteType>(submission.Payload);
         return coordinator.SubmitAsync(submission, async ct =>
         {
             var response = await wsmtxca.autorizarComprobanteAsync(tenant,
@@ -97,6 +83,46 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
                 return new(InvoiceState.Unknown, ResponseXml: xml);
             return Decision(response.Resultado is ResultadoSimpleType.A or ResultadoSimpleType.O ? "A" : response.Resultado.ToString(), result.Cae > 0 ? result.Cae.ToString(CultureInfo.InvariantCulture) : null, xml);
         }, cancellationToken);
+    }
+
+    public static InvoiceSubmission CreateWsfeSubmission(ArcaTenantContext tenant, string key, FecaeSolicitar request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return CreateWsfeSubmission(tenant, key, request.FeCaeReq);
+    }
+
+    public static InvoiceSubmission CreateWsfeSubmission(ArcaTenantContext tenant, string key, FecaeRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(tenant); ArgumentNullException.ThrowIfNull(request);
+        string payload = Serialize(request);
+        FecaeRequest frozen = Deserialize<FecaeRequest>(payload);
+        if (frozen.FeCabReq is not { CantReg: 1 } header || frozen.FeDetReq.Count != 1)
+            throw new ArgumentException("Durable issuance requires exactly one voucher; use the typed client for batches.", nameof(request));
+        var detail = frozen.FeDetReq[0];
+        if (detail.CbteDesde != detail.CbteHasta || string.IsNullOrWhiteSpace(detail.CbteFch) || detail.MonCotiz is null)
+            throw new ArgumentException("Provide one voucher number, an explicit issue date and exchange rate.", nameof(request));
+        return Submission(tenant, key, "wsfe", header.PtoVta, header.CbteTipo, detail.CbteDesde, payload);
+    }
+
+    public static InvoiceSubmission CreateWsfexSubmission(ArcaTenantContext tenant, string key, ClsFexRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(tenant); ArgumentNullException.ThrowIfNull(request);
+        string payload = Serialize(request);
+        ClsFexRequest frozen = Deserialize<ClsFexRequest>(payload);
+        if (frozen.Id <= 0 || string.IsNullOrWhiteSpace(frozen.FechaCbte) || frozen.MonedaCtz is null)
+            throw new ArgumentException("Provide a positive request Id, explicit issue date and exchange rate.", nameof(request));
+        return Submission(tenant, key, "wsfex", frozen.PuntoVta, frozen.CbteTipo, frozen.CbteNro, payload) with { RemoteRequestId = frozen.Id };
+    }
+
+    public static InvoiceSubmission CreateWsmtxcaSubmission(ArcaTenantContext tenant, string key, ComprobanteType request)
+    {
+        ArgumentNullException.ThrowIfNull(tenant); ArgumentNullException.ThrowIfNull(request);
+        string payload = Serialize(request);
+        ComprobanteType frozen = Deserialize<ComprobanteType>(payload);
+        if (frozen.FechaEmision is null || frozen.CotizacionMoneda is null || frozen.CodigoAutorizacion is not null ||
+            frozen.CodigoTipoAutorizacion is not null || frozen.FechaVencimiento is not null)
+            throw new ArgumentException("CAE issuance requires an explicit issue date and exchange rate, without a preexisting authorization.", nameof(request));
+        return Submission(tenant, key, "wsmtxca", frozen.NumeroPuntoVenta, frozen.CodigoTipoComprobante, frozen.NumeroComprobante, payload);
     }
 
     /// <summary>Recovers a stored operation. Only an unsent Prepared snapshot can be submitted.</summary>
