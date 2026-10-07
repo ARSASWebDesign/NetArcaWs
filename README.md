@@ -38,8 +38,8 @@ services.AddNetArcaWs(options =>
 using var provider = services.BuildServiceProvider();
 
 var tenant = new ArcaTenantContext(
-    tenantId: "empresa-123",
-    cuit: 20123456789,
+    tenantId: authorizedTenantId,
+    cuit: representedCuit,
     environment: ArcaEnvironment.Homologation,
     certificate: certificate);
 var wscpe = provider.GetRequiredService<IWscpeService>();
