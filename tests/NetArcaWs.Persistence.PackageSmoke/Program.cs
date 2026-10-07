@@ -21,6 +21,7 @@ using NetArcaWs.Cryptography;
 using NetArcaWs.Multitenancy;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.Json;
 
 NetArcaWsModelOptions selection = NetArcaWsModelOptions.Configure(options =>
     options.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca)
@@ -67,12 +68,31 @@ IArcaCertificateStore certificateStore = provider.GetRequiredService<IArcaCertif
 var certificateScope = new ArcaCertificateScope("consumer-smoke", 30_123_456_789, ArcaEnvironment.Homologation);
 ArcaCertificateVersion firstCertificate = await certificateStore.RotateAsync(certificateScope, CreateCertificateContent());
 ArcaStoredCertificate? activeCertificate = await certificateStore.GetActiveAsync(certificateScope);
-if (activeCertificate?.Metadata.VersionId != firstCertificate.VersionId || activeCertificate.Content.ToString().Contains("PRIVATE KEY", StringComparison.Ordinal))
+if (activeCertificate is null || activeCertificate.Metadata.VersionId != firstCertificate.VersionId || activeCertificate.Content.ToString().Contains("PRIVATE KEY", StringComparison.Ordinal))
     throw new InvalidOperationException("The installed EF certificate store did not round-trip a protected version safely.");
-Guid operationCertificateVersionId = activeCertificate.Metadata.VersionId;
-var authorizedContext = new ArcaTenantContext(certificateScope.TenantId, certificateScope.Cuit, certificateScope.Environment, activeCertificate.Content);
-if (operationCertificateVersionId != activeCertificate.Metadata.VersionId || authorizedContext.Certificate != activeCertificate.Content)
-    throw new InvalidOperationException("The consumer could not retain the selected certificate version with its operation context.");
+var hostPreparedOperation = new ConsumerPreparedOperation(
+    submission.TenantId, submission.IdempotencyKey, prepared.State.ToString(), activeCertificate.Metadata.VersionId);
+string hostRecordPath = Path.Combine(Path.GetTempPath(), $"netarcaws-consumer-operation-{Guid.NewGuid():N}.json");
+await File.WriteAllTextAsync(hostRecordPath, JsonSerializer.Serialize(hostPreparedOperation));
+
+ArcaCertificateVersion rotatedCertificate = await certificateStore.RotateAsync(
+    certificateScope, CreateCertificateContent(), expectedActiveVersionId: firstCertificate.VersionId);
+ConsumerPreparedOperation? reloadedHostOperation = JsonSerializer.Deserialize<ConsumerPreparedOperation>(await File.ReadAllTextAsync(hostRecordPath));
+if (reloadedHostOperation is null || reloadedHostOperation.CertificateVersionId != firstCertificate.VersionId)
+    throw new InvalidOperationException("The application-owned prepared operation did not retain its selected certificate version.");
+ArcaStoredCertificate? historicalCertificate = await certificateStore.GetVersionAsync(certificateScope, reloadedHostOperation.CertificateVersionId);
+ArcaStoredCertificate? activeAfterRotation = await certificateStore.GetActiveAsync(certificateScope);
+if (historicalCertificate is null || activeAfterRotation is null || historicalCertificate.Metadata.VersionId != firstCertificate.VersionId ||
+    historicalCertificate.Metadata.IsActive || activeAfterRotation.Metadata.VersionId != rotatedCertificate.VersionId)
+    throw new InvalidOperationException("The consumer did not resolve its exact historical certificate version after rotation.");
+InvoiceOperation? invoiceAfterRotation = await journal.FindAsync(submission.TenantId, submission.IdempotencyKey);
+if (invoiceAfterRotation?.Submission != persisted?.Submission || invoiceAfterRotation?.Submission != submission)
+    throw new InvalidOperationException("Certificate rotation changed the prepared invoice payload stored in the existing journal.");
+var authorizedContext = new ArcaTenantContext(
+    certificateScope.TenantId, certificateScope.Cuit, certificateScope.Environment, historicalCertificate.Content);
+if (authorizedContext.Certificate != historicalCertificate.Content)
+    throw new InvalidOperationException("The consumer could not construct its operation context from the pinned historical version.");
+File.Delete(hostRecordPath);
 
 var sqliteCertificateOnlyServices = new ServiceCollection();
 sqliteCertificateOnlyServices.AddDbContextFactory<ArcaWsDbContext>(options => options.UseSqlite(sqliteConnectionString));
@@ -164,3 +184,5 @@ static WsaaCertificateContent CreateCertificateContent()
     using X509Certificate2 certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(2));
     return WsaaCertificateContent.FromPem(certificate.ExportCertificatePem(), key.ExportPkcs8PrivateKeyPem());
 }
+
+sealed record ConsumerPreparedOperation(string TenantId, string IdempotencyKey, string State, Guid CertificateVersionId);
