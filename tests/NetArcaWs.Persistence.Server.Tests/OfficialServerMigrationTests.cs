@@ -274,6 +274,8 @@ public sealed class OfficialServerMigrationTests
     [InlineData("invoicing", "unknown-history")]
     [InlineData("certificates", "untracked")]
     [InlineData("certificates", "unknown-history")]
+    [InlineData("recovery", "untracked")]
+    [InlineData("recovery", "unknown-history")]
     public async Task Existing_unknown_schema_is_rejected_without_mutation(string moduleName, string setup)
     {
         PersistenceServerSettings? settings = PersistenceServerSettings.FromEnvironment();
@@ -281,12 +283,19 @@ public sealed class OfficialServerMigrationTests
         PersistenceServerSettings selected = settings!;
         Assert.SkipWhen(selected.Kind is not ("postgresql" or "sqlserver"), "This suite targets PostgreSQL/SQL Server.");
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-        NetArcaWsPersistenceModule module = moduleName == "certificates"
-            ? NetArcaWsPersistenceModule.TenantCertificates
-            : NetArcaWsPersistenceModule.Invoicing;
+        NetArcaWsPersistenceModule module = moduleName switch
+        {
+            "certificates" => NetArcaWsPersistenceModule.TenantCertificates,
+            "recovery" => NetArcaWsPersistenceModule.InvoiceRecovery,
+            _ => NetArcaWsPersistenceModule.Invoicing
+        };
         NetArcaWsModelOptions selectedOptions = Options(module);
         await using ServerTestDatabase database = await ServerTestDatabase.CreateAsync(selected,
-            builder => Add(builder, module), provision: false);
+            builder =>
+            {
+                Add(builder, module);
+                if (module == NetArcaWsPersistenceModule.InvoiceRecovery) builder.AddInvoicing(ArcaService.Wsfev1);
+            }, provision: false);
         await CreateInvalidSchemaAsync(database, selected.Kind, setup, module, cancellationToken);
 
         INetArcaWsMigrator migrator = database.CreateOfficialMigrator(selectedOptions);
@@ -304,8 +313,12 @@ public sealed class OfficialServerMigrationTests
         after.Modules.Single().PresentTables.Should().Equal(presentBefore);
         after.Modules.Single().Pending.Should().BeEquivalentTo(after.Modules.Single().Known);
         if (setup == "untracked")
-            after.Modules.Single().PresentTables.Should().Contain(module == NetArcaWsPersistenceModule.TenantCertificates
-                ? "NetArcaCertificateSlots" : "NetArcaInvoices");
+            after.Modules.Single().PresentTables.Should().Contain(module switch
+            {
+                NetArcaWsPersistenceModule.TenantCertificates => "NetArcaCertificateSlots",
+                NetArcaWsPersistenceModule.InvoiceRecovery => "NetArcaInvoiceRecoveryJobs",
+                _ => "NetArcaInvoices"
+            });
     }
 
     [Theory]
@@ -339,6 +352,130 @@ public sealed class OfficialServerMigrationTests
         after.Modules.Single().State.Should().Be(NetArcaWsMigrationState.TrackedSchemaIncomplete);
         after.Modules.Single().PresentTables.Should().Equal(presentBefore);
     }
+
+    [Fact]
+    public async Task Missing_recovery_queue_table_fails_preflight_and_preserves_history()
+    {
+        PersistenceServerSettings? settings = PersistenceServerSettings.FromEnvironment();
+        Assert.SkipWhen(settings is null, "Opt-in PostgreSQL/SQL Server recovery migration preflight test.");
+        PersistenceServerSettings selected = settings!;
+        Assert.SkipWhen(selected.Kind is not ("postgresql" or "sqlserver"), "This suite targets PostgreSQL/SQL Server.");
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        NetArcaWsModelOptions recovery = Options(NetArcaWsPersistenceModule.InvoiceRecovery);
+        await using ServerTestDatabase database = await ServerTestDatabase.CreateAsync(selected,
+            builder => builder.AddInvoicing(ArcaService.Wsfev1).AddInvoiceRecovery(ArcaService.Wsfev1), provision: false);
+        await database.ApplyOfficialMigrationsAsync(recovery, cancellationToken);
+        await ExecuteSchemaCommandAsync(database, selected.Kind,
+            selected.Kind == "sqlserver" ? "DROP TABLE [dbo].[NetArcaInvoiceRecoveryJobs]" : "DROP TABLE \"NetArcaInvoiceRecoveryJobs\"",
+            cancellationToken);
+        INetArcaWsMigrator migrator = database.CreateOfficialMigrator(recovery);
+        NetArcaWsMigrationStatus before = await migrator.GetStatusAsync(cancellationToken);
+        before.Modules.Should().ContainSingle().Which.State.Should().Be(NetArcaWsMigrationState.TrackedSchemaIncomplete);
+        string[] presentBefore = before.Modules.Single().PresentTables.ToArray();
+        Func<Task> apply = () => migrator.ApplyAsync(cancellationToken);
+        await apply.Should().ThrowAsync<NetArcaWsMigrationPreflightException>();
+        NetArcaWsMigrationStatus after = await migrator.GetStatusAsync(cancellationToken);
+        after.Modules.Single().State.Should().Be(NetArcaWsMigrationState.TrackedSchemaIncomplete);
+        after.Modules.Single().Applied.Should().Equal(before.Modules.Single().Applied);
+        after.Modules.Single().PresentTables.Should().Equal(presentBefore);
+    }
+
+    [Fact]
+    public async Task Invoice_recovery_DDL_failure_rolls_back_new_schema_and_preserves_invoice_ticket_and_certificate_data()
+    {
+        PersistenceServerSettings? settings = PersistenceServerSettings.FromEnvironment();
+        Assert.SkipWhen(settings is null, "Opt-in PostgreSQL/SQL Server recovery DDL failure test.");
+        PersistenceServerSettings selected = settings!;
+        Assert.SkipWhen(selected.Kind is not ("postgresql" or "sqlserver"), "This suite targets PostgreSQL/SQL Server.");
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        byte[] certificateKey = RandomNumberGenerator.GetBytes(32);
+        await using ServerTestDatabase database = await ServerTestDatabase.CreateAsync(selected, builder =>
+            builder.AddInvoicing(ArcaService.Wsfev1).AddWsaaTickets(ArcaService.Wsfev1).AddCertificates()
+                .AddInvoiceRecovery(ArcaService.Wsfev1), provision: false, certificateProtectionKey: certificateKey);
+        RecoveryPriorData prior = await SeedRecoveryPriorDataAsync(database, selected.Kind, cancellationToken);
+        var interceptor = new RecoveryMigrationFaultInterceptor();
+        INetArcaWsMigrator migrator = CreateRecoveryFaultMigrator(database, selected.Kind, interceptor);
+
+        Func<Task> apply = () => migrator.ApplyAsync(cancellationToken);
+        await apply.Should().ThrowAsync<InvalidOperationException>().WithMessage("Synthetic recovery DDL failure.");
+        interceptor.Observed.Should().BeTrue();
+        NetArcaWsMigrationStatus status = await migrator.GetStatusAsync(cancellationToken);
+        status.Modules.Should().ContainSingle().Which.State.Should().Be(NetArcaWsMigrationState.Empty);
+        status.Modules.Single().Applied.Should().BeEmpty();
+        status.Modules.Single().PresentTables.Should().NotContain("NetArcaInvoiceRecoveryJobs");
+        await AssertRecoveryFaultFixturePreservedAsync(database, selected.Kind, prior, cancellationToken);
+    }
+
+    [Fact]
+    public async Task Invoice_recovery_cancellation_rolls_back_new_schema_and_preserves_invoice_ticket_and_certificate_data()
+    {
+        PersistenceServerSettings? settings = PersistenceServerSettings.FromEnvironment();
+        Assert.SkipWhen(settings is null, "Opt-in PostgreSQL/SQL Server recovery cancellation test.");
+        PersistenceServerSettings selected = settings!;
+        Assert.SkipWhen(selected.Kind is not ("postgresql" or "sqlserver"), "This suite targets PostgreSQL/SQL Server.");
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        byte[] certificateKey = RandomNumberGenerator.GetBytes(32);
+        await using ServerTestDatabase database = await ServerTestDatabase.CreateAsync(selected, builder =>
+            builder.AddInvoicing(ArcaService.Wsfev1).AddWsaaTickets(ArcaService.Wsfev1).AddCertificates()
+                .AddInvoiceRecovery(ArcaService.Wsfev1), provision: false, certificateProtectionKey: certificateKey);
+        RecoveryPriorData prior = await SeedRecoveryPriorDataAsync(database, selected.Kind, cancellationToken);
+        using var cancellation = new CancellationTokenSource();
+        var interceptor = new RecoveryMigrationFaultInterceptor(cancellation);
+        INetArcaWsMigrator migrator = CreateRecoveryFaultMigrator(database, selected.Kind, interceptor);
+
+        Func<Task> apply = () => migrator.ApplyAsync(cancellation.Token);
+        await apply.Should().ThrowAsync<OperationCanceledException>();
+        cancellation.IsCancellationRequested.Should().BeTrue();
+        interceptor.Observed.Should().BeTrue();
+        NetArcaWsMigrationStatus status = await migrator.GetStatusAsync(cancellationToken);
+        status.Modules.Should().ContainSingle().Which.State.Should().Be(NetArcaWsMigrationState.Empty);
+        status.Modules.Single().Applied.Should().BeEmpty();
+        status.Modules.Single().PresentTables.Should().NotContain("NetArcaInvoiceRecoveryJobs");
+        await AssertRecoveryFaultFixturePreservedAsync(database, selected.Kind, prior, cancellationToken);
+    }
+
+    private static async Task<RecoveryPriorData> SeedRecoveryPriorDataAsync(ServerTestDatabase database, string kind,
+        CancellationToken cancellationToken)
+    {
+        NetArcaWsModelOptions oldModules = Options(NetArcaWsPersistenceModule.Invoicing,
+            NetArcaWsPersistenceModule.WsaaTickets, NetArcaWsPersistenceModule.TenantCertificates);
+        (await database.ApplyOfficialMigrationsAsync(oldModules, cancellationToken)).Modules.Should().HaveCount(3);
+        await PersistFixtureAsync(database, kind, invoicingFirst: true, cancellationToken);
+        await PersistFixtureAsync(database, kind, invoicingFirst: false, cancellationToken);
+        InvoiceStoreSnapshot invoice = await CaptureInvoiceStoreAsync(database, kind, "migration-lifecycle", "invoice-fixture", cancellationToken);
+        byte[] ticket = await ReadTicketCiphertextAsync(database, kind, cancellationToken);
+        ArcaCertificateScope scope = new("recovery-fault-fixture", 20_123_456_789, ArcaEnvironment.Homologation);
+        ArcaCertificateVersion version = await database.Services.GetRequiredService<IArcaCertificateStore>()
+            .RotateAsync(scope, CreateCertificateContent("CN=recovery-fault-fixture"), cancellationToken: cancellationToken);
+        byte[] certificate = await ReadCertificateCiphertextAsync(database, kind, version.VersionId, cancellationToken);
+        return new(invoice, ticket, scope, version, certificate);
+    }
+
+    private static INetArcaWsMigrator CreateRecoveryFaultMigrator(ServerTestDatabase database, string kind,
+        RecoveryMigrationFaultInterceptor interceptor)
+    {
+        INetArcaWsMigrationContextFactory inner = kind == "postgresql"
+            ? new PostgreSqlMigrationContextFactory(database.ConnectionString)
+            : new SqlServerMigrationContextFactory(database.ConnectionString);
+        return new NetArcaWsMigrator(new RecoveryMigrationFaultContextFactory(database.ConnectionString, kind, inner, interceptor),
+            [NetArcaWsPersistenceModule.InvoiceRecovery]);
+    }
+
+    private static async Task AssertRecoveryFaultFixturePreservedAsync(ServerTestDatabase database, string kind,
+        RecoveryPriorData expected, CancellationToken cancellationToken)
+    {
+        (await CaptureInvoiceStoreAsync(database, kind, "migration-lifecycle", "invoice-fixture", cancellationToken))
+            .Should().BeEquivalentTo(expected.Invoice);
+        (await ReadTicketCiphertextAsync(database, kind, cancellationToken)).Should().Equal(expected.TicketCiphertext);
+        (await ReadCertificateCiphertextAsync(database, kind, expected.CertificateVersion.VersionId, cancellationToken))
+            .Should().Equal(expected.CertificateCiphertext);
+        (await database.Services.GetRequiredService<IArcaCertificateStore>()
+            .GetVersionAsync(expected.CertificateScope, expected.CertificateVersion.VersionId, cancellationToken))!
+            .Metadata.VersionId.Should().Be(expected.CertificateVersion.VersionId);
+    }
+
+    private sealed record RecoveryPriorData(InvoiceStoreSnapshot Invoice, byte[] TicketCiphertext,
+        ArcaCertificateScope CertificateScope, ArcaCertificateVersion CertificateVersion, byte[] CertificateCiphertext);
 
     [Theory]
     [InlineData(true)]
@@ -478,10 +615,18 @@ public sealed class OfficialServerMigrationTests
     private static async Task CreateInvalidSchemaAsync(ServerTestDatabase database, string kind, string setup,
         NetArcaWsPersistenceModule module, CancellationToken cancellationToken)
     {
-        string appTable = module == NetArcaWsPersistenceModule.TenantCertificates ? "NetArcaCertificateSlots" : "NetArcaInvoices";
-        string historyName = module == NetArcaWsPersistenceModule.TenantCertificates
-            ? "__NetArcaWsCertificateMigrations"
-            : "__NetArcaWsInvoiceMigrations";
+        string appTable = module switch
+        {
+            NetArcaWsPersistenceModule.TenantCertificates => "NetArcaCertificateSlots",
+            NetArcaWsPersistenceModule.InvoiceRecovery => "NetArcaInvoiceRecoveryJobs",
+            _ => "NetArcaInvoices"
+        };
+        string historyName = module switch
+        {
+            NetArcaWsPersistenceModule.TenantCertificates => "__NetArcaWsCertificateMigrations",
+            NetArcaWsPersistenceModule.InvoiceRecovery => "__NetArcaWsInvoiceRecoveryMigrations",
+            _ => "__NetArcaWsInvoiceMigrations"
+        };
         if (setup == "untracked")
         {
             string table = kind == "sqlserver" ? $"[dbo].[{appTable}]" : $"\"{appTable}\"";
@@ -591,7 +736,7 @@ public sealed class OfficialServerMigrationTests
         if (module == NetArcaWsPersistenceModule.Invoicing) builder.AddInvoicing(ArcaService.Wsfev1);
         else if (module == NetArcaWsPersistenceModule.WsaaTickets) builder.AddWsaaTickets(ArcaService.Wsfev1);
         else if (module == NetArcaWsPersistenceModule.TenantCertificates) builder.AddCertificates();
-        else builder.AddInvoiceRecovery(ArcaService.Wsfev1);
+        else if (module == NetArcaWsPersistenceModule.InvoiceRecovery) builder.AddInvoiceRecovery(ArcaService.Wsfev1);
     }
 }
 
@@ -626,5 +771,50 @@ internal sealed class FailDuringOfficialServerInvoiceMigrationFactory(string con
                 throw new InvalidOperationException("Synthetic DDL failure.");
             return ValueTask.FromResult(result);
         }
+    }
+}
+
+internal sealed class RecoveryMigrationFaultContextFactory(string connectionString, string kind,
+    INetArcaWsMigrationContextFactory inner, RecoveryMigrationFaultInterceptor interceptor) : INetArcaWsMigrationContextFactory
+{
+    public NetArcaWsMigrationProvider Provider => inner.Provider;
+
+    public DbContext CreateContext(NetArcaWsPersistenceModule module)
+    {
+        if (module != NetArcaWsPersistenceModule.InvoiceRecovery) return inner.CreateContext(module);
+        if (kind == "postgresql")
+            return new PostgreSqlInvoiceRecoveryMigrationsDbContext(new DbContextOptionsBuilder<PostgreSqlInvoiceRecoveryMigrationsDbContext>()
+                .UseNpgsql(connectionString, options => options.MigrationsAssembly(typeof(PostgreSqlMigrationContextFactory).Assembly.FullName)
+                    .MigrationsHistoryTable("__NetArcaWsInvoiceRecoveryMigrations", "public"))
+                .AddInterceptors(interceptor).Options);
+        return new SqlServerInvoiceRecoveryMigrationsDbContext(new DbContextOptionsBuilder<SqlServerInvoiceRecoveryMigrationsDbContext>()
+            .UseSqlServer(connectionString, options => options.MigrationsAssembly(typeof(SqlServerMigrationContextFactory).Assembly.FullName)
+                .MigrationsHistoryTable("__NetArcaWsInvoiceRecoveryMigrations", "dbo"))
+            .AddInterceptors(interceptor).Options);
+    }
+
+    public Task<IReadOnlyList<string>> GetPresentTablesAsync(DbContext context, IReadOnlyList<string> names,
+        CancellationToken cancellationToken) => inner.GetPresentTablesAsync(context, names, cancellationToken);
+}
+
+internal sealed class RecoveryMigrationFaultInterceptor(CancellationTokenSource? cancellation = null) : DbCommandInterceptor
+{
+    public bool Observed { get; private set; }
+
+    public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+        InterceptionResult<int> result, CancellationToken cancellationToken = default)
+    {
+        if (command.CommandText.Contains("CREATE INDEX", StringComparison.OrdinalIgnoreCase) &&
+            command.CommandText.Contains("NetArcaInvoiceRecoveryJobs", StringComparison.Ordinal))
+        {
+            Observed = true;
+            if (cancellation is not null)
+            {
+                cancellation.Cancel();
+                throw new OperationCanceledException("Synthetic invoice recovery DDL cancellation.", cancellation.Token);
+            }
+            throw new InvalidOperationException("Synthetic recovery DDL failure.");
+        }
+        return ValueTask.FromResult(result);
     }
 }

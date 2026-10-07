@@ -106,6 +106,100 @@ public sealed class OfficialSqliteMigrationsTests
         }
     }
 
+    [Theory]
+    [InlineData("untracked")]
+    [InlineData("unknown-history")]
+    [InlineData("missing-table")]
+    public async Task InvoiceRecoveryPreflightRejectsUnknownUntrackedAndIncompleteOwnedSchemaWithoutMutation(string setup)
+    {
+        await using var db = new TestDatabase(RecoveryOptions());
+        if (setup == "untracked")
+            await db.Execute("CREATE TABLE NetArcaInvoiceRecoveryJobs (SyntheticTrap INTEGER NOT NULL)");
+        else if (setup == "unknown-history")
+            await db.Execute("CREATE TABLE __NetArcaWsInvoiceRecoveryMigrations (MigrationId TEXT PRIMARY KEY, ProductVersion TEXT NOT NULL); INSERT INTO __NetArcaWsInvoiceRecoveryMigrations VALUES ('29990101000000_FutureRecovery', '10.0.12')");
+        else
+        {
+            await db.Migrator.ApplyAsync(TestContext.Current.CancellationToken);
+            await db.Execute("DROP TABLE NetArcaInvoiceRecoveryJobs");
+        }
+
+        string[] tablesBefore = await db.Tables();
+        NetArcaWsMigrationStatus before = await db.Migrator.GetStatusAsync(TestContext.Current.CancellationToken);
+        NetArcaWsMigrationState expected = setup switch
+        {
+            "untracked" => NetArcaWsMigrationState.UntrackedSchema,
+            "unknown-history" => NetArcaWsMigrationState.UnknownAppliedMigration,
+            _ => NetArcaWsMigrationState.TrackedSchemaIncomplete
+        };
+        before.Modules.Should().ContainSingle().Which.State.Should().Be(expected);
+        Func<Task> apply = () => db.Migrator.ApplyAsync(TestContext.Current.CancellationToken);
+        await apply.Should().ThrowAsync<NetArcaWsMigrationPreflightException>();
+        NetArcaWsMigrationStatus after = await db.Migrator.GetStatusAsync(TestContext.Current.CancellationToken);
+        after.Modules.Single().State.Should().Be(expected);
+        after.Modules.Single().Applied.Should().Equal(before.Modules.Single().Applied);
+        after.Modules.Single().PresentTables.Should().Equal(before.Modules.Single().PresentTables);
+        (await db.Tables()).Should().Equal(tablesBefore);
+    }
+
+    [Fact]
+    public async Task InvoiceRecoveryDdlFailureRollsBackQueueAndHistoryAndPreservesExistingModuleRows()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"arca-recovery-ddl-failure-{Guid.NewGuid():N}.db");
+        string connectionString = $"Data Source={path};Pooling=False";
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        try
+        {
+            await using var existing = new TestDatabase(connectionString, ExistingDataOptions());
+            (await existing.Migrator.ApplyAsync(cancellationToken)).Modules.Should().HaveCount(3);
+            await SeedExistingModuleRowsAsync(existing, cancellationToken);
+            var factory = new FailDuringRecoveryMigrationFactory(connectionString, new SqliteMigrationContextFactory(connectionString));
+            var recoveryMigrator = new NetArcaWsMigrator(factory, [NetArcaWsPersistenceModule.InvoiceRecovery]);
+
+            Func<Task> apply = () => recoveryMigrator.ApplyAsync(cancellationToken);
+            await apply.Should().ThrowAsync<InvalidOperationException>().WithMessage("Synthetic recovery DDL failure.");
+            (await recoveryMigrator.GetStatusAsync(cancellationToken)).Modules.Should().ContainSingle()
+                .Which.State.Should().Be(NetArcaWsMigrationState.Empty);
+            (await existing.Tables()).Should().Contain("NetArcaInvoices", "NetArcaWsaaTickets", "NetArcaCertificateSlots", "NetArcaCertificateVersions")
+                .And.NotContain("NetArcaInvoiceRecoveryJobs");
+            await AssertExistingModuleRowsAsync(existing, cancellationToken);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceRecoveryCancellationRollsBackQueueHistoryAndPreservesExistingModuleRows()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"arca-recovery-cancel-{Guid.NewGuid():N}.db");
+        string connectionString = $"Data Source={path};Pooling=False";
+        using var cancellation = new CancellationTokenSource();
+        try
+        {
+            await using var existing = new TestDatabase(connectionString, ExistingDataOptions());
+            (await existing.Migrator.ApplyAsync(TestContext.Current.CancellationToken)).Modules.Should().HaveCount(3);
+            await SeedExistingModuleRowsAsync(existing, TestContext.Current.CancellationToken);
+            var factory = new CancelDuringRecoveryMigrationFactory(connectionString, new SqliteMigrationContextFactory(connectionString), cancellation);
+            var recoveryMigrator = new NetArcaWsMigrator(factory, [NetArcaWsPersistenceModule.InvoiceRecovery]);
+
+            Func<Task> apply = () => recoveryMigrator.ApplyAsync(cancellation.Token);
+            await apply.Should().ThrowAsync<OperationCanceledException>();
+            cancellation.IsCancellationRequested.Should().BeTrue();
+            (await recoveryMigrator.GetStatusAsync(TestContext.Current.CancellationToken)).Modules.Should().ContainSingle()
+                .Which.State.Should().Be(NetArcaWsMigrationState.Empty);
+            (await existing.Tables()).Should().Contain("NetArcaInvoices", "NetArcaWsaaTickets", "NetArcaCertificateSlots", "NetArcaCertificateVersions")
+                .And.NotContain("NetArcaInvoiceRecoveryJobs");
+            await AssertExistingModuleRowsAsync(existing, TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
     [Fact]
     public async Task Independent_processes_claim_once_then_restart_reclaims_expired_prepared_and_rejects_stale_fence()
     {
@@ -643,6 +737,26 @@ public sealed class OfficialSqliteMigrationsTests
     private static NetArcaWsModelOptions RecoveryOptions() => NetArcaWsModelOptions.Configure(x => x.AddInvoiceRecovery(ArcaService.Wsfev1));
     private static NetArcaWsModelOptions RecoveryModelOptions() => NetArcaWsModelOptions.Configure(x =>
         x.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1).AddInvoiceRecovery(ArcaService.Wsfev1, ArcaService.Wsfexv1));
+    private static NetArcaWsModelOptions ExistingDataOptions() => NetArcaWsModelOptions.Configure(x =>
+        x.AddInvoicing(ArcaService.Wsfev1).AddWsaaTickets(ArcaService.Wsfev1).AddCertificates());
+
+    private static async Task SeedExistingModuleRowsAsync(TestDatabase db, CancellationToken cancellationToken)
+    {
+        await db.Execute("INSERT INTO NetArcaInvoices (TenantHash, KeyHash, TenantId, IdempotencyKey, Service, ServiceHash, Environment, Cuit, PointOfSale, VoucherType, VoucherNumber, FiscalHash, Payload, PayloadHash, CanonicalVersion, State, Version, Attempt, CreatedUtcTicks) VALUES ('t','k','tenant','idem','WSFEv1','s',1,20999888777,1,1,1,'f','<synthetic>existing-invoice</synthetic>','p',1,1,1,1,1)");
+        await db.Execute("INSERT INTO NetArcaWsaaTickets (KeyHash, CertificateHash, Endpoint, Service, State, Fence, Version, Nonce, Ciphertext, Tag, UpdatedUtcTicks) VALUES ('ticket-key','cert-hash','https://synthetic.invalid/wsaa','wsfev1',3,4,5,X'010203',X'0B16212C37',X'060708',123456789)");
+        await db.Execute("INSERT INTO NetArcaCertificateSlots (TenantHash, Cuit, Environment, ActiveVersionId, Generation) VALUES ('cert-tenant',20999888777,1,'version-1',1)");
+        await db.Execute("INSERT INTO NetArcaCertificateVersions (TenantHash, Cuit, Environment, VersionId, CreatedAtUtcTicks, ThumbprintSha256, NotBeforeUtcTicks, NotAfterUtcTicks, KeyId, Nonce, Ciphertext, Tag) VALUES ('cert-tenant',20999888777,1,'version-1',1,'thumbprint',1,2,'key-1',X'0102',X'0304',X'0506')");
+        (await ReadSqliteIntAsync(db.ConnectionString, "SELECT COUNT(*) FROM NetArcaInvoices WHERE KeyHash='k'", cancellationToken)).Should().Be(1);
+    }
+
+    private static async Task AssertExistingModuleRowsAsync(TestDatabase db, CancellationToken cancellationToken)
+    {
+        (await ReadSqliteIntAsync(db.ConnectionString, "SELECT COUNT(*) FROM NetArcaInvoices WHERE KeyHash='k'", cancellationToken)).Should().Be(1);
+        (await ReadSqliteBlobAsync(db.ConnectionString, "SELECT Ciphertext FROM NetArcaWsaaTickets WHERE KeyHash='ticket-key'", cancellationToken))
+            .Should().Equal(new byte[] { 11, 22, 33, 44, 55 });
+        (await ReadSqliteBlobAsync(db.ConnectionString, "SELECT Ciphertext FROM NetArcaCertificateVersions WHERE VersionId='version-1'", cancellationToken))
+            .Should().Equal(new byte[] { 3, 4 });
+    }
 
     private static async Task<int[]> RunTwoRecoveryClaimsAsync(string connectionString, string tenant, string leaseMilliseconds,
         CancellationToken cancellationToken)
@@ -922,6 +1036,62 @@ public sealed class OfficialSqliteMigrationsTests
         public Task<IReadOnlyList<string>> GetPresentTablesAsync(DbContext context, IReadOnlyList<string> names, CancellationToken cancellationToken) =>
             inner.GetPresentTablesAsync(context, names, cancellationToken);
     }
+
+    private sealed class FailDuringRecoveryMigrationFactory(string connectionString, SqliteMigrationContextFactory inner)
+        : INetArcaWsMigrationContextFactory
+    {
+        public NetArcaWsMigrationProvider Provider => NetArcaWsMigrationProvider.Sqlite;
+        public DbContext CreateContext(NetArcaWsPersistenceModule module) => module == NetArcaWsPersistenceModule.InvoiceRecovery
+            ? new SqliteInvoiceRecoveryMigrationsDbContext(new DbContextOptionsBuilder<SqliteInvoiceRecoveryMigrationsDbContext>()
+                .UseSqlite(connectionString, options => options.MigrationsAssembly(typeof(SqliteMigrationContextFactory).Assembly.FullName)
+                    .MigrationsHistoryTable("__NetArcaWsInvoiceRecoveryMigrations"))
+                .AddInterceptors(new FailRecoveryIndexCreationInterceptor()).Options)
+            : inner.CreateContext(module);
+        public Task<IReadOnlyList<string>> GetPresentTablesAsync(DbContext context, IReadOnlyList<string> names,
+            CancellationToken cancellationToken) => inner.GetPresentTablesAsync(context, names, cancellationToken);
+    }
+
+    private sealed class FailRecoveryIndexCreationInterceptor : DbCommandInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains("CREATE INDEX", StringComparison.OrdinalIgnoreCase) &&
+                command.CommandText.Contains("NetArcaInvoiceRecoveryJobs", StringComparison.Ordinal))
+                throw new InvalidOperationException("Synthetic recovery DDL failure.");
+            return ValueTask.FromResult(result);
+        }
+    }
+
+    private sealed class CancelDuringRecoveryMigrationFactory(string connectionString, SqliteMigrationContextFactory inner,
+        CancellationTokenSource cancellation) : INetArcaWsMigrationContextFactory
+    {
+        public NetArcaWsMigrationProvider Provider => NetArcaWsMigrationProvider.Sqlite;
+        public DbContext CreateContext(NetArcaWsPersistenceModule module) => module == NetArcaWsPersistenceModule.InvoiceRecovery
+            ? new SqliteInvoiceRecoveryMigrationsDbContext(new DbContextOptionsBuilder<SqliteInvoiceRecoveryMigrationsDbContext>()
+                .UseSqlite(connectionString, options => options.MigrationsAssembly(typeof(SqliteMigrationContextFactory).Assembly.FullName)
+                    .MigrationsHistoryTable("__NetArcaWsInvoiceRecoveryMigrations"))
+                .AddInterceptors(new CancelRecoveryIndexCreationInterceptor(cancellation)).Options)
+            : inner.CreateContext(module);
+        public Task<IReadOnlyList<string>> GetPresentTablesAsync(DbContext context, IReadOnlyList<string> names,
+            CancellationToken cancellationToken) => inner.GetPresentTablesAsync(context, names, cancellationToken);
+    }
+
+    private sealed class CancelRecoveryIndexCreationInterceptor(CancellationTokenSource cancellation) : DbCommandInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains("CREATE INDEX", StringComparison.OrdinalIgnoreCase) &&
+                command.CommandText.Contains("NetArcaInvoiceRecoveryJobs", StringComparison.Ordinal))
+            {
+                cancellation.Cancel();
+                throw new OperationCanceledException("Synthetic recovery migration cancellation.", cancellation.Token);
+            }
+            return ValueTask.FromResult(result);
+        }
+    }
+
 
     private sealed class FailReservationTableCreationInterceptor : DbCommandInterceptor
     {
