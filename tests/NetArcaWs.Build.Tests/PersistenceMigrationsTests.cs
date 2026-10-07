@@ -12,18 +12,19 @@ namespace NetArcaWs.Build.Tests;
 public sealed class PersistenceMigrationsTests
 {
     [Fact]
-    public void Generates_ten_deterministic_offline_scripts_with_real_initial_migration_operations()
+    public void Generates_twenty_deterministic_offline_scripts_with_real_initial_migration_operations()
     {
         IReadOnlyDictionary<string, string> scripts = PersistenceMigrations.GenerateScripts();
         IReadOnlyDictionary<string, string> repeated = PersistenceMigrations.GenerateScripts();
 
-        scripts.Should().HaveCount(15);
+        scripts.Should().HaveCount(20);
         repeated.Should().BeEquivalentTo(scripts);
         foreach (string provider in new[] { "sqlite", "mysql", "mariadb", "postgresql", "sqlserver" })
         {
             string invoice = scripts[$"{provider}/invoicing/0-latest.sql"];
             string tickets = scripts[$"{provider}/wsaa-tickets/0-latest.sql"];
             string certificates = scripts[$"{provider}/tenant-certificates/0-latest.sql"];
+            string recovery = scripts[$"{provider}/invoice-recovery/0-latest.sql"];
             invoice.Should().Contain("20261006000100_InitialInvoicing")
                 .And.Contain("__NetArcaWsInvoiceMigrations")
                 .And.Contain("CREATE TABLE")
@@ -44,6 +45,14 @@ public sealed class PersistenceMigrationsTests
                 certificates.ToUpperInvariant().Should().NotContain("ALTER DATABASE");
             Count(certificates, "NetArcaCertificateSlots").Should().BeGreaterThanOrEqualTo(1);
             Count(certificates, "NetArcaCertificateVersions").Should().BeGreaterThanOrEqualTo(1);
+            recovery.Should().Contain("20261007000400_InitialInvoiceRecovery")
+                .And.Contain("__NetArcaWsInvoiceRecoveryMigrations")
+                .And.Contain("CREATE TABLE")
+                .And.Contain("NetArcaInvoiceRecoveryJobs")
+                .And.NotContain("NetArcaInvoices")
+                .And.NotContain("NetArcaWsaaTickets")
+                .And.NotContain("NetArcaCertificateSlots");
+            Count(recovery, "NetArcaInvoiceRecoveryJobs").Should().BeGreaterThanOrEqualTo(1);
         }
         scripts.Values.Should().OnlyContain(script => script.EndsWith('\n') && !script.Contains("\r", StringComparison.Ordinal));
     }
@@ -54,7 +63,7 @@ public sealed class PersistenceMigrationsTests
         string root = Path.Combine(Path.GetTempPath(), $"netarcaws-migrations-{Guid.NewGuid():N}");
         try
         {
-            PersistenceMigrations.GenerateScripts().Should().HaveCount(15);
+            PersistenceMigrations.GenerateScripts().Should().HaveCount(20);
             IReadOnlyDictionary<string, string> generated = PersistenceMigrations.GenerateScripts();
             foreach ((string relative, string contents) in generated)
             {
