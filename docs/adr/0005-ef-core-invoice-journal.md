@@ -1,4 +1,4 @@
-# ADR 0005: Persistencia EF Core opt-in para diario fiscal y tickets WSAA
+# ADR 0005: Persistencia EF Core opt-in por módulo
 
 - Estado: Aceptado; MySQL/MariaDB/PostgreSQL/SQL Server verificados en engines reales, con evidencia acotada por versión
 - Fecha: 2026-10-06
@@ -32,17 +32,20 @@ base de datos.
 
 La selección de capacidades y servicios se realiza una vez mediante
 `NetArcaWsModelOptions`. Puede habilitar el diario para WSFEv1, WSFEXv1 y/o
-WSMTXCA, tickets para los servicios autenticados que use la aplicación, o ambos
-módulos. El conjunto es inmutable y forma parte de la clave de caché del modelo
-EF. Un contexto consumidor aplica la misma selección a su propio modelo y DI:
+WSMTXCA, tickets para los servicios autenticados que use la aplicación y/o el
+store independiente de certificados. El conjunto inmutable forma parte de la
+clave de caché del modelo EF. Un contexto consumidor aplica la misma selección
+a su propio modelo y DI:
 
 ```csharp
 NetArcaWsModelOptions modelOptions = NetArcaWsModelOptions.Configure(options =>
     options.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca)
-        .AddWsaaTickets(ArcaService.Wsfev1, ArcaService.PadronA5));
+        .AddWsaaTickets(ArcaService.Wsfev1, ArcaService.PadronA5)
+        .AddCertificates());
 
 services.AddDbContextFactory<MyApplicationDbContext>(options => options.UseSqlite(connectionString));
 services.AddSingleton<IWsaaTicketProtector>(protectorFromApplicationKeyRing);
+services.AddSingleton<IArcaCertificateProtector>(certificateProtectorFromApplicationKeyRing);
 services.AddNetArcaWsEntityFrameworkStores<MyApplicationDbContext>(modelOptions);
 services.AddNetArcaWsInvoicing(); // Registra WSAA/fachadas y SafeInvoiceService.
 ```
@@ -80,22 +83,24 @@ tampoco autodetectan la versión ni conectan al registrar.
 Para un contexto EF existente, registrar el proveedor en la aplicación y usar
 `AddNetArcaWsEntityFrameworkStores<TContext>`.
 
-Las migraciones oficiales poseen las cuatro tablas dedicadas: facturación posee
+Las migraciones oficiales poseen seis tablas dedicadas: facturación posee
 `NetArcaInvoices`, `NetArcaInvoiceRevisions` y
-`NetArcaInvoiceSeriesReservations`; WSAA posee `NetArcaWsaaTickets`. Sus
-historias independientes son `__NetArcaWsInvoiceMigrations` y
-`__NetArcaWsTicketMigrations`. Cada proveedor y módulo mantiene su propia
-migración inicial y snapshot. La selección dinámica de servicios no altera el
-modelo de tablas.
+`NetArcaInvoiceSeriesReservations`; WSAA posee `NetArcaWsaaTickets`; certificados
+posee `NetArcaCertificateSlots` y `NetArcaCertificateVersions`. Sus historias
+independientes son `__NetArcaWsInvoiceMigrations`,
+`__NetArcaWsTicketMigrations` y `__NetArcaWsCertificateMigrations`. Cada
+proveedor y módulo mantiene su propia migración inicial y snapshot. La selección
+dinámica de servicios no altera el modelo de tablas.
 
 El consumidor actualiza los paquetes y aplica las migraciones pendientes desde
 un actor de despliegue explícito. DI y el inicio normal de APIs no abren
 conexiones ni migran. El actor requiere permisos de cambio de esquema; runtime
 usa permisos de datos acotados. Los trabajos de despliegue deben serializarse
 por base porque el preflight se ejecuta fuera del lock EF y no coordina procesos
-externos. Los módulos se pueden instalar en cualquiera de los dos órdenes;
-deshabilitarlos conserva tablas, historia y filas. No hay transacción global
-entre módulos ni rollback uniforme de DDL parcial en todos los motores.
+externos. Los tres módulos independientes se pueden aplicar en cualquiera de
+los seis órdenes posibles; deshabilitarlos conserva tablas, historia y filas.
+No hay transacción global entre módulos ni rollback uniforme de DDL parcial en
+todos los motores.
 
 Para cambios upstream se conserva cada migración publicada y se agrega una
 nueva por proveedor y módulo, probando upgrades desde la versión anterior. El
@@ -120,12 +125,11 @@ incluyen lotes durables, WSFECred, WSCPE ni asignación automática de números.
   Server son opt-in.
 - La aplicación controla proveedor, claves de conexión, migraciones, despliegue,
   backups, retención y protección de los datos fiscales guardados.
-- Seleccionar solo tickets o solo facturación crea únicamente las tablas del
-  módulo elegido; seleccionar ambos agrega ambas familias de tablas al mismo
-  contexto.
-- El [modelo relacional](../wiki/Modelo-relacional.md) describe cuatro tablas
-  operativas y 15 DDL actuales (cinco motores × tres selecciones). Por separado,
-  hay 10 scripts de migración versionados (cinco motores × dos módulos) para el
+- Seleccionar cualquiera de los tres módulos agrega únicamente sus tablas;
+  cualquier combinación incorpora las familias seleccionadas al mismo contexto.
+- El [modelo relacional](../wiki/Modelo-relacional.md) describe seis tablas
+  operativas y 20 DDL actuales (cinco motores × cuatro selecciones). Por separado,
+  hay 15 scripts de migración versionados (cinco motores × tres módulos) para el
   upgrade inicial `0`→`latest`; no son idempotentes ni adoptan esquemas previos.
   SQLite puede crear además su tabla interna `__EFMigrationsLock`. Las relaciones actuales son lógicas por hashes; no
   hay FKs físicas, cascadas ni restricciones CHECK de enums.
@@ -148,6 +152,19 @@ incluyen lotes durables, WSFECred, WSCPE ni asignación automática de números.
   con ese motor y versión. No implica worker, scheduler o reintentos SOAP.
 - Los tickets compartidos, sus claves y límites se especifican en el
   [ADR 0006](0006-shared-wsaa-tickets.md).
+
+## Módulo independiente de certificados
+
+El paquete EF también incluye `TenantCertificates`, un tercer módulo de
+persistencia opt-in, independiente de facturación y tickets. No modifica el
+comportamiento ni los historiales publicados de los módulos anteriores. Su
+decisión de autorización, protección criptográfica, historial inmutable y
+operación se encuentra en el [ADR 0007](0007-tenant-certificate-store.md).
+Seleccionar `AddCertificates()` solo agrega sus dos entidades y requiere un
+`IArcaCertificateProtector` configurado por la aplicación. No registra servicios
+ARCA, no comparte tickets y no migra al inicio. La aplicación conserva el
+`VersionId` seleccionado junto a su propia operación; el diario fiscal y su
+hash canónico no cambian.
 
 El seguimiento y las capacidades diferidas asociadas a esta integración se
 mantienen en el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19).

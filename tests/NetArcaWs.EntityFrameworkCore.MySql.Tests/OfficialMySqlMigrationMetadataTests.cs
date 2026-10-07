@@ -34,6 +34,12 @@ public sealed class OfficialMySqlMigrationMetadataTests
             wsaaTickets ? ["NetArcaWsaaTickets"] : ["NetArcaInvoices", "NetArcaInvoiceRevisions", "NetArcaInvoiceSeriesReservations"]);
     }
 
+    [Fact]
+    public void MySqlTenantCertificateMigrationMetadataContainsOnlyItsOwnedTables()
+    {
+        AssertCertificateMigration(MySqlContextFactory().CreateContext(NetArcaWsPersistenceModule.TenantCertificates));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -48,6 +54,12 @@ public sealed class OfficialMySqlMigrationMetadataTests
         context.Database.GetMigrations().Should().ContainSingle();
         context.Model.GetEntityTypes().Select(entity => entity.GetTableName()).Should().BeEquivalentTo(
             wsaaTickets ? ["NetArcaWsaaTickets"] : ["NetArcaInvoices", "NetArcaInvoiceRevisions", "NetArcaInvoiceSeriesReservations"]);
+    }
+
+    [Fact]
+    public void MariaDbTenantCertificateMigrationMetadataContainsOnlyItsOwnedTables()
+    {
+        AssertCertificateMigration(MariaDbContextFactory().CreateContext(NetArcaWsPersistenceModule.TenantCertificates));
     }
 
     [Fact]
@@ -86,6 +98,24 @@ public sealed class OfficialMySqlMigrationMetadataTests
             .Should().Contain("IF NOT EXISTS").And.Contain("20261006000100_InitialInvoicing");
         mariaDbMigrator.GenerateScript(NetArcaWsPersistenceModule.WsaaTickets, idempotent: true)
             .Should().Contain("IF NOT EXISTS").And.Contain("20261006000200_InitialWsaaTickets");
+
+        NetArcaWsModelOptions certificates = NetArcaWsModelOptions.Configure(options => options.AddCertificates());
+        using ServiceProvider certificateMySql = new ServiceCollection()
+            .AddNetArcaWsMySqlMigrations(connectionString, new MySqlServerVersion(new Version(8, 4, 11)), certificates)
+            .BuildServiceProvider();
+        using ServiceProvider certificateMariaDb = new ServiceCollection()
+            .AddNetArcaWsMariaDbMigrations(connectionString, new MariaDbServerVersion(new Version(11, 4, 13)), certificates)
+            .BuildServiceProvider();
+        INetArcaWsMigrator certificateMySqlMigrator = certificateMySql.GetRequiredService<INetArcaWsMigrator>();
+        INetArcaWsMigrator certificateMariaDbMigrator = certificateMariaDb.GetRequiredService<INetArcaWsMigrator>();
+        certificateMySqlMigrator.GenerateScript(NetArcaWsPersistenceModule.TenantCertificates)
+            .Should().Contain("NetArcaCertificateSlots").And.Contain("NetArcaCertificateVersions")
+            .And.Contain("__NetArcaWsCertificateMigrations").And.NotContain("NetArcaInvoices");
+        certificateMariaDbMigrator.GenerateScript(NetArcaWsPersistenceModule.TenantCertificates)
+            .Should().Contain("NetArcaCertificateSlots").And.Contain("NetArcaCertificateVersions")
+            .And.Contain("__NetArcaWsCertificateMigrations").And.NotContain("NetArcaWsaaTickets");
+        certificateMySqlMigrator.GenerateScript(NetArcaWsPersistenceModule.TenantCertificates, idempotent: true)
+            .Should().Contain("20261006000300_InitialTenantCertificates");
     }
 
     [Fact]
@@ -171,6 +201,21 @@ public sealed class OfficialMySqlMigrationMetadataTests
         context.GetService<IHistoryRepository>().GetCreateScript().Should().Contain($"`{historyTable}`");
         context.GetService<IMigrationsAssembly>().Migrations.Should().ContainSingle();
         context.GetService<IMigrationsAssembly>().ModelSnapshot.Should().NotBeNull();
+    }
+
+    private static void AssertCertificateMigration(DbContext context)
+    {
+        using (context)
+        {
+            AssertMigrationContext(context, "__NetArcaWsCertificateMigrations");
+            context.Database.HasPendingModelChanges().Should().BeFalse();
+            context.GetService<IMigrationsAssembly>().Migrations.Keys.Should().ContainSingle()
+                .Which.Should().Be("20261006000300_InitialTenantCertificates");
+            context.Model.GetEntityTypes().Select(entity => entity.GetTableName())
+                .Should().BeEquivalentTo("NetArcaCertificateSlots", "NetArcaCertificateVersions");
+            context.Model.GetEntityTypes().SelectMany(entity => entity.GetProperties()).Select(property => property.Name)
+                .Should().Contain("Ciphertext").And.Contain("Nonce").And.Contain("Tag").And.Contain("ActiveVersionId");
+        }
     }
 
     private static object[] ModelShape(DbContext context) => context.Model.GetEntityTypes()

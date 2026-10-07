@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using MySqlConnector;
 using NetArcaWs.EntityFrameworkCore;
 using NetArcaWs.EntityFrameworkCore.MySql;
+using NetArcaWs.Cryptography;
 using NetArcaWs.EntityFrameworkCore.Migrations;
 using NetArcaWs.EntityFrameworkCore.Migrations.MySql;
 using NetArcaWs.EntityFrameworkCore.Migrations.MariaDb;
@@ -39,10 +40,16 @@ public sealed class MySqlPersistenceTests
         NetArcaWsPersistenceModule secondModule = invoicingFirst ? NetArcaWsPersistenceModule.WsaaTickets : NetArcaWsPersistenceModule.Invoicing;
         NetArcaWsModelOptions firstOptions = MigrationOptions(firstModule);
         NetArcaWsModelOptions secondOptions = MigrationOptions(secondModule);
-        NetArcaWsModelOptions allOptions = MigrationOptions(NetArcaWsPersistenceModule.Invoicing, NetArcaWsPersistenceModule.WsaaTickets);
-        await using MySqlTestDatabase database = await MySqlTestDatabase.CreateAsync(settings, builder => AddModule(builder, firstModule));
+        NetArcaWsModelOptions allOptions = MigrationOptions(NetArcaWsPersistenceModule.Invoicing,
+            NetArcaWsPersistenceModule.WsaaTickets, NetArcaWsPersistenceModule.TenantCertificates);
+        byte[] certificateKey = RandomNumberGenerator.GetBytes(32);
+        await using MySqlTestDatabase database = await MySqlTestDatabase.CreateAsync(settings,
+            builder => { builder.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1).AddWsaaTickets(ArcaService.Wsfev1, ArcaService.PadronA5).AddCertificates(); },
+            provision: false, certificateProtectionKey: certificateKey);
 
         (await database.ApplyOfficialMigrationsAsync(NetArcaWsModelOptions.Configure(_ => { }), cancellationToken)).Modules.Should().BeEmpty();
+        (await database.ApplyOfficialMigrationsAsync(firstOptions, cancellationToken)).Modules.Should().ContainSingle()
+            .Which.State.Should().Be(NetArcaWsMigrationState.Current);
         if (invoicingFirst)
         {
             IInvoiceJournal journal = database.Services.GetRequiredService<IInvoiceJournal>();
@@ -59,15 +66,36 @@ public sealed class MySqlPersistenceTests
             await ExecuteTicketFixtureAsync(database, cancellationToken);
         }
 
-        InvoiceStoreSnapshot? invoiceBefore = invoicingFirst
-            ? await CaptureInvoiceStoreAsync(database, "mysql-migration-lifecycle", "invoice-fixture", cancellationToken)
-            : null;
-
         (await database.ApplyOfficialMigrationsAsync(secondOptions, cancellationToken)).Modules.Should().ContainSingle().Which.State.Should().Be(NetArcaWsMigrationState.Current);
+        if (invoicingFirst) await ExecuteTicketFixtureAsync(database, cancellationToken);
+        else await CreateInvoiceFixtureAsync(database, cancellationToken);
+        InvoiceStoreSnapshot invoiceBefore = await CaptureInvoiceStoreAsync(database, "mysql-migration-lifecycle", "invoice-fixture", cancellationToken);
+        byte[] ticketBefore = await ReadTicketFixtureAsync(database, cancellationToken);
+
+        NetArcaWsMigrationStatus certificates = await database.ApplyOfficialMigrationsAsync(
+            MigrationOptions(NetArcaWsPersistenceModule.TenantCertificates), cancellationToken);
+        certificates.Modules.Should().ContainSingle().Which.State.Should().Be(NetArcaWsMigrationState.Current);
+        certificates.Modules.Single().Applied.Should().ContainSingle().Which.Should().Be("20261006000300_InitialTenantCertificates");
+        IArcaCertificateStore certificateStore = database.Services.GetRequiredService<IArcaCertificateStore>();
+        var certificateScope = new ArcaCertificateScope("mysql-migration-tenant", 20_123_456_789, ArcaEnvironment.Homologation);
+        WsaaCertificateContent certificateContent = CreateCertificateContent("CN=mysql-migration-fixture");
+        ArcaCertificateVersion certificateVersion = await certificateStore.RotateAsync(certificateScope, certificateContent, cancellationToken: cancellationToken);
+        byte[] certificateCiphertextBefore = await ReadCertificateCiphertextAsync(database, certificateVersion.VersionId, cancellationToken);
+
         NetArcaWsMigrationStatus allCurrent = await database.ApplyOfficialMigrationsAsync(allOptions, cancellationToken);
-        allCurrent.Modules.Should().HaveCount(2).And.OnlyContain(module => module.State == NetArcaWsMigrationState.Current);
+        allCurrent.Modules.Should().HaveCount(3).And.OnlyContain(module => module.State == NetArcaWsMigrationState.Current);
         NetArcaWsMigrationStatus repeated = await database.ApplyOfficialMigrationsAsync(allOptions, cancellationToken);
         repeated.Modules.Select(module => module.Applied).Should().BeEquivalentTo(allCurrent.Modules.Select(module => module.Applied));
+        NetArcaWsMigrationStatus modulesDisabled = await database.ApplyOfficialMigrationsAsync(
+            MigrationOptions(NetArcaWsPersistenceModule.Invoicing, NetArcaWsPersistenceModule.WsaaTickets), cancellationToken);
+        modulesDisabled.Modules.Should().HaveCount(2).And.OnlyContain(module => module.State == NetArcaWsMigrationState.Current);
+        (await certificateStore.GetVersionAsync(certificateScope, certificateVersion.VersionId, cancellationToken))!.Metadata.VersionId.Should().Be(certificateVersion.VersionId);
+        (await ReadCertificateCiphertextAsync(database, certificateVersion.VersionId, cancellationToken)).Should().Equal(certificateCiphertextBefore);
+        using var wrongCertificateProtector = new AesGcmArcaCertificateProtector("wrong", new Dictionary<string, byte[]> { ["wrong"] = RandomNumberGenerator.GetBytes(32) });
+        var wrongKeyStore = new EfArcaCertificateStore<ArcaWsDbContext>(
+            database.Services.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>(), allOptions, wrongCertificateProtector);
+        Func<Task> wrongKeyRead = async () => await wrongKeyStore.GetVersionAsync(certificateScope, certificateVersion.VersionId, cancellationToken);
+        await wrongKeyRead.Should().ThrowAsync<ArcaCertificateDataException>();
 
         if (invoicingFirst)
         {
@@ -84,8 +112,9 @@ public sealed class MySqlPersistenceTests
         }
         else
         {
-            (await ReadTicketFixtureAsync(database, cancellationToken)).Should().Equal([11, 22, 33, 44, 55]);
+            (await ReadTicketFixtureAsync(database, cancellationToken)).Should().Equal(ticketBefore);
         }
+        (await ReadTicketFixtureAsync(database, cancellationToken)).Should().Equal(ticketBefore);
     }
 
     private static async Task<InvoiceStoreSnapshot> CaptureInvoiceStoreAsync(MySqlTestDatabase database, string tenant, string key,
@@ -137,7 +166,39 @@ public sealed class MySqlPersistenceTests
     private static void AddModule(NetArcaWsModelOptionsBuilder builder, NetArcaWsPersistenceModule module)
     {
         if (module == NetArcaWsPersistenceModule.Invoicing) builder.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1);
-        else builder.AddWsaaTickets(ArcaService.Wsfev1, ArcaService.PadronA5);
+        else if (module == NetArcaWsPersistenceModule.WsaaTickets) builder.AddWsaaTickets(ArcaService.Wsfev1, ArcaService.PadronA5);
+        else builder.AddCertificates();
+    }
+
+    private static async Task CreateInvoiceFixtureAsync(MySqlTestDatabase database, CancellationToken cancellationToken)
+    {
+        IInvoiceJournal journal = database.Services.GetRequiredService<IInvoiceJournal>();
+        var submission = new InvoiceSubmission("mysql-migration-lifecycle", "invoice-fixture", "wsfe",
+            new InvoiceIdentity(ArcaEnvironment.Homologation, 20999888777, 72, 1, 1), "<synthetic>preserved</synthetic>");
+        await journal.PrepareAsync(submission, cancellationToken);
+        InvoiceLease lease = (await journal.TryAcquireAsync(submission.TenantId, submission.IdempotencyKey,
+            TimeSpan.FromSeconds(30), false, cancellationToken))!;
+        InvoiceOperation rejected = await journal.CompleteAsync(lease, new InvoiceDecision(InvoiceState.Rejected), cancellationToken);
+        await journal.ReviseRejectedAsync(submission with { Payload = "<synthetic>revision</synthetic>" }, rejected.Version, cancellationToken);
+    }
+
+    private static WsaaCertificateContent CreateCertificateContent(string subject)
+    {
+        using RSA key = RSA.Create(2048);
+        var request = new CertificateRequest(subject, key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        using X509Certificate2 certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(2));
+        return WsaaCertificateContent.FromPem(certificate.ExportCertificatePem(), key.ExportPkcs8PrivateKeyPem());
+    }
+
+    private static async Task<byte[]> ReadCertificateCiphertextAsync(MySqlTestDatabase database, Guid versionId, CancellationToken cancellationToken)
+    {
+        await using ArcaWsDbContext context = await database.Services.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>().CreateDbContextAsync(cancellationToken);
+        await context.Database.OpenConnectionAsync(cancellationToken);
+        await using DbCommand command = context.Database.GetDbConnection().CreateCommand();
+        command.CommandText = "SELECT `Ciphertext` FROM `NetArcaCertificateVersions` WHERE `VersionId` = @version";
+        AddParameter(command, "@version", versionId);
+        return (byte[])(await command.ExecuteScalarAsync(cancellationToken)
+            ?? throw new InvalidOperationException("Synthetic certificate version ciphertext was not found."));
     }
 
     private static async Task ExecuteTicketFixtureAsync(MySqlTestDatabase database, CancellationToken cancellationToken)
@@ -383,12 +444,18 @@ internal sealed class MySqlTestDatabase : IAsyncDisposable
             ? new MySqlMigrationContextFactory(connectionString, new MySqlServerVersion(version))
             : new MariaDbMigrationContextFactory(connectionString, new MariaDbServerVersion(version));
         NetArcaWsPersistenceModule[] modules = Enum.GetValues<NetArcaWsPersistenceModule>()
-            .Where(module => module == NetArcaWsPersistenceModule.Invoicing ? options.InvoicingEnabled : options.WsaaTicketsEnabled).ToArray();
+            .Where(module => module switch
+            {
+                NetArcaWsPersistenceModule.Invoicing => options.InvoicingEnabled,
+                NetArcaWsPersistenceModule.WsaaTickets => options.WsaaTicketsEnabled,
+                NetArcaWsPersistenceModule.TenantCertificates => options.CertificatesEnabled,
+                _ => false
+            }).ToArray();
         return new NetArcaWsMigrator(factory, modules);
     }
 
     public static async Task<MySqlTestDatabase> CreateAsync(PersistenceDbSettings settings,
-        Action<NetArcaWsModelOptionsBuilder>? configure = null, bool provision = true)
+        Action<NetArcaWsModelOptionsBuilder>? configure = null, bool provision = true, byte[]? certificateProtectionKey = null)
     {
         var builder = new MySqlConnectionStringBuilder(settings.ConnectionString)
         {
@@ -398,6 +465,9 @@ internal sealed class MySqlTestDatabase : IAsyncDisposable
             x.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1).AddWsaaTickets(ArcaService.Wsfev1, ArcaService.PadronA5)));
         var services = new ServiceCollection();
         services.AddSingleton<IWsaaTicketProtector>(MySqlPersistenceTests.CreateTestProtector());
+        if (model.CertificatesEnabled)
+            services.AddSingleton<IArcaCertificateProtector>(new AesGcmArcaCertificateProtector("provider-test",
+                new Dictionary<string, byte[]> { ["provider-test"] = certificateProtectionKey ?? RandomNumberGenerator.GetBytes(32) }));
         ServerVersion server = settings.Kind == "mysql" ? new MySqlServerVersion(settings.Version) : new MariaDbServerVersion(settings.Version);
         services.AddNetArcaWsMySqlStores(builder.ConnectionString, server, model);
         await using (var admin = new MySqlConnection(settings.ConnectionString))

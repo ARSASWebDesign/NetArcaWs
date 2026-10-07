@@ -18,6 +18,8 @@ public sealed class OfficialMySqlMigrationTests
     [Theory]
     [InlineData("untracked")]
     [InlineData("unknown-history")]
+    [InlineData("certificate-untracked")]
+    [InlineData("certificate-unknown-history")]
     public async Task Existing_untracked_or_unknown_schema_is_rejected_without_mutation(string setup)
     {
         bool anyOptInSetting = new[] { "NETARCA_PERSISTENCE_DB", "NETARCA_PERSISTENCE_DB_KIND", "NETARCA_PERSISTENCE_DB_VERSION" }
@@ -25,45 +27,56 @@ public sealed class OfficialMySqlMigrationTests
         Assert.SkipWhen(!anyOptInSetting, "Opt-in MySQL/MariaDB migration preflight test.");
         PersistenceDbSettings settings = PersistenceDbSettings.ReadRequired();
         Assert.SkipWhen(settings.Kind is not ("mysql" or "mariadb"), "This suite targets MySQL/MariaDB.");
-        NetArcaWsModelOptions invoiceOptions = NetArcaWsModelOptions.Configure(builder => builder.AddInvoicing(ArcaService.Wsfev1));
+        bool certificates = setup.StartsWith("certificate-", StringComparison.Ordinal);
+        string condition = certificates ? setup["certificate-".Length..] : setup;
+        NetArcaWsPersistenceModule module = certificates ? NetArcaWsPersistenceModule.TenantCertificates : NetArcaWsPersistenceModule.Invoicing;
+        NetArcaWsModelOptions selectedOptions = MigrationOptions(module);
         await using MySqlTestDatabase database = await MySqlTestDatabase.CreateAsync(settings,
-            builder => builder.AddInvoicing(ArcaService.Wsfev1), provision: false);
-        await CreateInvalidSchemaAsync(database, setup);
+            builder => AddModule(builder, module), provision: false);
+        await CreateInvalidSchemaAsync(database, condition, module);
 
-        INetArcaWsMigrator migrator = database.CreateOfficialMigrator(invoiceOptions);
-        NetArcaWsMigrationState expected = setup == "untracked"
+        INetArcaWsMigrator migrator = database.CreateOfficialMigrator(selectedOptions);
+        NetArcaWsMigrationState expected = condition == "untracked"
             ? NetArcaWsMigrationState.UntrackedSchema
             : NetArcaWsMigrationState.UnknownAppliedMigration;
         NetArcaWsMigrationStatus before = await migrator.GetStatusAsync(TestContext.Current.CancellationToken);
         before.Modules.Should().ContainSingle().Which.State.Should().Be(expected);
+        string[] tablesBefore = before.Modules.Single().PresentTables.ToArray();
         Func<Task> apply = () => migrator.ApplyAsync(TestContext.Current.CancellationToken);
         await apply.Should().ThrowAsync<NetArcaWsMigrationPreflightException>();
         NetArcaWsMigrationStatus after = await migrator.GetStatusAsync(TestContext.Current.CancellationToken);
         after.Modules.Single().State.Should().Be(expected);
         after.Modules.Single().Applied.Should().Equal(before.Modules.Single().Applied);
-        if (setup == "untracked") after.Modules.Single().PresentTables.Should().Contain("NetArcaInvoices").And.NotContain("NetArcaInvoiceRevisions");
+        after.Modules.Single().PresentTables.Should().Equal(tablesBefore);
+        if (condition == "untracked")
+            after.Modules.Single().PresentTables.Should().Contain(certificates ? "NetArcaCertificateSlots" : "NetArcaInvoices");
     }
 
-    [Fact]
-    public async Task Missing_tracked_table_is_rejected_without_rewriting_history()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Missing_tracked_table_is_rejected_without_rewriting_history(bool certificates)
     {
         bool anyOptInSetting = new[] { "NETARCA_PERSISTENCE_DB", "NETARCA_PERSISTENCE_DB_KIND", "NETARCA_PERSISTENCE_DB_VERSION" }
             .Any(name => Environment.GetEnvironmentVariable(name) is not null);
         Assert.SkipWhen(!anyOptInSetting, "Opt-in MySQL/MariaDB migration preflight test.");
         PersistenceDbSettings settings = PersistenceDbSettings.ReadRequired();
         Assert.SkipWhen(settings.Kind is not ("mysql" or "mariadb"), "This suite targets MySQL/MariaDB.");
-        NetArcaWsModelOptions invoiceOptions = NetArcaWsModelOptions.Configure(builder => builder.AddInvoicing(ArcaService.Wsfev1));
+        NetArcaWsPersistenceModule module = certificates ? NetArcaWsPersistenceModule.TenantCertificates : NetArcaWsPersistenceModule.Invoicing;
+        NetArcaWsModelOptions selectedOptions = MigrationOptions(module);
         await using MySqlTestDatabase database = await MySqlTestDatabase.CreateAsync(settings,
-            builder => builder.AddInvoicing(ArcaService.Wsfev1));
-        await ExecuteAsync(database, "DROP TABLE `NetArcaInvoiceRevisions`");
-        INetArcaWsMigrator migrator = database.CreateOfficialMigrator(invoiceOptions);
+            builder => AddModule(builder, module));
+        await ExecuteAsync(database, certificates ? "DROP TABLE `NetArcaCertificateVersions`" : "DROP TABLE `NetArcaInvoiceRevisions`");
+        INetArcaWsMigrator migrator = database.CreateOfficialMigrator(selectedOptions);
         NetArcaWsMigrationStatus before = await migrator.GetStatusAsync(TestContext.Current.CancellationToken);
         before.Modules.Should().ContainSingle().Which.State.Should().Be(NetArcaWsMigrationState.TrackedSchemaIncomplete);
+        string[] presentBefore = before.Modules.Single().PresentTables.ToArray();
         Func<Task> apply = () => migrator.ApplyAsync(TestContext.Current.CancellationToken);
         await apply.Should().ThrowAsync<NetArcaWsMigrationPreflightException>();
         NetArcaWsMigrationStatus after = await migrator.GetStatusAsync(TestContext.Current.CancellationToken);
         after.Modules.Single().State.Should().Be(NetArcaWsMigrationState.TrackedSchemaIncomplete);
         after.Modules.Single().Applied.Should().Equal(before.Modules.Single().Applied);
+        after.Modules.Single().PresentTables.Should().Equal(presentBefore);
     }
 
     [Fact]
@@ -108,15 +121,28 @@ public sealed class OfficialMySqlMigrationTests
             [NetArcaWsPersistenceModule.Invoicing]);
     }
 
-    private static async Task CreateInvalidSchemaAsync(MySqlTestDatabase database, string setup)
+    private static async Task CreateInvalidSchemaAsync(MySqlTestDatabase database, string setup, NetArcaWsPersistenceModule module)
     {
+        string table = module == NetArcaWsPersistenceModule.TenantCertificates ? "NetArcaCertificateSlots" : "NetArcaInvoices";
+        string history = module == NetArcaWsPersistenceModule.TenantCertificates
+            ? "__NetArcaWsCertificateMigrations"
+            : "__NetArcaWsInvoiceMigrations";
         if (setup == "untracked")
         {
-            await ExecuteAsync(database, "CREATE TABLE `NetArcaInvoices` (`SyntheticTrap` int NOT NULL)");
+            await ExecuteAsync(database, $"CREATE TABLE `{table}` (`SyntheticTrap` int NOT NULL)");
             return;
         }
-        await ExecuteAsync(database, "CREATE TABLE `__NetArcaWsInvoiceMigrations` (`MigrationId` varchar(150) NOT NULL PRIMARY KEY, `ProductVersion` varchar(32) NOT NULL)");
-        await ExecuteAsync(database, "INSERT INTO `__NetArcaWsInvoiceMigrations` (`MigrationId`, `ProductVersion`) VALUES ('29990101000000_Future', '10.0.12')");
+        await ExecuteAsync(database, $"CREATE TABLE `{history}` (`MigrationId` varchar(150) NOT NULL PRIMARY KEY, `ProductVersion` varchar(32) NOT NULL)");
+        await ExecuteAsync(database, $"INSERT INTO `{history}` (`MigrationId`, `ProductVersion`) VALUES ('29990101000000_Future', '10.0.12')");
+    }
+
+    private static NetArcaWsModelOptions MigrationOptions(NetArcaWsPersistenceModule module) => NetArcaWsModelOptions.Configure(builder => AddModule(builder, module));
+
+    private static void AddModule(NetArcaWsModelOptionsBuilder builder, NetArcaWsPersistenceModule module)
+    {
+        if (module == NetArcaWsPersistenceModule.Invoicing) builder.AddInvoicing(ArcaService.Wsfev1);
+        else if (module == NetArcaWsPersistenceModule.TenantCertificates) builder.AddCertificates();
+        else builder.AddWsaaTickets(ArcaService.Wsfev1);
     }
 
     private static async Task ExecuteAsync(MySqlTestDatabase database, string sql)

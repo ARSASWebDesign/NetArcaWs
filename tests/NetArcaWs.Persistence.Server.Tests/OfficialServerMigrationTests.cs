@@ -1,12 +1,17 @@
 using System.Data.Common;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 using NetArcaWs.EntityFrameworkCore;
 using NetArcaWs.EntityFrameworkCore.Migrations;
 using NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql;
 using NetArcaWs.EntityFrameworkCore.Migrations.SqlServer;
+using NetArcaWs.Cryptography;
 using NetArcaWs.HealthChecks;
 using NetArcaWs.Invoicing;
 using NetArcaWs.Multitenancy;
@@ -17,6 +22,115 @@ namespace NetArcaWs.Persistence.Server.Tests;
 
 public sealed class OfficialServerMigrationTests
 {
+    [Fact]
+    public void Certificate_migration_registration_and_script_generation_are_connection_free_for_server_providers()
+    {
+        NetArcaWsModelOptions certificates = NetArcaWsModelOptions.Configure(options => options.AddCertificates());
+        using ServiceProvider postgreSqlServices = new ServiceCollection()
+            .AddNetArcaWsPostgreSqlMigrations("Host=127.0.0.1;Port=1;Database=must_not_connect", certificates)
+            .BuildServiceProvider();
+        using ServiceProvider sqlServerServices = new ServiceCollection()
+            .AddNetArcaWsSqlServerMigrations("Server=127.0.0.1,1;Database=must_not_connect;Encrypt=True;TrustServerCertificate=True;Connect Timeout=1", certificates)
+            .BuildServiceProvider();
+
+        postgreSqlServices.GetRequiredService<INetArcaWsMigrationContextFactory>().Provider.Should().Be(NetArcaWsMigrationProvider.PostgreSql);
+        sqlServerServices.GetRequiredService<INetArcaWsMigrationContextFactory>().Provider.Should().Be(NetArcaWsMigrationProvider.SqlServer);
+        foreach (INetArcaWsMigrator migrator in new[]
+        {
+            postgreSqlServices.GetRequiredService<INetArcaWsMigrator>(),
+            sqlServerServices.GetRequiredService<INetArcaWsMigrator>()
+        })
+        {
+            string script = migrator.GenerateScript(NetArcaWsPersistenceModule.TenantCertificates);
+            script.Should().Contain("20261006000300_InitialTenantCertificates")
+                .And.Contain("NetArcaCertificateSlots").And.Contain("NetArcaCertificateVersions")
+                .And.NotContain("NetArcaInvoices").And.NotContain("NetArcaWsaaTickets");
+        }
+    }
+
+    [Fact]
+    public async Task Add_certificate_module_after_invoice_and_ticket_migrations_preserves_existing_encrypted_data_and_opt_out_state()
+    {
+        PersistenceServerSettings? settings = PersistenceServerSettings.FromEnvironment();
+        Assert.SkipWhen(settings is null, "Opt-in PostgreSQL/SQL Server additive certificate migration test.");
+        PersistenceServerSettings selected = settings!;
+        Assert.SkipWhen(selected.Kind is not ("postgresql" or "sqlserver"), "This suite targets PostgreSQL/SQL Server.");
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        byte[] externalKey = RandomNumberGenerator.GetBytes(32);
+        await using ServerTestDatabase database = await ServerTestDatabase.CreateAsync(selected, builder =>
+            builder.AddInvoicing(ArcaService.Wsfev1).AddWsaaTickets(ArcaService.Wsfev1).AddCertificates(),
+            provision: false, certificateProtectionKey: externalKey);
+
+        NetArcaWsModelOptions invoiceAndTicket = Options(NetArcaWsPersistenceModule.Invoicing, NetArcaWsPersistenceModule.WsaaTickets);
+        (await database.ApplyOfficialMigrationsAsync(invoiceAndTicket, cancellationToken)).Modules.Should().HaveCount(2);
+        await PersistFixtureAsync(database, selected.Kind, invoicingFirst: true, cancellationToken);
+        await PersistFixtureAsync(database, selected.Kind, invoicingFirst: false, cancellationToken);
+        InvoiceStoreSnapshot invoiceBefore = await CaptureInvoiceStoreAsync(database, selected.Kind, "migration-lifecycle", "invoice-fixture", cancellationToken);
+        byte[] ticketBefore = await ReadTicketCiphertextAsync(database, selected.Kind, cancellationToken);
+
+        NetArcaWsModelOptions certificateOnly = Options(NetArcaWsPersistenceModule.TenantCertificates);
+        NetArcaWsMigrationStatus added = await database.ApplyOfficialMigrationsAsync(certificateOnly, cancellationToken);
+        added.Modules.Should().ContainSingle().Which.Applied.Should().ContainSingle().Which.Should().Be("20261006000300_InitialTenantCertificates");
+        IArcaCertificateStore store = database.Services.GetRequiredService<IArcaCertificateStore>();
+        var scope = new ArcaCertificateScope("server-migration-tenant", 20_123_456_789, ArcaEnvironment.Homologation);
+        WsaaCertificateContent content = CreateCertificateContent("CN=server-migration-fixture");
+        ArcaCertificateVersion version = await store.RotateAsync(scope, content, cancellationToken: cancellationToken);
+        byte[] certCiphertextBefore = await ReadCertificateCiphertextAsync(database, selected.Kind, version.VersionId, cancellationToken);
+
+        NetArcaWsMigrationStatus all = await database.ApplyOfficialMigrationsAsync(
+            Options(NetArcaWsPersistenceModule.Invoicing, NetArcaWsPersistenceModule.WsaaTickets, NetArcaWsPersistenceModule.TenantCertificates), cancellationToken);
+        all.Modules.Should().HaveCount(3).And.OnlyContain(module => module.State == NetArcaWsMigrationState.Current);
+        (await database.ApplyOfficialMigrationsAsync(invoiceAndTicket, cancellationToken)).Modules.Should().HaveCount(2)
+            .And.OnlyContain(module => module.State == NetArcaWsMigrationState.Current);
+
+        (await CaptureInvoiceStoreAsync(database, selected.Kind, "migration-lifecycle", "invoice-fixture", cancellationToken)).Should().BeEquivalentTo(invoiceBefore);
+        (await ReadTicketCiphertextAsync(database, selected.Kind, cancellationToken)).Should().Equal(ticketBefore);
+        (await ReadCertificateCiphertextAsync(database, selected.Kind, version.VersionId, cancellationToken)).Should().Equal(certCiphertextBefore);
+        (await store.GetVersionAsync(scope, version.VersionId, cancellationToken))!.Metadata.VersionId.Should().Be(version.VersionId);
+
+        using var wrongProtector = new AesGcmArcaCertificateProtector("wrong", new Dictionary<string, byte[]> { ["wrong"] = RandomNumberGenerator.GetBytes(32) });
+        var wrongKeyStore = new EfArcaCertificateStore<ArcaWsDbContext>(
+            database.Services.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>(),
+            Options(NetArcaWsPersistenceModule.Invoicing, NetArcaWsPersistenceModule.WsaaTickets,
+                NetArcaWsPersistenceModule.TenantCertificates), wrongProtector);
+        Func<Task> wrongKeyRead = async () => await wrongKeyStore.GetVersionAsync(scope, version.VersionId, cancellationToken);
+        await wrongKeyRead.Should().ThrowAsync<ArcaCertificateDataException>();
+
+        await using ServerTestDatabase restored = await ServerTestDatabase.CreateAsync(selected,
+            builder => builder.AddCertificates(), provision: false, certificateProtectionKey: externalKey);
+        await restored.ApplyOfficialMigrationsAsync(certificateOnly, cancellationToken);
+        await CopyCertificateTablesAsync(database, restored, selected.Kind, cancellationToken);
+        IArcaCertificateStore restoredStore = restored.Services.GetRequiredService<IArcaCertificateStore>();
+        (await restoredStore.GetVersionAsync(scope, version.VersionId, cancellationToken))!.Metadata.VersionId.Should().Be(version.VersionId);
+        Func<Task> missingRestoredKey = async () => await new EfArcaCertificateStore<ArcaWsDbContext>(
+            restored.Services.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>(), certificateOnly, wrongProtector)
+            .GetVersionAsync(scope, version.VersionId, cancellationToken);
+        await missingRestoredKey.Should().ThrowAsync<ArcaCertificateDataException>();
+    }
+
+    [Fact]
+    public void PostgreSql_and_sqlserver_certificate_snapshots_are_independent_and_contain_only_certificate_tables()
+    {
+        INetArcaWsMigrationContextFactory[] factories =
+        [
+            new PostgreSqlMigrationContextFactory("Host=localhost;Database=metadata_only"),
+            new SqlServerMigrationContextFactory("Server=localhost;Database=metadata_only;Encrypt=True;TrustServerCertificate=True")
+        ];
+        string[] historyNames = ["__NetArcaWsCertificateMigrations", "__NetArcaWsCertificateMigrations"];
+
+        for (int index = 0; index < factories.Length; index++)
+        {
+            using DbContext context = factories[index].CreateContext(NetArcaWsPersistenceModule.TenantCertificates);
+            context.Database.GetMigrations().Should().ContainSingle().Which.Should().Be("20261006000300_InitialTenantCertificates");
+            context.Database.HasPendingModelChanges().Should().BeFalse();
+            context.Model.GetEntityTypes().Select(entity => entity.GetTableName())
+                .Should().BeEquivalentTo("NetArcaCertificateSlots", "NetArcaCertificateVersions");
+            context.Model.GetEntityTypes().SelectMany(entity => entity.GetProperties()).Select(property => property.Name)
+                .Should().Contain("Ciphertext").And.Contain("Nonce").And.Contain("Tag").And.Contain("ActiveVersionId");
+            context.GetService<IHistoryRepository>().GetCreateScript().Should().Contain(historyNames[index]);
+        }
+    }
+
     [Fact]
     public async Task Official_migration_DDL_failure_rolls_back_tables_and_history_on_transactional_servers()
     {
@@ -47,57 +161,74 @@ public sealed class OfficialServerMigrationTests
     }
 
     [Theory]
-    [InlineData("untracked")]
-    [InlineData("unknown-history")]
-    public async Task Existing_unknown_schema_is_rejected_without_mutation(string setup)
+    [InlineData("invoicing", "untracked")]
+    [InlineData("invoicing", "unknown-history")]
+    [InlineData("certificates", "untracked")]
+    [InlineData("certificates", "unknown-history")]
+    public async Task Existing_unknown_schema_is_rejected_without_mutation(string moduleName, string setup)
     {
         PersistenceServerSettings? settings = PersistenceServerSettings.FromEnvironment();
         Assert.SkipWhen(settings is null, "Opt-in PostgreSQL/SQL Server migration preflight test.");
         PersistenceServerSettings selected = settings!;
         Assert.SkipWhen(selected.Kind is not ("postgresql" or "sqlserver"), "This suite targets PostgreSQL/SQL Server.");
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-        NetArcaWsModelOptions invoiceOptions = Options(NetArcaWsPersistenceModule.Invoicing);
+        NetArcaWsPersistenceModule module = moduleName == "certificates"
+            ? NetArcaWsPersistenceModule.TenantCertificates
+            : NetArcaWsPersistenceModule.Invoicing;
+        NetArcaWsModelOptions selectedOptions = Options(module);
         await using ServerTestDatabase database = await ServerTestDatabase.CreateAsync(selected,
-            builder => builder.AddInvoicing(ArcaService.Wsfev1), provision: false);
-        await CreateInvalidSchemaAsync(database, selected.Kind, setup, cancellationToken);
+            builder => Add(builder, module), provision: false);
+        await CreateInvalidSchemaAsync(database, selected.Kind, setup, module, cancellationToken);
 
-        INetArcaWsMigrator migrator = database.CreateOfficialMigrator(invoiceOptions);
+        INetArcaWsMigrator migrator = database.CreateOfficialMigrator(selectedOptions);
         NetArcaWsMigrationState expected = setup == "untracked"
             ? NetArcaWsMigrationState.UntrackedSchema
             : NetArcaWsMigrationState.UnknownAppliedMigration;
         NetArcaWsMigrationStatus before = await migrator.GetStatusAsync(cancellationToken);
         before.Modules.Should().ContainSingle().Which.State.Should().Be(expected);
+        string[] presentBefore = before.Modules.Single().PresentTables.ToArray();
         Func<Task> apply = () => migrator.ApplyAsync(cancellationToken);
         await apply.Should().ThrowAsync<NetArcaWsMigrationPreflightException>();
         NetArcaWsMigrationStatus after = await migrator.GetStatusAsync(cancellationToken);
         after.Modules.Should().ContainSingle().Which.State.Should().Be(expected);
         after.Modules.Single().Applied.Should().Equal(before.Modules.Single().Applied);
+        after.Modules.Single().PresentTables.Should().Equal(presentBefore);
         after.Modules.Single().Pending.Should().BeEquivalentTo(after.Modules.Single().Known);
+        if (setup == "untracked")
+            after.Modules.Single().PresentTables.Should().Contain(module == NetArcaWsPersistenceModule.TenantCertificates
+                ? "NetArcaCertificateSlots" : "NetArcaInvoices");
     }
 
-    [Fact]
-    public async Task Missing_tracked_table_fails_preflight_and_preserves_history()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Missing_tracked_table_fails_preflight_and_preserves_history(bool certificates)
     {
         PersistenceServerSettings? settings = PersistenceServerSettings.FromEnvironment();
         Assert.SkipWhen(settings is null, "Opt-in PostgreSQL/SQL Server migration preflight test.");
         PersistenceServerSettings selected = settings!;
         Assert.SkipWhen(selected.Kind is not ("postgresql" or "sqlserver"), "This suite targets PostgreSQL/SQL Server.");
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-        NetArcaWsModelOptions invoiceOptions = Options(NetArcaWsPersistenceModule.Invoicing);
+        NetArcaWsPersistenceModule module = certificates ? NetArcaWsPersistenceModule.TenantCertificates : NetArcaWsPersistenceModule.Invoicing;
+        NetArcaWsModelOptions selectedOptions = Options(module);
         await using ServerTestDatabase database = await ServerTestDatabase.CreateAsync(selected,
-            builder => builder.AddInvoicing(ArcaService.Wsfev1));
+            builder => Add(builder, module));
         await ExecuteSchemaCommandAsync(database, selected.Kind,
-            selected.Kind == "sqlserver" ? "DROP TABLE [dbo].[NetArcaInvoiceRevisions]" : "DROP TABLE \"NetArcaInvoiceRevisions\"",
+            selected.Kind == "sqlserver"
+                ? certificates ? "DROP TABLE [dbo].[NetArcaCertificateVersions]" : "DROP TABLE [dbo].[NetArcaInvoiceRevisions]"
+                : certificates ? "DROP TABLE \"NetArcaCertificateVersions\"" : "DROP TABLE \"NetArcaInvoiceRevisions\"",
             cancellationToken);
 
-        INetArcaWsMigrator migrator = database.CreateOfficialMigrator(invoiceOptions);
+        INetArcaWsMigrator migrator = database.CreateOfficialMigrator(selectedOptions);
         NetArcaWsMigrationStatus before = await migrator.GetStatusAsync(cancellationToken);
         before.Modules.Should().ContainSingle().Which.State.Should().Be(NetArcaWsMigrationState.TrackedSchemaIncomplete);
+        string[] presentBefore = before.Modules.Single().PresentTables.ToArray();
         Func<Task> apply = () => migrator.ApplyAsync(cancellationToken);
         await apply.Should().ThrowAsync<NetArcaWsMigrationPreflightException>();
         NetArcaWsMigrationStatus after = await migrator.GetStatusAsync(cancellationToken);
         after.Modules.Single().Applied.Should().Equal(before.Modules.Single().Applied);
         after.Modules.Single().State.Should().Be(NetArcaWsMigrationState.TrackedSchemaIncomplete);
+        after.Modules.Single().PresentTables.Should().Equal(presentBefore);
     }
 
     [Theory]
@@ -235,16 +366,21 @@ public sealed class OfficialServerMigrationTests
         }
     }
 
-    private static async Task CreateInvalidSchemaAsync(ServerTestDatabase database, string kind, string setup, CancellationToken cancellationToken)
+    private static async Task CreateInvalidSchemaAsync(ServerTestDatabase database, string kind, string setup,
+        NetArcaWsPersistenceModule module, CancellationToken cancellationToken)
     {
+        string appTable = module == NetArcaWsPersistenceModule.TenantCertificates ? "NetArcaCertificateSlots" : "NetArcaInvoices";
+        string historyName = module == NetArcaWsPersistenceModule.TenantCertificates
+            ? "__NetArcaWsCertificateMigrations"
+            : "__NetArcaWsInvoiceMigrations";
         if (setup == "untracked")
         {
-            string table = kind == "sqlserver" ? "[dbo].[NetArcaInvoices]" : "\"NetArcaInvoices\"";
+            string table = kind == "sqlserver" ? $"[dbo].[{appTable}]" : $"\"{appTable}\"";
             await ExecuteSchemaCommandAsync(database, kind, $"CREATE TABLE {table} (SyntheticTrap int NOT NULL)", cancellationToken);
             return;
         }
 
-        string history = kind == "sqlserver" ? "[dbo].[__NetArcaWsInvoiceMigrations]" : "\"__NetArcaWsInvoiceMigrations\"";
+        string history = kind == "sqlserver" ? $"[dbo].[{historyName}]" : $"\"{historyName}\"";
         string columns = kind == "sqlserver" ? "[MigrationId] varchar(150) NOT NULL PRIMARY KEY, [ProductVersion] varchar(32) NOT NULL" : "\"MigrationId\" varchar(150) PRIMARY KEY, \"ProductVersion\" varchar(32) NOT NULL";
         await ExecuteSchemaCommandAsync(database, kind, $"CREATE TABLE {history} ({columns})", cancellationToken);
         await ExecuteSchemaCommandAsync(database, kind, $"INSERT INTO {history} ({(kind == "sqlserver" ? "[MigrationId], [ProductVersion]" : "\"MigrationId\", \"ProductVersion\"")}) VALUES ('29990101000000_Future', '10.0.12')", cancellationToken);
@@ -271,6 +407,63 @@ public sealed class OfficialServerMigrationTests
             ?? throw new InvalidOperationException("The synthetic WSAA ticket row was not preserved."));
     }
 
+    private static async Task<byte[]> ReadCertificateCiphertextAsync(ServerTestDatabase database, string kind, Guid versionId,
+        CancellationToken cancellationToken)
+    {
+        await using DbContext context = await database.Services.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>().CreateDbContextAsync(cancellationToken);
+        await context.Database.OpenConnectionAsync(cancellationToken);
+        await using DbCommand command = context.Database.GetDbConnection().CreateCommand();
+        command.CommandText = kind == "sqlserver"
+            ? "SELECT [Ciphertext] FROM [dbo].[NetArcaCertificateVersions] WHERE [VersionId] = @version"
+            : "SELECT \"Ciphertext\" FROM \"NetArcaCertificateVersions\" WHERE \"VersionId\" = @version";
+        AddParameter(command, "@version", versionId);
+        return (byte[])(await command.ExecuteScalarAsync(cancellationToken)
+            ?? throw new InvalidOperationException("The synthetic certificate ciphertext was not found."));
+    }
+
+    private static async Task CopyCertificateTablesAsync(ServerTestDatabase source, ServerTestDatabase destination, string kind,
+        CancellationToken cancellationToken)
+    {
+        string Quote(string identifier) => kind == "sqlserver" ? $"[{identifier}]" : $"\"{identifier}\"";
+        foreach (string table in new[] { "NetArcaCertificateSlots", "NetArcaCertificateVersions" })
+        {
+            List<(string[] Columns, object[] Values)> rows = await ReadRowsAsync(source, table, kind, cancellationToken);
+            await using var context = await destination.Services.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>().CreateDbContextAsync(cancellationToken);
+            await context.Database.OpenConnectionAsync(cancellationToken);
+            foreach ((string[] columns, object[] values) in rows)
+            {
+                await using DbCommand command = context.Database.GetDbConnection().CreateCommand();
+                string tableName = kind == "sqlserver" ? $"[dbo].{Quote(table)}" : Quote(table);
+                command.CommandText = $"INSERT INTO {tableName} ({string.Join(", ", columns.Select(Quote))}) VALUES ({string.Join(", ", columns.Select((_, index) => $"@p{index}"))})";
+                for (int index = 0; index < values.Length; index++) AddParameter(command, $"@p{index}", values[index]);
+                await command.ExecuteNonQueryAsync(cancellationToken);
+            }
+        }
+    }
+
+    private static async Task<List<(string[] Columns, object[] Values)>> ReadRowsAsync(ServerTestDatabase database, string table,
+        string kind, CancellationToken cancellationToken)
+    {
+        await using var context = await database.Services.GetRequiredService<IDbContextFactory<ArcaWsDbContext>>().CreateDbContextAsync(cancellationToken);
+        await context.Database.OpenConnectionAsync(cancellationToken);
+        string tableName = kind == "sqlserver" ? $"[dbo].[{table}]" : $"\"{table}\"";
+        await using DbCommand command = context.Database.GetDbConnection().CreateCommand(); command.CommandText = $"SELECT * FROM {tableName}";
+        await using DbDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        string[] columns = Enumerable.Range(0, reader.FieldCount).Select(reader.GetName).ToArray();
+        var rows = new List<(string[], object[])>();
+        while (await reader.ReadAsync(cancellationToken))
+            rows.Add((columns, Enumerable.Range(0, reader.FieldCount).Select(reader.GetValue).ToArray()));
+        return rows;
+    }
+
+    private static WsaaCertificateContent CreateCertificateContent(string subject)
+    {
+        using RSA key = RSA.Create(2048);
+        var request = new CertificateRequest(subject, key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        using X509Certificate2 certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(2));
+        return WsaaCertificateContent.FromPem(certificate.ExportCertificatePem(), key.ExportPkcs8PrivateKeyPem());
+    }
+
     private static void AddParameter(DbCommand command, string name, object value)
     {
         DbParameter parameter = command.CreateParameter();
@@ -287,7 +480,8 @@ public sealed class OfficialServerMigrationTests
     private static void Add(NetArcaWsModelOptionsBuilder builder, NetArcaWsPersistenceModule module)
     {
         if (module == NetArcaWsPersistenceModule.Invoicing) builder.AddInvoicing(ArcaService.Wsfev1);
-        else builder.AddWsaaTickets(ArcaService.Wsfev1);
+        else if (module == NetArcaWsPersistenceModule.WsaaTickets) builder.AddWsaaTickets(ArcaService.Wsfev1);
+        else builder.AddCertificates();
     }
 }
 

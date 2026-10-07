@@ -8,6 +8,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NetArcaWs.EntityFrameworkCore;
+using NetArcaWs.Cryptography;
 using NetArcaWs.EntityFrameworkCore.Migrations;
 using NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql;
 using NetArcaWs.EntityFrameworkCore.Migrations.SqlServer;
@@ -177,12 +178,18 @@ internal sealed class ServerTestDatabase : IAsyncDisposable
             _ => throw new InvalidOperationException("The shared server suite supports PostgreSQL and SQL Server only.")
         };
         NetArcaWsPersistenceModule[] modules = Enum.GetValues<NetArcaWsPersistenceModule>()
-            .Where(module => module == NetArcaWsPersistenceModule.Invoicing ? options.InvoicingEnabled : options.WsaaTicketsEnabled).ToArray();
+            .Where(module => module switch
+            {
+                NetArcaWsPersistenceModule.Invoicing => options.InvoicingEnabled,
+                NetArcaWsPersistenceModule.WsaaTickets => options.WsaaTicketsEnabled,
+                NetArcaWsPersistenceModule.TenantCertificates => options.CertificatesEnabled,
+                _ => false
+            }).ToArray();
         return new NetArcaWsMigrator(factory, modules);
     }
 
     public static async Task<ServerTestDatabase> CreateAsync(PersistenceServerSettings settings,
-        Action<NetArcaWsModelOptionsBuilder> configure, bool provision = true)
+        Action<NetArcaWsModelOptionsBuilder> configure, bool provision = true, byte[]? certificateProtectionKey = null)
     {
         string databaseName = "netarcaws_probe_" + Guid.NewGuid().ToString("N");
         string connectionString = await CreateDatabaseAsync(settings, databaseName);
@@ -190,7 +197,7 @@ internal sealed class ServerTestDatabase : IAsyncDisposable
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddSingleton<IWsaaTicketProtector>(CreateProtector());
         serviceCollection.AddSingleton<IWsaaTicketLoginClient, UnusedLoginClient>();
-        RegisterStores(serviceCollection, settings, connectionString, modelOptions);
+        RegisterStores(serviceCollection, settings, connectionString, modelOptions, certificateProtectionKey);
         ServiceProvider? provider = null;
         try
         {
@@ -423,8 +430,11 @@ internal sealed class ServerTestDatabase : IAsyncDisposable
     }
 
     private static void RegisterStores(IServiceCollection services, PersistenceServerSettings settings,
-        string connectionString, NetArcaWsModelOptions modelOptions)
+        string connectionString, NetArcaWsModelOptions modelOptions, byte[]? certificateProtectionKey)
     {
+        if (modelOptions.CertificatesEnabled)
+            services.AddSingleton<IArcaCertificateProtector>(new AesGcmArcaCertificateProtector("provider-test",
+                new Dictionary<string, byte[]> { ["provider-test"] = certificateProtectionKey ?? RandomNumberGenerator.GetBytes(32) }));
         switch (settings.Kind)
         {
             case "postgresql": services.AddNetArcaWsPostgreSqlStores(connectionString, modelOptions); break;

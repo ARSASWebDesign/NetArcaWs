@@ -3,9 +3,9 @@
 Esta referencia describe el modelo **opcional** agregado por
 `NetArcaWs.EntityFrameworkCore` y los scripts SQL generados desde ese modelo.
 No representa una conversión automática del diario SQLite integrado en el
-paquete principal. Hay dos artefactos distintos: 15 scripts DDL actuales (tres
-selecciones por cada uno de cinco proveedores) y 10 scripts SQL de las
-migraciones versionadas `0`→`latest` (un módulo por proveedor). El primer grupo
+paquete principal. Hay dos artefactos distintos: 20 scripts DDL actuales (cuatro
+selecciones por cada uno de cinco proveedores) y 15 scripts SQL de las
+migraciones versionadas `0`→`latest` (tres módulos por proveedor). El primer grupo
 describe el modelo presente; el segundo contiene las operaciones de migración
 realmente versionadas. Ninguno se usa para adoptar automáticamente tablas
 existentes.
@@ -21,7 +21,8 @@ servicios admitidos para las filas del diario o los tickets compartidos.
 | Sin módulos | 0 |
 | `AddInvoicing(...)` | 3: `NetArcaInvoices`, `NetArcaInvoiceRevisions`, `NetArcaInvoiceSeriesReservations` |
 | `AddWsaaTickets(...)` | 1: `NetArcaWsaaTickets` |
-| Ambos módulos | 4 |
+| `AddCertificates()` | 2: `NetArcaCertificateSlots`, `NetArcaCertificateVersions` |
+| Cualquier combinación de los tres | Tablas de cada módulo seleccionado; certificados funciona por separado. |
 
 El diario admite WSFEv1, WSFEXv1 y WSMTXCA. Los tickets permiten cualquier
 servicio autenticado admitido por `ArcaService`, salvo WSAA. La aplicación debe
@@ -34,6 +35,12 @@ NetArcaWsModelOptions model = NetArcaWsModelOptions.Configure(options =>
 
 modelBuilder.AddNetArcaWs(model);
 ```
+
+El módulo de certificados es independiente de servicios ARCA, facturación y
+tickets. `AddNetArcaWs` solo incorpora sus entidades cuando está seleccionado;
+su registro no conecta ni ejecuta migraciones. Ver la [guía del store
+multitenant](Certificados-multitenant.md) para autorización, keyring externo,
+rotación y recuperación.
 
 ## Diagrama lógico
 
@@ -48,8 +55,11 @@ flowchart LR
   R[NetArcaInvoiceRevisions<br/>PK TenantHash + KeyHash + RevisionNumber]
   S[NetArcaInvoiceSeriesReservations<br/>PK SeriesHash]
   T[NetArcaWsaaTickets<br/>PK KeyHash]
+  C[NetArcaCertificateSlots<br/>PK TenantHash + Cuit + Environment]
+  V[NetArcaCertificateVersions<br/>PK TenantHash + Cuit + Environment + VersionId]
   I -. "historial por TenantHash + KeyHash; sin FK" .-> R
   I -. "reserva activa por TenantHash + KeyHash; sin FK" .-> S
+  C -. "versión activa lógica; sin FK" .-> V
 ```
 
 La tabla WSAA es independiente de las entidades fiscales. La identidad lógica
@@ -66,6 +76,8 @@ crear otra identidad para ARCA y aún así colisionar con alias remotos.
 | `NetArcaInvoiceRevisions` | PK `(TenantHash, KeyHash, RevisionNumber)`; conserva las versiones previas rechazadas para auditoría. |
 | `NetArcaInvoiceSeriesReservations` | PK `SeriesHash` para reservar `(ambiente, CUIT, punto de venta, tipo)` mientras el resultado no sea terminal; único `(TenantHash, KeyHash)` para vincular lógicamente una operación. |
 | `NetArcaWsaaTickets` | PK `KeyHash`; índice `(State, UpdatedUtcTicks)` para localizar coordinación pendiente y tickets. |
+| `NetArcaCertificateSlots` | PK `(TenantHash, Cuit, Environment)`; `ActiveVersionId` y `Generation` mantienen la cabecera activa mediante compare-and-swap. |
+| `NetArcaCertificateVersions` | PK `(TenantHash, Cuit, Environment, VersionId)`; índice de scope y vigencia según el modelo común. No se borra ni muta una versión al rotar. |
 
 Las identidades textuales se hashean con SHA-256 sobre valores codificados de
 forma determinista; los hashes almacenados son hexadecimales de 64 caracteres.
@@ -180,6 +192,41 @@ réplicas y conserva las claves antiguas mientras existan filas cifradas con su
 `KeyId`. Token y Sign están dentro del ciphertext; el endpoint, servicio,
 huella de certificado, nonce y tag quedan visibles como metadatos.
 
+## Diccionario: `NetArcaCertificateSlots`
+
+Todas las columnas son `NOT NULL`. El tenant se representa con su hash SHA-256;
+el texto original solo se usa en el AAD del contenido cifrado.
+
+| Columna | Longitud EF | Significado |
+| --- | ---: | --- |
+| `TenantHash` | 64 | Hash SHA-256 hexadecimal del tenant; primera parte de la clave primaria. |
+| `Cuit` | — | CUIT representada, `long`; segunda parte de la clave primaria. |
+| `Environment` | — | Ambiente ARCA como entero; tercera parte de la clave primaria. |
+| `ActiveVersionId` | 36 | ID de versión que representa la cabecera activa. No tiene FK física. |
+| `Generation` | — | Contador creciente usado para compare-and-swap de rotaciones concurrentes. |
+
+## Diccionario: `NetArcaCertificateVersions`
+
+Todas las columnas son `NOT NULL`. Cada fila es una versión inmutable.
+
+| Columna | Longitud EF | Significado |
+| --- | ---: | --- |
+| `TenantHash` | 64 | Hash SHA-256 hexadecimal del tenant; parte de la clave primaria y del scope. |
+| `Cuit` | — | CUIT representada; parte de la clave primaria y del scope. |
+| `Environment` | — | Ambiente como entero; parte de la clave primaria y del scope. |
+| `VersionId` | 36 | GUID inmutable de la versión; parte de la clave primaria. |
+| `CreatedAtUtcTicks` | — | Creación UTC en ticks .NET (100 ns). |
+| `ThumbprintSha256` | 64 | Huella SHA-256 del certificado X.509 cargado. |
+| `NotBeforeUtcTicks`, `NotAfterUtcTicks` | — | Límites de vigencia real del certificado en ticks UTC. No acreditan autorización ARCA. |
+| `KeyId` | 128 | ID de clave AES-GCM externa que resuelve el keyring. |
+| `Nonce`, `Ciphertext`, `Tag` | — | Sobre PEM normalizado cifrado; nonce y tag se validan al descifrar. |
+
+El AAD autentica propósito, key ID, scope original, versión, huella, vigencia y
+creación. La fila no conserva el tenant original en claro ni incluye las claves
+de protección. No hay FK física entre la cabecera y las versiones; la
+transacción asegura que la cabecera apunte a una versión guardada. Retención,
+borrado y reenvoltura no son tareas automáticas del store.
+
 ## Tipos, límites y restricciones
 
 Los scripts concretan los tipos de cada proveedor. EF configura `HasMaxLength`
@@ -205,27 +252,27 @@ Tablas preexistentes sin historia, IDs desconocidos, huecos de historia o tablas
 
 ## Scripts generados
 
-`dotnet run --project tools/NetArcaWs.Build -- persistence-schema` genera 15 DDL actuales desde los modelos EF; `--check` detecta archivos ausentes, distintos o sobrantes sin reescribirlos.
+`dotnet run --project tools/NetArcaWs.Build -- persistence-schema` genera 20 DDL actuales desde los modelos EF; `--check` detecta archivos ausentes, distintos o sobrantes sin reescribirlos.
 
-`dotnet run --project tools/NetArcaWs.Build -- persistence-migrations` genera 10 scripts desde migraciones versionadas reales, uno por módulo y proveedor; `--check` valida esos artefactos. Son upgrades iniciales `0`→`latest`, no idempotentes ni una alternativa de baseline.
+`dotnet run --project tools/NetArcaWs.Build -- persistence-migrations` genera 15 scripts desde migraciones versionadas reales, uno por módulo y proveedor; `--check` valida esos artefactos. Son upgrades iniciales `0`→`latest`, no idempotentes ni una alternativa de baseline.
 
-| Proveedor | Facturación | Tickets WSAA | Ambos (solo DDL) |
+| Proveedor | Facturación | Tickets WSAA | Certificados | Todos (solo DDL) |
 | --- | --- | --- | --- |
-| SQLite | [invoicing](../reference/persistence/sqlite/invoicing.sql) | [wsaa-tickets](../reference/persistence/sqlite/wsaa-tickets.sql) | [all](../reference/persistence/sqlite/all.sql) |
-| MySQL | [invoicing](../reference/persistence/mysql/invoicing.sql) | [wsaa-tickets](../reference/persistence/mysql/wsaa-tickets.sql) | [all](../reference/persistence/mysql/all.sql) |
-| MariaDB | [invoicing](../reference/persistence/mariadb/invoicing.sql) | [wsaa-tickets](../reference/persistence/mariadb/wsaa-tickets.sql) | [all](../reference/persistence/mariadb/all.sql) |
-| PostgreSQL | [invoicing](../reference/persistence/postgresql/invoicing.sql) | [wsaa-tickets](../reference/persistence/postgresql/wsaa-tickets.sql) | [all](../reference/persistence/postgresql/all.sql) |
-| SQL Server | [invoicing](../reference/persistence/sqlserver/invoicing.sql) | [wsaa-tickets](../reference/persistence/sqlserver/wsaa-tickets.sql) | [all](../reference/persistence/sqlserver/all.sql) |
+| SQLite | [invoicing](../reference/persistence/sqlite/invoicing.sql) | [wsaa-tickets](../reference/persistence/sqlite/wsaa-tickets.sql) | [tenant-certificates](../reference/persistence/sqlite/tenant-certificates.sql) | [all](../reference/persistence/sqlite/all.sql) |
+| MySQL | [invoicing](../reference/persistence/mysql/invoicing.sql) | [wsaa-tickets](../reference/persistence/mysql/wsaa-tickets.sql) | [tenant-certificates](../reference/persistence/mysql/tenant-certificates.sql) | [all](../reference/persistence/mysql/all.sql) |
+| MariaDB | [invoicing](../reference/persistence/mariadb/invoicing.sql) | [wsaa-tickets](../reference/persistence/mariadb/wsaa-tickets.sql) | [tenant-certificates](../reference/persistence/mariadb/tenant-certificates.sql) | [all](../reference/persistence/mariadb/all.sql) |
+| PostgreSQL | [invoicing](../reference/persistence/postgresql/invoicing.sql) | [wsaa-tickets](../reference/persistence/postgresql/wsaa-tickets.sql) | [tenant-certificates](../reference/persistence/postgresql/tenant-certificates.sql) | [all](../reference/persistence/postgresql/all.sql) |
+| SQL Server | [invoicing](../reference/persistence/sqlserver/invoicing.sql) | [wsaa-tickets](../reference/persistence/sqlserver/wsaa-tickets.sql) | [tenant-certificates](../reference/persistence/sqlserver/tenant-certificates.sql) | [all](../reference/persistence/sqlserver/all.sql) |
 
-Los 10 scripts de migración versionados son independientes de los DDL anteriores:
+Los 15 scripts de migración versionados son independientes de los DDL anteriores:
 
-| Motor | Facturación | Tickets WSAA |
+| Motor | Facturación | Tickets WSAA | Certificados |
 | --- | --- | --- |
-| SQLite | [0→latest](../reference/persistence-migrations/sqlite/invoicing/0-latest.sql) | [0→latest](../reference/persistence-migrations/sqlite/wsaa-tickets/0-latest.sql) |
-| MySQL | [0→latest](../reference/persistence-migrations/mysql/invoicing/0-latest.sql) | [0→latest](../reference/persistence-migrations/mysql/wsaa-tickets/0-latest.sql) |
-| MariaDB | [0→latest](../reference/persistence-migrations/mariadb/invoicing/0-latest.sql) | [0→latest](../reference/persistence-migrations/mariadb/wsaa-tickets/0-latest.sql) |
-| PostgreSQL | [0→latest](../reference/persistence-migrations/postgresql/invoicing/0-latest.sql) | [0→latest](../reference/persistence-migrations/postgresql/wsaa-tickets/0-latest.sql) |
-| SQL Server | [0→latest](../reference/persistence-migrations/sqlserver/invoicing/0-latest.sql) | [0→latest](../reference/persistence-migrations/sqlserver/wsaa-tickets/0-latest.sql) |
+| SQLite | [0→latest](../reference/persistence-migrations/sqlite/invoicing/0-latest.sql) | [0→latest](../reference/persistence-migrations/sqlite/wsaa-tickets/0-latest.sql) | [0→latest](../reference/persistence-migrations/sqlite/tenant-certificates/0-latest.sql) |
+| MySQL | [0→latest](../reference/persistence-migrations/mysql/invoicing/0-latest.sql) | [0→latest](../reference/persistence-migrations/mysql/wsaa-tickets/0-latest.sql) | [0→latest](../reference/persistence-migrations/mysql/tenant-certificates/0-latest.sql) |
+| MariaDB | [0→latest](../reference/persistence-migrations/mariadb/invoicing/0-latest.sql) | [0→latest](../reference/persistence-migrations/mariadb/wsaa-tickets/0-latest.sql) | [0→latest](../reference/persistence-migrations/mariadb/tenant-certificates/0-latest.sql) |
+| PostgreSQL | [0→latest](../reference/persistence-migrations/postgresql/invoicing/0-latest.sql) | [0→latest](../reference/persistence-migrations/postgresql/wsaa-tickets/0-latest.sql) | [0→latest](../reference/persistence-migrations/postgresql/tenant-certificates/0-latest.sql) |
+| SQL Server | [0→latest](../reference/persistence-migrations/sqlserver/invoicing/0-latest.sql) | [0→latest](../reference/persistence-migrations/sqlserver/wsaa-tickets/0-latest.sql) | [0→latest](../reference/persistence-migrations/sqlserver/tenant-certificates/0-latest.sql) |
 
 Estos archivos son operaciones de upgrade inicial reales de las cadenas versionadas;
 no son idempotentes ni un mecanismo de adopción/baseline. Se generan y revisan

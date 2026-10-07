@@ -230,13 +230,16 @@ la garantía del ciclo fiscal completo.
 El paquete `NetArcaWs.EntityFrameworkCore` implementa `IInvoiceJournal` sobre
 un `DbContext` mediante `IDbContextFactory<TContext>`. El paquete base no
 depende de EF. `NetArcaWsModelOptions` habilita, de forma inmutable, facturación
-(WSFEv1, WSFEXv1 y/o WSMTXCA), tickets WSAA para servicios seleccionados o
-ambos. El modelo operativo conserva solo las tablas elegidas.
+(WSFEv1, WSFEXv1 y/o WSMTXCA), tickets WSAA para servicios seleccionados y/o el
+store independiente de certificados. El modelo operativo conserva solo las
+tablas elegidas.
 
 Los providers de stores MySQL, PostgreSQL y SQL Server son extras separados;
 MySQL/MariaDB requiere una versión explícita. Cinco extras de migraciones
 (`NetArcaWs.EntityFrameworkCore.Migrations.{Sqlite,MySql,MariaDb,PostgreSql,SqlServer}`)
-contienen contextos fijos e historias separadas por motor y módulo. La tarea de
+contienen contextos fijos e historias separadas por motor y módulo. Los tres
+módulos (facturación, tickets WSAA y certificados) se seleccionan por separado.
+La tarea de
 despliegue registra el paquete elegido, consulta `INetArcaWsMigrator.GetStatusAsync`,
 puede revisar SQL con `GenerateScript(module, fromMigration, toMigration,
 idempotent)` y llama `ApplyAsync` para avanzar. El modelo operativo del consumidor
@@ -246,8 +249,8 @@ contextos dedicados.
 El registro DI y el inicio normal de la API no conectan ni aplican migraciones.
 El actor de despliegue usa permisos de esquema; runtime usa permisos de datos
 mínimos. Serializá jobs externamente por base: el preflight ocurre antes del lock
-EF y no coordina otros actores. Ambos módulos se pueden aplicar en cualquier
-orden. Deshabilitarlos preserva tablas, historial y filas. Updates usan paquetes
+EF y no coordina otros actores. Los tres módulos se pueden aplicar en cualquiera
+de los seis órdenes posibles. Deshabilitarlos preserva tablas, historial y filas. Updates usan paquetes
 actualizados más migraciones oficiales pendientes; el consumidor no crea
 migraciones para esas tablas. Un cambio futuro añade una migración por módulo y
 motor, preserva las publicadas y prueba desde la anterior.
@@ -261,18 +264,30 @@ admite scripts idempotentes. Sus migraciones pueden crear además
 motores usan su schema por defecto. La API de conveniencia avanza solamente y no
 promete rollback uniforme de DDL entre motores.
 
-El modelo relacional documenta cuatro tablas funcionales, 15 DDL actuales (tres
-selecciones × cinco motores) y 10 scripts de migración inicial versionados (dos
-módulos × cinco motores). El DDL representa el modelo actual y los scripts el
-upgrade real `0`→`latest`; no son intercambiables ni baselines automáticos.
+El modelo relacional documenta seis tablas funcionales, 20 DDL actuales (cuatro
+selecciones × cinco motores) y 15 scripts de migración inicial versionados
+(tres módulos × cinco motores). El DDL representa el modelo actual y los scripts
+el upgrade real `0`→`latest`; no son intercambiables ni baselines automáticos.
+
+El módulo opcional `TenantCertificates` almacena versiones inmutables cifradas y
+un puntero activo por tenant/CUIT/ambiente. La aplicación autoriza ese alcance
+antes de leer o escribir; el store no otorga permisos ni solicita, renueva o
+habilita certificados ante ARCA. El protector AES-GCM recibe un keyring externo
+de la aplicación. DI no conecta ni ejecuta migraciones; el despliegue selecciona
+y aplica explícitamente su historial independiente. La emisión durable no
+incluye `VersionId` en su hash ni en sus tablas: el consumidor registra la
+versión escogida junto a su propia operación preparada. Véase la
+[guía multitenant](docs/wiki/Certificados-multitenant.md) y el
+[ADR 0007](docs/adr/0007-tenant-certificate-store.md).
 
 CI 37547645296 pasó 510 pruebas (491 aprobadas, 19 opt-in skips, 0 fallos),
 build Release con 0 warnings; MySQL 8.4.11 20/20, MariaDB 11.4.13 20/20,
 PostgreSQL 17.6 19/19 y SQL Server Developer 16.0.4295.3 19/19, sin skips de
 motor. La corrida validó también los 10 SQL de migración, 15 DDL, 11 paquetes y
 un consumer/CLI nuevo. Es evidencia limitada a estas versiones/escenarios; no
-hubo llamadas ARCA ni publicación de extras. Certificados y worker siguen en
-[issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19). Consultar
+hubo llamadas ARCA ni publicación de extras. El store de certificados está
+implementado en el código de desarrollo posterior a 0.6.0; su inclusión en
+NuGet queda pendiente de la siguiente publicación. Consultar
 [ADR 0005](docs/adr/0005-ef-core-invoice-journal.md), la
 [guía del diario](docs/wiki/Diario-fiscal.md) y el
 [modelo relacional](docs/wiki/Modelo-relacional.md).

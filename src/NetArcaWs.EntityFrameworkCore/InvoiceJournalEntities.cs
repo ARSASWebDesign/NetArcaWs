@@ -79,14 +79,17 @@ public sealed class NetArcaWsModelOptions
     private static readonly ArcaService[] SupportedInvoiceServices = [ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca];
     private readonly ImmutableHashSet<ArcaService> invoiceServices;
     private readonly ImmutableHashSet<ArcaService> wsaaTicketServices;
+    private readonly bool certificatesEnabled;
 
-    private NetArcaWsModelOptions(IEnumerable<ArcaService> invoiceServices, IEnumerable<ArcaService> wsaaTicketServices)
+    private NetArcaWsModelOptions(IEnumerable<ArcaService> invoiceServices, IEnumerable<ArcaService> wsaaTicketServices, bool certificatesEnabled)
     {
         this.invoiceServices = invoiceServices.ToImmutableHashSet();
         this.wsaaTicketServices = wsaaTicketServices.ToImmutableHashSet();
+        this.certificatesEnabled = certificatesEnabled;
         string fingerprint = "invoicing:" + string.Join("\n", this.invoiceServices.Order().Select(x => x.ToString()));
         if (this.wsaaTicketServices.Count > 0)
             fingerprint += "\nwsaa-tickets:" + string.Join("\n", this.wsaaTicketServices.Order().Select(x => x.ToString()));
+        if (certificatesEnabled) fingerprint += "\ntenant-certificates:v1";
         Fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprint)));
     }
 
@@ -94,6 +97,7 @@ public sealed class NetArcaWsModelOptions
     public IReadOnlySet<ArcaService> InvoicingServices => invoiceServices;
     public bool WsaaTicketsEnabled => wsaaTicketServices.Count != 0;
     public IReadOnlySet<ArcaService> WsaaTicketServices => wsaaTicketServices;
+    public bool CertificatesEnabled => certificatesEnabled;
     public string Fingerprint { get; }
 
     public static NetArcaWsModelOptions Configure(Action<NetArcaWsModelOptionsBuilder> configure)
@@ -101,7 +105,7 @@ public sealed class NetArcaWsModelOptions
         ArgumentNullException.ThrowIfNull(configure);
         var builder = new NetArcaWsModelOptionsBuilder();
         configure(builder);
-        return new NetArcaWsModelOptions(builder.InvoiceServices, builder.WsaaTicketServices);
+        return new NetArcaWsModelOptions(builder.InvoiceServices, builder.WsaaTicketServices, builder.CertificatesEnabled);
     }
 
     internal bool SupportsInvoiceService(string service) => invoiceServices.Any(selected =>
@@ -139,6 +143,7 @@ public sealed class NetArcaWsModelOptionsBuilder
 {
     private readonly HashSet<ArcaService> invoiceServices = [];
     private readonly HashSet<ArcaService> wsaaTicketServices = [];
+    internal bool CertificatesEnabled { get; private set; }
     internal IEnumerable<ArcaService> InvoiceServices => invoiceServices;
     internal IEnumerable<ArcaService> WsaaTicketServices => wsaaTicketServices;
 
@@ -169,6 +174,9 @@ public sealed class NetArcaWsModelOptionsBuilder
         }
         return this;
     }
+
+    /// <summary>Enables the encrypted, versioned tenant certificate tables.</summary>
+    public NetArcaWsModelOptionsBuilder AddCertificates() { CertificatesEnabled = true; return this; }
 }
 
 /// <summary>Implemented by contexts whose immutable NetArcaWs model selection can vary within one EF service provider.</summary>
@@ -269,6 +277,30 @@ public static class NetArcaWsModelBuilderExtensions
                 entity.Property(x => x.Ciphertext).IsRequired(false);
                 entity.Property(x => x.Tag).IsRequired(false);
                 entity.HasIndex(x => new { x.State, x.UpdatedUtcTicks });
+            });
+        }
+        if (!options.CertificatesEnabled)
+        {
+            modelBuilder.Ignore<ArcaCertificateSlotEntity>();
+            modelBuilder.Ignore<ArcaCertificateVersionEntity>();
+        }
+        else
+        {
+            modelBuilder.Entity<ArcaCertificateSlotEntity>(entity =>
+            {
+                entity.ToTable("NetArcaCertificateSlots");
+                entity.HasKey(x => new { x.TenantHash, x.Cuit, x.Environment });
+                entity.Property(x => x.TenantHash).HasMaxLength(64).IsRequired();
+            });
+            modelBuilder.Entity<ArcaCertificateVersionEntity>(entity =>
+            {
+                entity.ToTable("NetArcaCertificateVersions");
+                entity.HasKey(x => new { x.TenantHash, x.Cuit, x.Environment, x.VersionId });
+                entity.Property(x => x.TenantHash).HasMaxLength(64).IsRequired();
+                entity.Property(x => x.ThumbprintSha256).HasMaxLength(64).IsRequired();
+                entity.Property(x => x.KeyId).HasMaxLength(128).IsRequired();
+                entity.Property(x => x.Nonce).IsRequired(); entity.Property(x => x.Ciphertext).IsRequired(); entity.Property(x => x.Tag).IsRequired();
+                entity.HasIndex(x => new { x.TenantHash, x.Cuit, x.Environment, x.NotAfterUtcTicks });
             });
         }
         return modelBuilder;

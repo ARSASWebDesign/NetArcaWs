@@ -17,12 +17,13 @@ public sealed class PersistenceMigrationsTests
         IReadOnlyDictionary<string, string> scripts = PersistenceMigrations.GenerateScripts();
         IReadOnlyDictionary<string, string> repeated = PersistenceMigrations.GenerateScripts();
 
-        scripts.Should().HaveCount(10);
+        scripts.Should().HaveCount(15);
         repeated.Should().BeEquivalentTo(scripts);
         foreach (string provider in new[] { "sqlite", "mysql", "mariadb", "postgresql", "sqlserver" })
         {
             string invoice = scripts[$"{provider}/invoicing/0-latest.sql"];
             string tickets = scripts[$"{provider}/wsaa-tickets/0-latest.sql"];
+            string certificates = scripts[$"{provider}/tenant-certificates/0-latest.sql"];
             invoice.Should().Contain("20261006000100_InitialInvoicing")
                 .And.Contain("__NetArcaWsInvoiceMigrations")
                 .And.Contain("CREATE TABLE")
@@ -33,6 +34,16 @@ public sealed class PersistenceMigrationsTests
                 .And.NotContain("RenameTable");
             Count(invoice, "NetArcaInvoices").Should().BeGreaterThanOrEqualTo(3);
             Count(tickets, "NetArcaWsaaTickets").Should().BeGreaterThanOrEqualTo(1);
+            certificates.Should().Contain("20261006000300_InitialTenantCertificates")
+                .And.Contain("__NetArcaWsCertificateMigrations")
+                .And.Contain("NetArcaCertificateSlots")
+                .And.Contain("NetArcaCertificateVersions")
+                .And.NotContain("NetArcaInvoices")
+                .And.NotContain("NetArcaWsaaTickets");
+            if (provider is "mysql" or "mariadb")
+                certificates.ToUpperInvariant().Should().NotContain("ALTER DATABASE");
+            Count(certificates, "NetArcaCertificateSlots").Should().BeGreaterThanOrEqualTo(1);
+            Count(certificates, "NetArcaCertificateVersions").Should().BeGreaterThanOrEqualTo(1);
         }
         scripts.Values.Should().OnlyContain(script => script.EndsWith('\n') && !script.Contains("\r", StringComparison.Ordinal));
     }
@@ -43,7 +54,7 @@ public sealed class PersistenceMigrationsTests
         string root = Path.Combine(Path.GetTempPath(), $"netarcaws-migrations-{Guid.NewGuid():N}");
         try
         {
-            PersistenceMigrations.GenerateScripts().Should().HaveCount(10);
+            PersistenceMigrations.GenerateScripts().Should().HaveCount(15);
             IReadOnlyDictionary<string, string> generated = PersistenceMigrations.GenerateScripts();
             foreach ((string relative, string contents) in generated)
             {

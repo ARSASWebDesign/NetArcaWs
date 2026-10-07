@@ -14,3 +14,9 @@ public sealed class WsaaTicketsDesignTimeFactory : IDesignTimeDbContextFactory<M
     public MariaDbWsaaTicketsMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<MariaDbWsaaTicketsMigrationsDbContext>()
         .UseMySql("Server=localhost;Database=netarcaws_design_time", new MariaDbServerVersion(new Version(11, 4, 13)), x => x.MigrationsAssembly(typeof(WsaaTicketsDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsTicketMigrations")).Options);
 }
+
+public sealed class TenantCertificatesDesignTimeFactory : IDesignTimeDbContextFactory<MariaDbTenantCertificatesMigrationsDbContext>
+{
+    public MariaDbTenantCertificatesMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<MariaDbTenantCertificatesMigrationsDbContext>()
+        .UseMySql("Server=localhost;Database=netarcaws_design_time", new MariaDbServerVersion(new Version(11, 4, 13)), options => options.MigrationsAssembly(typeof(TenantCertificatesDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsCertificateMigrations")).Options);
+}

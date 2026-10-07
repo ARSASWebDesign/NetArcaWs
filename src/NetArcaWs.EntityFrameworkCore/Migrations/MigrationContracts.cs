@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace NetArcaWs.EntityFrameworkCore.Migrations;
 
-public enum NetArcaWsPersistenceModule { Invoicing, WsaaTickets }
+public enum NetArcaWsPersistenceModule { Invoicing, WsaaTickets, TenantCertificates }
 public enum NetArcaWsMigrationProvider { Sqlite, MySql, MariaDb, PostgreSql, SqlServer }
 public enum NetArcaWsMigrationState
 {

@@ -26,3 +26,13 @@ public sealed class SqlServerWsaaTicketsMigrationsDbContext(DbContextOptions<Sql
             ArcaService.PadronA10, ArcaService.PadronA13, ArcaService.Wscdc, ArcaService.Wsfecred, ArcaService.Wscpe)));
     }
 }
+
+public sealed class SqlServerTenantCertificatesMigrationsDbContext(DbContextOptions<SqlServerTenantCertificatesMigrationsDbContext> options) : DbContext(options)
+{
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) => optionsBuilder.ReplaceService<IModelCacheKeyFactory, NetArcaWsModelCacheKeyFactory>();
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.HasDefaultSchema("dbo");
+        modelBuilder.AddNetArcaWs(NetArcaWsModelOptions.Configure(x => x.AddCertificates()));
+    }
+}

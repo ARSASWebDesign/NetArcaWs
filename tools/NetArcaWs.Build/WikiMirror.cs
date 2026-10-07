@@ -122,6 +122,7 @@ public static class WikiMirror
     }
 
     private static bool IsExcluded(string relative) =>
+        relative.Replace(Path.DirectorySeparatorChar, '/').StartsWith("docs/superpowers/", StringComparison.Ordinal) ||
         relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
             .Any(part => part is ".git" or ".superpowers" or "artifacts" or "bin" or "obj");
 

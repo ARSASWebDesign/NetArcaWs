@@ -14,3 +14,9 @@ public sealed class WsaaTicketsDesignTimeFactory : IDesignTimeDbContextFactory<P
     public PostgreSqlWsaaTicketsMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<PostgreSqlWsaaTicketsMigrationsDbContext>()
         .UseNpgsql("Host=localhost;Database=netarcaws_design_time;Username=netarcaws", options => options.MigrationsAssembly(typeof(WsaaTicketsDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsTicketMigrations", "public")).Options);
 }
+
+public sealed class TenantCertificatesDesignTimeFactory : IDesignTimeDbContextFactory<PostgreSqlTenantCertificatesMigrationsDbContext>
+{
+    public PostgreSqlTenantCertificatesMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<PostgreSqlTenantCertificatesMigrationsDbContext>()
+        .UseNpgsql("Host=localhost;Database=netarcaws_design_time;Username=netarcaws", options => options.MigrationsAssembly(typeof(TenantCertificatesDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsCertificateMigrations", "public")).Options);
+}

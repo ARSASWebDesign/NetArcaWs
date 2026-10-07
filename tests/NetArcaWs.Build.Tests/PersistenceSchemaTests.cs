@@ -11,7 +11,7 @@ public sealed class PersistenceSchemaTests
     {
         IReadOnlyDictionary<string, string> scripts = PersistenceSchema.GenerateScripts();
 
-        scripts.Should().HaveCount(15);
+        scripts.Should().HaveCount(20);
         scripts.Keys.Should().Contain("sqlite/all.sql");
         scripts.Keys.Should().Contain("mysql/invoicing.sql");
         scripts.Keys.Should().Contain("mariadb/wsaa-tickets.sql");
@@ -24,7 +24,35 @@ public sealed class PersistenceSchemaTests
         scripts["postgresql/wsaa-tickets.sql"].Should().Contain("NetArcaWsaaTickets")
             .And.NotContain("NetArcaInvoices");
         scripts["sqlserver/all.sql"].Should().Contain("NetArcaWsaaTickets")
-            .And.Contain("NetArcaInvoices");
+            .And.Contain("NetArcaInvoices")
+            .And.Contain("NetArcaCertificateSlots")
+            .And.Contain("NetArcaCertificateVersions");
+    }
+
+    [Fact]
+    public void CertificateSelectionGeneratesTheTwentyDdlAndFifteenMigrationArtifacts()
+    {
+        IReadOnlyDictionary<string, string> ddl = PersistenceSchema.GenerateScripts();
+        IReadOnlyDictionary<string, string> migrations = PersistenceMigrations.GenerateScripts();
+
+        ddl.Should().HaveCount(20);
+        migrations.Should().HaveCount(15);
+        foreach (string provider in new[] { "sqlite", "mysql", "mariadb", "postgresql", "sqlserver" })
+        {
+            string certificateDdl = ddl[$"{provider}/tenant-certificates.sql"];
+            certificateDdl.Should().Contain("NetArcaCertificateSlots")
+                .And.Contain("NetArcaCertificateVersions")
+                .And.NotContain("NetArcaInvoices")
+                .And.NotContain("NetArcaWsaaTickets");
+
+            string certificateMigration = migrations[$"{provider}/tenant-certificates/0-latest.sql"];
+            certificateMigration.Should().Contain("20261006000300_InitialTenantCertificates")
+                .And.Contain("__NetArcaWsCertificateMigrations")
+                .And.Contain("NetArcaCertificateSlots")
+                .And.Contain("NetArcaCertificateVersions")
+                .And.NotContain("NetArcaInvoices")
+                .And.NotContain("NetArcaWsaaTickets");
+        }
     }
 
     [Fact]
