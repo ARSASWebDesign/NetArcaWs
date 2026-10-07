@@ -20,3 +20,9 @@ public sealed class TenantCertificatesDesignTimeFactory : IDesignTimeDbContextFa
     public MySqlTenantCertificatesMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<MySqlTenantCertificatesMigrationsDbContext>()
         .UseMySql("Server=localhost;Database=netarcaws_design_time", new MySqlServerVersion(new Version(8, 4, 11)), options => options.MigrationsAssembly(typeof(TenantCertificatesDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsCertificateMigrations")).Options);
 }
+
+public sealed class InvoiceRecoveryDesignTimeFactory : IDesignTimeDbContextFactory<MySqlInvoiceRecoveryMigrationsDbContext>
+{
+    public MySqlInvoiceRecoveryMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<MySqlInvoiceRecoveryMigrationsDbContext>()
+        .UseMySql("Server=localhost;Database=netarcaws_design_time", new MySqlServerVersion(new Version(8, 4, 11)), options => options.MigrationsAssembly(typeof(InvoiceRecoveryDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsInvoiceRecoveryMigrations")).Options);
+}

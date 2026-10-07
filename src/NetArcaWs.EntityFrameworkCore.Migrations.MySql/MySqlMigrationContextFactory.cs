@@ -11,7 +11,7 @@ public sealed class MySqlMigrationContextFactory(string connectionString, MySqlS
     private static readonly HashSet<string> OwnedTables = new(StringComparer.Ordinal)
     {
         "NetArcaInvoices", "NetArcaInvoiceRevisions", "NetArcaInvoiceSeriesReservations", "NetArcaWsaaTickets",
-        "NetArcaCertificateSlots", "NetArcaCertificateVersions", "__NetArcaWsInvoiceMigrations", "__NetArcaWsTicketMigrations", "__NetArcaWsCertificateMigrations"
+        "NetArcaCertificateSlots", "NetArcaCertificateVersions", "NetArcaInvoiceRecoveryJobs", "__NetArcaWsInvoiceMigrations", "__NetArcaWsTicketMigrations", "__NetArcaWsCertificateMigrations", "__NetArcaWsInvoiceRecoveryMigrations"
     };
 
     public NetArcaWsMigrationProvider Provider => NetArcaWsMigrationProvider.MySql;
@@ -24,12 +24,14 @@ public sealed class MySqlMigrationContextFactory(string connectionString, MySqlS
             .UseMySql(connectionString, serverVersion, options => options.MigrationsAssembly(typeof(MySqlMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsTicketMigrations")).Options),
         NetArcaWsPersistenceModule.TenantCertificates => new MySqlTenantCertificatesMigrationsDbContext(new DbContextOptionsBuilder<MySqlTenantCertificatesMigrationsDbContext>()
             .UseMySql(connectionString, serverVersion, options => options.MigrationsAssembly(typeof(MySqlMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsCertificateMigrations")).Options),
+        NetArcaWsPersistenceModule.InvoiceRecovery => new MySqlInvoiceRecoveryMigrationsDbContext(new DbContextOptionsBuilder<MySqlInvoiceRecoveryMigrationsDbContext>()
+            .UseMySql(connectionString, serverVersion, options => options.MigrationsAssembly(typeof(MySqlMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsInvoiceRecoveryMigrations")).Options),
         _ => throw new ArgumentOutOfRangeException(nameof(module))
     };
 
     public async Task<IReadOnlyList<string>> GetPresentTablesAsync(DbContext context, IReadOnlyList<string> names, CancellationToken cancellationToken)
     {
-        if (context is not (MySqlInvoicingMigrationsDbContext or MySqlWsaaTicketsMigrationsDbContext or MySqlTenantCertificatesMigrationsDbContext))
+        if (context is not (MySqlInvoicingMigrationsDbContext or MySqlWsaaTicketsMigrationsDbContext or MySqlTenantCertificatesMigrationsDbContext or MySqlInvoiceRecoveryMigrationsDbContext))
             throw new ArgumentException("A MySQL migrations context is required.", nameof(context));
         ArgumentNullException.ThrowIfNull(names);
         if (names.Count == 0) return Array.Empty<string>();

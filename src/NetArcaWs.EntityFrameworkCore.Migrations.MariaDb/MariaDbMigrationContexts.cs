@@ -24,3 +24,9 @@ public sealed class MariaDbTenantCertificatesMigrationsDbContext(DbContextOption
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) => optionsBuilder.ReplaceService<IModelCacheKeyFactory, NetArcaWsModelCacheKeyFactory>();
     protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.AddNetArcaWs(NetArcaWsModelOptions.Configure(x => x.AddCertificates()));
 }
+
+public sealed class MariaDbInvoiceRecoveryMigrationsDbContext(DbContextOptions<MariaDbInvoiceRecoveryMigrationsDbContext> options) : DbContext(options)
+{
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) => optionsBuilder.ReplaceService<IModelCacheKeyFactory, NetArcaWsModelCacheKeyFactory>();
+    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.AddNetArcaWs(NetArcaWsModelOptions.Configure(x => x.AddInvoiceRecovery(ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca)));
+}

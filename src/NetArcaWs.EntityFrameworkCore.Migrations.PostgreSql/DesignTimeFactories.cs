@@ -20,3 +20,9 @@ public sealed class TenantCertificatesDesignTimeFactory : IDesignTimeDbContextFa
     public PostgreSqlTenantCertificatesMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<PostgreSqlTenantCertificatesMigrationsDbContext>()
         .UseNpgsql("Host=localhost;Database=netarcaws_design_time;Username=netarcaws", options => options.MigrationsAssembly(typeof(TenantCertificatesDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsCertificateMigrations", "public")).Options);
 }
+
+public sealed class InvoiceRecoveryDesignTimeFactory : IDesignTimeDbContextFactory<PostgreSqlInvoiceRecoveryMigrationsDbContext>
+{
+    public PostgreSqlInvoiceRecoveryMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<PostgreSqlInvoiceRecoveryMigrationsDbContext>()
+        .UseNpgsql("Host=localhost;Database=netarcaws_design_time;Username=netarcaws", options => options.MigrationsAssembly(typeof(InvoiceRecoveryDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsInvoiceRecoveryMigrations", "public")).Options);
+}

@@ -20,3 +20,9 @@ public sealed class TenantCertificatesDesignTimeFactory : IDesignTimeDbContextFa
     public MariaDbTenantCertificatesMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<MariaDbTenantCertificatesMigrationsDbContext>()
         .UseMySql("Server=localhost;Database=netarcaws_design_time", new MariaDbServerVersion(new Version(11, 4, 13)), options => options.MigrationsAssembly(typeof(TenantCertificatesDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsCertificateMigrations")).Options);
 }
+
+public sealed class InvoiceRecoveryDesignTimeFactory : IDesignTimeDbContextFactory<MariaDbInvoiceRecoveryMigrationsDbContext>
+{
+    public MariaDbInvoiceRecoveryMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<MariaDbInvoiceRecoveryMigrationsDbContext>()
+        .UseMySql("Server=localhost;Database=netarcaws_design_time", new MariaDbServerVersion(new Version(11, 4, 13)), options => options.MigrationsAssembly(typeof(InvoiceRecoveryDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsInvoiceRecoveryMigrations")).Options);
+}

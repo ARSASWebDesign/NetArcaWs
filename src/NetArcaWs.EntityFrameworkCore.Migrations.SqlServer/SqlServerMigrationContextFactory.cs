@@ -10,7 +10,7 @@ public sealed class SqlServerMigrationContextFactory(string connectionString) : 
     private static readonly HashSet<string> OwnedTables = new(StringComparer.Ordinal)
     {
         "NetArcaInvoices", "NetArcaInvoiceRevisions", "NetArcaInvoiceSeriesReservations", "NetArcaWsaaTickets",
-        "NetArcaCertificateSlots", "NetArcaCertificateVersions", "__NetArcaWsInvoiceMigrations", "__NetArcaWsTicketMigrations", "__NetArcaWsCertificateMigrations"
+        "NetArcaCertificateSlots", "NetArcaCertificateVersions", "NetArcaInvoiceRecoveryJobs", "__NetArcaWsInvoiceMigrations", "__NetArcaWsTicketMigrations", "__NetArcaWsCertificateMigrations", "__NetArcaWsInvoiceRecoveryMigrations"
     };
 
     public NetArcaWsMigrationProvider Provider => NetArcaWsMigrationProvider.SqlServer;
@@ -23,6 +23,8 @@ public sealed class SqlServerMigrationContextFactory(string connectionString) : 
             .UseSqlServer(connectionString, options => options.MigrationsAssembly(typeof(SqlServerMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsTicketMigrations", "dbo")).Options),
         NetArcaWsPersistenceModule.TenantCertificates => new SqlServerTenantCertificatesMigrationsDbContext(new DbContextOptionsBuilder<SqlServerTenantCertificatesMigrationsDbContext>()
             .UseSqlServer(connectionString, options => options.MigrationsAssembly(typeof(SqlServerMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsCertificateMigrations", "dbo")).Options),
+        NetArcaWsPersistenceModule.InvoiceRecovery => new SqlServerInvoiceRecoveryMigrationsDbContext(new DbContextOptionsBuilder<SqlServerInvoiceRecoveryMigrationsDbContext>()
+            .UseSqlServer(connectionString, options => options.MigrationsAssembly(typeof(SqlServerMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsInvoiceRecoveryMigrations", "dbo")).Options),
         _ => throw new ArgumentOutOfRangeException(nameof(module))
     };
 

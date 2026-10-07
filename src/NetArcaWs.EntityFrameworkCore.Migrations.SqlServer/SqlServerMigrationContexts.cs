@@ -36,3 +36,13 @@ public sealed class SqlServerTenantCertificatesMigrationsDbContext(DbContextOpti
         modelBuilder.AddNetArcaWs(NetArcaWsModelOptions.Configure(x => x.AddCertificates()));
     }
 }
+
+public sealed class SqlServerInvoiceRecoveryMigrationsDbContext(DbContextOptions<SqlServerInvoiceRecoveryMigrationsDbContext> options) : DbContext(options)
+{
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) => optionsBuilder.ReplaceService<IModelCacheKeyFactory, NetArcaWsModelCacheKeyFactory>();
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.HasDefaultSchema("dbo");
+        modelBuilder.AddNetArcaWs(NetArcaWsModelOptions.Configure(x => x.AddInvoiceRecovery(ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca)));
+    }
+}

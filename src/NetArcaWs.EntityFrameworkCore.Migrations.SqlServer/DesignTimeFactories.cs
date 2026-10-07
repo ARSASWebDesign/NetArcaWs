@@ -20,3 +20,9 @@ public sealed class TenantCertificatesDesignTimeFactory : IDesignTimeDbContextFa
     public SqlServerTenantCertificatesMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<SqlServerTenantCertificatesMigrationsDbContext>()
         .UseSqlServer("Server=localhost;Database=netarcaws_design_time;Integrated Security=true;TrustServerCertificate=true", options => options.MigrationsAssembly(typeof(TenantCertificatesDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsCertificateMigrations", "dbo")).Options);
 }
+
+public sealed class InvoiceRecoveryDesignTimeFactory : IDesignTimeDbContextFactory<SqlServerInvoiceRecoveryMigrationsDbContext>
+{
+    public SqlServerInvoiceRecoveryMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<SqlServerInvoiceRecoveryMigrationsDbContext>()
+        .UseSqlServer("Server=localhost;Database=netarcaws_design_time;Integrated Security=true;TrustServerCertificate=true", options => options.MigrationsAssembly(typeof(InvoiceRecoveryDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsInvoiceRecoveryMigrations", "dbo")).Options);
+}
