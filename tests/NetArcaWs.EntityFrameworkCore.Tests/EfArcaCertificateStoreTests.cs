@@ -180,6 +180,32 @@ public sealed class EfArcaCertificateStoreTests
     }
 
     [Fact]
+    public async Task NonUniqueSqliteConstraintFailureIsNotReportedAsCasConflict()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"arca-certs-{Guid.NewGuid():N}.db");
+        NetArcaWsModelOptions model = NetArcaWsModelOptions.Configure(x => x.AddCertificates());
+        using var protector = new AesGcmArcaCertificateProtector("k", new Dictionary<string, byte[]> { ["k"] = RandomNumberGenerator.GetBytes(32) });
+        var factory = new TestFactory(path, model);
+        var store = new EfArcaCertificateStore<ArcaWsDbContext>(factory, model, protector);
+        var scope = new ArcaCertificateScope("constraint", 20_123_456_789, ArcaEnvironment.Homologation);
+        using CertificateFixture initial = CertificateFixture.Create("CN=constraint-initial");
+        using CertificateFixture next = CertificateFixture.Create("CN=constraint-next");
+        try
+        {
+            await using (ArcaWsDbContext db = await factory.CreateDbContextAsync(TestContext.Current.CancellationToken)) await db.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            ArcaCertificateVersion head = await store.RotateAsync(scope, initial.Content, cancellationToken: TestContext.Current.CancellationToken);
+            await using (ArcaWsDbContext db = await factory.CreateDbContextAsync(TestContext.Current.CancellationToken))
+                await db.Database.ExecuteSqlRawAsync("CREATE TRIGGER RejectCertificateInsert BEFORE INSERT ON NetArcaCertificateVersions BEGIN SELECT RAISE(ABORT, 'forced non-unique constraint'); END", TestContext.Current.CancellationToken);
+
+            Func<Task> rotate = () => store.RotateAsync(scope, next.Content, head.VersionId, TestContext.Current.CancellationToken);
+            await rotate.Should().ThrowAsync<DbUpdateException>();
+            (await store.GetActiveAsync(scope, TestContext.Current.CancellationToken))!.Metadata.VersionId.Should().Be(head.VersionId);
+            (await store.ListVersionsAsync(scope, TestContext.Current.CancellationToken)).Should().ContainSingle();
+        }
+        finally { try { File.Delete(path); } catch { } }
+    }
+
+    [Fact]
     public async Task StoreRejectsContextWithDifferentModelFingerprint()
     {
         NetArcaWsModelOptions selected = NetArcaWsModelOptions.Configure(x => x.AddCertificates());
