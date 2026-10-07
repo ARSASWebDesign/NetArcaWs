@@ -128,17 +128,25 @@ byte por byte: el flujo nunca los reemplaza. Se usa Ubuntu 24.04 y restauración
 no reciben OIDC ni credenciales de publicación. No se usa `pull_request_target`.
 El contenido se publica mediante acciones fijadas a commit.
 
+Antes de solicitar el login OIDC de NuGet, el workflow consulta el flat-container
+público para cada ID y versión. Un 404 significa que todavía no existe ese
+paquete; un 200 exige comparar todos los nombres y bytes del ZIP con el artefacto
+construido, ignorando únicamente la firma de repositorio en la entrada raíz
+`.signature.p7s`. Las entradas duplicadas, contenido distinto y respuestas HTTP
+distintas de 200/404 detienen la publicación. Solo los IDs existentes con
+contenido idéntico se marcan para omitir su envío. Si otro actor publica después
+de esta comprobación, el push normal falla y la ejecución debe repetirse para
+comparar de nuevo el contenido antes de omitirlo.
+
 ## Fallos y recuperación
 
 La publicación de once paquetes no es una transacción: algunos pueden subirse
 aunque después falle otro. Corregir el problema y reejecutar el mismo workflow
-con el mismo tag, preferentemente reejecutando solo el job fallido para reutilizar
-los mismos artefactos. Si una reconstrucción difiere de los assets ya adjuntos,
-el flujo se detiene y exige resolver la discrepancia, no sobrescribe archivos.
-`--skip-duplicate` permite continuar sin reemplazar una versión
-que NuGet ya aceptó. Verificar por separado que cada paquete existente
-corresponde a la release;
-no usar esta opción para dar por correcta una versión publicada por otra fuente.
+con el mismo tag para que vuelva a comparar cada versión existente antes de
+continuar. Si una reconstrucción difiere de los assets ya adjuntos o de un
+paquete NuGet existente, el flujo se detiene y exige resolver la discrepancia;
+nunca reemplaza assets ni usa `--skip-duplicate` para aceptar una versión
+preexistente sin verificar su contenido.
 
 No mover ni reutilizar un tag publicado para código diferente. Los paquetes ya
 publicados son inmutables; una corrección de código requiere otra versión. Si
