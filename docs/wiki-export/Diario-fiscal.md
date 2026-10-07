@@ -221,7 +221,11 @@ datos; ver el [ADR 0006](ADR-0006-shared-wsaa-tickets).
 El módulo `InvoiceRecovery` agrega una tabla de metadatos de cola al diario EF,
 sin copiar su payload fiscal. Seleccioná cada servicio dos veces, como servicio
 de facturación y como servicio de recuperación. El siguiente ejemplo usa SQLite
-para el registro operativo local; no migra ni conecta durante la configuración:
+para el registro operativo local. No conecta ni migra al configurar el worker.
+Referenciá `NetArcaWs.EntityFrameworkCore.Migrations.Sqlite` para el actor de
+despliegue. El bloque compila como una unidad con imports implícitos habilitados;
+el host implementa `IArcaRecoveryAuthorization` con su sistema de identidad y
+credenciales:
 
 ```csharp
 using Microsoft.EntityFrameworkCore;
@@ -234,48 +238,6 @@ using NetArcaWs.HealthChecks;
 using NetArcaWs.Invoicing;
 using NetArcaWs.Multitenancy;
 
-static IServiceCollection ConfigureRecoveryWorker(
-    IServiceCollection services, string sqliteConnectionString, string authorizedTenantId)
-{
-    NetArcaWsModelOptions recoveryModel = NetArcaWsModelOptions.Configure(options =>
-        options.AddInvoicing(ArcaService.Wsfev1)
-            .AddInvoiceRecovery(ArcaService.Wsfev1));
-
-    services.AddDbContextFactory<ArcaWsDbContext>(options =>
-        options.UseSqlite(sqliteConnectionString));
-    services.AddNetArcaWsEntityFrameworkStores<ArcaWsDbContext>(recoveryModel);
-    services.AddNetArcaWsInvoicing();
-    services.AddScoped<IArcaRecoveryAuthorization, ApplicationArcaRecoveryAuthorization>();
-    services.AddScoped<IInvoiceRecoveryContextResolver, AuthorizedRecoveryContextResolver>();
-    services.AddNetArcaWsInvoiceRecoveryWorker(
-        new InvoiceRecoveryScope(authorizedTenantId, [ArcaService.Wsfev1]),
-        options =>
-        {
-            options.LeaseDuration = TimeSpan.FromMinutes(5);
-            options.IdleInterval = TimeSpan.FromSeconds(5);
-            options.MaxAttempts = 10;
-            options.BaseBackoff = TimeSpan.FromSeconds(2);
-            options.MaxBackoff = TimeSpan.FromMinutes(5);
-            options.JitterRatio = 0.2;
-        });
-    return services;
-}
-```
-
-El host debe implementar su resolver con la autorización propia de la aplicación.
-El contrato recibe `InvoiceRecoveryWorkItem` y `CancellationToken`, y devuelve
-`ValueTask<ArcaTenantContext>`. Use `workItem.TenantId`, la CUIT y ambiente de
-`workItem.Identity` y `workItem.CredentialReference` para resolver la versión
-exacta guardada. Si la credencial fijada fue revocada, eliminada o ya no está
-autorizada, rechace la operación; no sustituya silenciosamente una credencial
-nueva. El processor vuelve a comprobar tenant, CUIT, ambiente, servicio y fence
-después de resolver el contexto, justo antes de llamar a `SafeInvoiceService`.
-El contexto no constituye autorización de usuario.
-
-Este patrón completo compila al implementar el origen de autorización con el
-modelo de identidad/credenciales de tu aplicación:
-
-```csharp
 public interface IArcaRecoveryAuthorization
 {
     ValueTask<ArcaTenantContext> ResolveAuthorizedContextAsync(
@@ -297,71 +259,104 @@ public sealed class AuthorizedRecoveryContextResolver(
     }
 }
 
-// ApplicationArcaRecoveryAuthorization is implemented by the host. Its method
-// authenticates the tenant and retrieves the exact version named by credentialReference.
-```
-
-Al preparar, primero construí el mismo snapshot tipado que utiliza la emisión
-normal, luego encolalo en una sola transacción junto con factura y reserva de
-serie:
-
-```csharp
-static Task<InvoiceOperation> PrepareWsfeRecoveryAsync(
-    IInvoiceRecoveryQueue queue,
-    ArcaTenantContext authorizedTenantContext,
-    string idempotencyKey,
-    FecaeRequest fecaeRequest,
-    Guid credentialVersionId,
-    CancellationToken cancellationToken)
+public static class RecoveryExample
 {
-    InvoiceSubmission snapshot = SafeInvoiceService.CreateWsfeSubmission(
-        authorizedTenantContext, idempotencyKey, fecaeRequest);
-    string credentialReference = credentialVersionId.ToString("D");
-    return queue.PrepareAndEnqueueAsync(snapshot, credentialReference, cancellationToken);
+    public static IServiceCollection ConfigureRecoveryWorker(
+        IServiceCollection services, string sqliteConnectionString, string authorizedTenantId,
+        Func<IServiceProvider, IArcaRecoveryAuthorization> authorizationFactory)
+    {
+        NetArcaWsModelOptions recoveryModel = NetArcaWsModelOptions.Configure(options =>
+            options.AddInvoicing(ArcaService.Wsfev1)
+                .AddInvoiceRecovery(ArcaService.Wsfev1));
+        services.AddDbContextFactory<ArcaWsDbContext>(options =>
+            options.UseSqlite(sqliteConnectionString));
+        services.AddNetArcaWsEntityFrameworkStores<ArcaWsDbContext>(recoveryModel);
+        services.AddNetArcaWsInvoicing();
+        services.AddScoped(authorizationFactory);
+        services.AddScoped<IInvoiceRecoveryContextResolver, AuthorizedRecoveryContextResolver>();
+        services.AddNetArcaWsInvoiceRecoveryWorker(
+            new InvoiceRecoveryScope(authorizedTenantId, [ArcaService.Wsfev1]),
+            options =>
+            {
+                options.LeaseDuration = TimeSpan.FromMinutes(5);
+                options.IdleInterval = TimeSpan.FromSeconds(5);
+                options.MaxAttempts = 10;
+                options.BaseBackoff = TimeSpan.FromSeconds(2);
+                options.MaxBackoff = TimeSpan.FromMinutes(5);
+                options.JitterRatio = 0.2;
+            });
+        return services;
+    }
+
+    public static Task<InvoiceOperation> PrepareWsfeRecoveryAsync(
+        IInvoiceRecoveryQueue queue, ArcaTenantContext authorizedTenantContext,
+        string idempotencyKey, FecaeRequest fecaeRequest, Guid credentialVersionId,
+        CancellationToken cancellationToken)
+    {
+        InvoiceSubmission snapshot = SafeInvoiceService.CreateWsfeSubmission(
+            authorizedTenantContext, idempotencyKey, fecaeRequest);
+        string credentialReference = credentialVersionId.ToString("D");
+        return queue.PrepareAndEnqueueAsync(snapshot, credentialReference, cancellationToken);
+    }
+
+    public static async Task<(NetArcaWsMigrationStatus Status, string Sql)> InspectRecoveryMigrationsAsync(
+        string sqliteConnectionString, CancellationToken cancellationToken)
+    {
+        NetArcaWsModelOptions deploymentModel = NetArcaWsModelOptions.Configure(options =>
+            options.AddInvoicing(ArcaService.Wsfev1)
+                .AddInvoiceRecovery(ArcaService.Wsfev1));
+        var deploymentServices = new ServiceCollection();
+        deploymentServices.AddNetArcaWsSqliteMigrations(sqliteConnectionString, deploymentModel);
+        await using ServiceProvider deploymentProvider = deploymentServices.BuildServiceProvider();
+        INetArcaWsMigrator migrator = deploymentProvider.GetRequiredService<INetArcaWsMigrator>();
+        NetArcaWsMigrationStatus status = await migrator.GetStatusAsync(cancellationToken);
+        if (status.Modules.Any(module => module.State is NetArcaWsMigrationState.UntrackedSchema
+                or NetArcaWsMigrationState.UnknownAppliedMigration or NetArcaWsMigrationState.InconsistentHistory
+                or NetArcaWsMigrationState.TrackedSchemaIncomplete))
+            throw new InvalidOperationException("Migration preflight requires operator diagnosis.");
+        string sql = migrator.GenerateScript(NetArcaWsPersistenceModule.InvoiceRecovery,
+            fromMigration: "0", toMigration: null, idempotent: false);
+        return (status, sql);
+    }
+
+    public static async Task<NetArcaWsMigrationStatus> ApplyReviewedMigrationsAsync(
+        string sqliteConnectionString, CancellationToken cancellationToken)
+    {
+        NetArcaWsModelOptions deploymentModel = NetArcaWsModelOptions.Configure(options =>
+            options.AddInvoicing(ArcaService.Wsfev1)
+                .AddInvoiceRecovery(ArcaService.Wsfev1));
+        var deploymentServices = new ServiceCollection();
+        deploymentServices.AddNetArcaWsSqliteMigrations(sqliteConnectionString, deploymentModel);
+        await using ServiceProvider deploymentProvider = deploymentServices.BuildServiceProvider();
+        INetArcaWsMigrator migrator = deploymentProvider.GetRequiredService<INetArcaWsMigrator>();
+        return await migrator.ApplyAsync(cancellationToken);
+    }
 }
 ```
 
-La referencia es opaca, opcional y de hasta 512 unidades UTF-16. Puede ser un ID
-de versión propio, pero nunca incluye PFX/PEM, clave privada, Token o Sign. Un
-replay compatible conserva intento, próximo horario, referencia y claim. Un
-cambio del payload fiscal o de la referencia en la misma generación entra en
-conflicto. Para revisar un `Rejected`, prepará antes la revisión explícita del
-diario; la cola solo fija esa versión cuando se la programa expresamente.
+La fábrica registra el servicio de autorización scoped. Debe autorizar tenant,
+CUIT y ambiente, y devolver el contexto usando la versión exacta nombrada por
+`credentialReference`; si esa versión fue revocada, eliminada o dejó de estar
+autorizada, debe rechazarla sin sustituirla. El processor vuelve a comprobar
+tenant, CUIT, ambiente, servicio y fencing antes de llamar a `SafeInvoiceService`.
+El contexto no autoriza al usuario final. Antes de invocar
+`ConfigureRecoveryWorker`, el host registra su implementación real de
+`IWsfev1Service`; `AddNetArcaWsInvoicing` registra `SafeInvoiceService` y el store
+EF registra `IInvoiceRecoveryQueue`.
 
-El paquete de migraciones se registra y ejecuta desde un actor de despliegue
-separado del host de la API. Para SQLite, agregá la referencia
-`NetArcaWs.EntityFrameworkCore.Migrations.Sqlite` y usa la misma selección de
-módulos:
+Al preparar, el ejemplo crea el mismo snapshot tipado de la emisión normal y lo
+encola en una transacción con factura y reserva de serie. La referencia es opaca,
+opcional y de hasta 512 unidades UTF-16: puede ser un ID de versión, pero nunca
+incluye PFX/PEM, clave privada, Token o Sign. Un replay compatible conserva
+intento, próximo horario, referencia y claim. Un cambio del payload fiscal o de
+la referencia en la misma generación entra en conflicto. Para revisar un
+`Rejected`, prepará antes la revisión explícita del diario.
 
-```csharp
-static async Task<NetArcaWsMigrationStatus> ApplyRecoveryMigrations(
-    string sqliteConnectionString, CancellationToken cancellationToken)
-{
-    NetArcaWsModelOptions deploymentModel = NetArcaWsModelOptions.Configure(options =>
-        options.AddInvoicing(ArcaService.Wsfev1)
-            .AddInvoiceRecovery(ArcaService.Wsfev1));
-    var deploymentServices = new ServiceCollection();
-    deploymentServices.AddNetArcaWsSqliteMigrations(sqliteConnectionString, deploymentModel);
-    await using ServiceProvider deploymentProvider = deploymentServices.BuildServiceProvider();
-    INetArcaWsMigrator migrator = deploymentProvider.GetRequiredService<INetArcaWsMigrator>();
-
-    NetArcaWsMigrationStatus before = await migrator.GetStatusAsync(cancellationToken);
-    if (before.Modules.Any(module => module.State is NetArcaWsMigrationState.UntrackedSchema
-            or NetArcaWsMigrationState.UnknownAppliedMigration or NetArcaWsMigrationState.InconsistentHistory
-            or NetArcaWsMigrationState.TrackedSchemaIncomplete))
-        throw new InvalidOperationException("Migration preflight found a schema requiring operator diagnosis.");
-    string reviewedSql = migrator.GenerateScript(
-        NetArcaWsPersistenceModule.InvoiceRecovery,
-        fromMigration: "0", toMigration: null, idempotent: false);
-    // El actor de despliegue revisa before y reviewedSql antes de esta llamada.
-    _ = reviewedSql;
-    return await migrator.ApplyAsync(cancellationToken);
-}
-```
-
-El módulo queda seleccionado por `recoveryModel`; solo `ApplyAsync` cambia el
-esquema. El estado `UntrackedSchema`, IDs desconocidos, historial inconsistente
-o esquema incompleto requiere diagnóstico, no un baseline ni retry ciego. La
+`InspectRecoveryMigrationsAsync` devuelve el estado y el SQL para revisión; solo
+después de aprobarlos ejecutá `ApplyReviewedMigrationsAsync` desde el actor de
+despliegue. El método vuelve a registrar el migrator y `ApplyAsync` repite el
+preflight antes de aplicar. El estado `UntrackedSchema`, IDs desconocidos, historia inconsistente
+o esquema incompleto requiere diagnóstico, no baseline ni retry ciego. La
 historia independiente es `__NetArcaWsInvoiceRecoveryMigrations` y el ID inicial
 `20261007000400_InitialInvoiceRecovery`; el apply exclusivo crea solo
 `NetArcaInvoiceRecoveryJobs`. SQLite no admite SQL idempotente. MySQL/MariaDB
@@ -398,9 +393,10 @@ no está en los paquetes públicos 0.6.0 y requiere una publicación posterior.
 La evidencia de Task 3 reporta suites locales completas para estas revisiones:
 SQLite 131/131, MySQL 8.4.11 29/29, MariaDB 11.4.13 29/29, PostgreSQL 17.6
 28/28 y SQL Server Developer 28/28; los proyectos offline de metadatos aprobaron
-PostgreSQL 8/8 y SQL Server 19/19. Las pruebas recovery específicas de preflight,
-fallo y cancelación fueron focalizadas y son subconjuntos de esas matrices,
-excepto las ejecuciones dedicadas MySQL y MariaDB de cancelación (1/1 cada una).
+PostgreSQL 8/8 y SQL Server 19/19. Las comprobaciones recovery focalizadas
+posteriores cubrieron preflight, fallos y cancelación. Algunas repiten casos de
+esas matrices y no deben sumarse como pruebas únicas; las ejecuciones dedicadas
+MySQL y MariaDB de cancelación aprobaron 1/1 cada una.
 Son datos sintéticos y verifican las versiones indicadas; no son homologación
 ARCA ni compatibilidad universal. El consumer smoke usó un feed local y caché
 nueva, aplicó los cuatro módulos SQLite, verificó recovery sintético, generó
