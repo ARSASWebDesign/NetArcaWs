@@ -87,9 +87,9 @@ La guía [Diario fiscal](https://github.com/ARSASWebDesign/NetArcaWs/wiki/Diario
 
 ## Documentación
 
-La [wiki del proyecto](https://github.com/ARSASWebDesign/NetArcaWs/wiki) contiene guías de uso, catálogo de servicios, operaciones, arquitectura, seguridad, homologación y contribución. El inventario de fuentes upstream se mantiene en [referencias del repositorio](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/upstream-inventory.md).
+La [wiki del proyecto](https://github.com/ARSASWebDesign/NetArcaWs/wiki) contiene guías de uso, catálogo de servicios, operaciones, arquitectura, seguridad, homologación y contribución. El inventario de fuentes upstream se mantiene en [referencias del repositorio](Inventario-del-proyecto-original).
 
-Para conocer la arquitectura y las decisiones de seguridad, consultá [ARCHITECTURE.md](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/ARCHITECTURE.md), [SECURITY.md](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/SECURITY.md) y los [ADR](https://github.com/ARSASWebDesign/NetArcaWs/tree/main/docs/adr).
+Para conocer la arquitectura y las decisiones de seguridad, consultá [ARCHITECTURE.md](Arquitectura-general), [SECURITY.md](Seguridad-del-proyecto) y los [ADR](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/adr/).
 
 ## Desarrollo y contribuciones
 
@@ -101,8 +101,8 @@ dotnet build NetArcaWs.slnx --configuration Release --no-restore
 dotnet test --solution NetArcaWs.slnx --configuration Release --no-build --no-restore
 ```
 
-Las pruebas locales usan datos sintéticos y no acreditan homologación con ARCA. Las pruebas fiscales son opt-in y requieren certificados y permisos adecuados. Leé [CONTRIBUTING.md](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/CONTRIBUTING.md) antes de enviar cambios.
+Las pruebas locales usan datos sintéticos y no acreditan homologación con ARCA. Las pruebas fiscales son opt-in y requieren certificados y permisos adecuados. Leé [CONTRIBUTING.md](Contribuir) antes de enviar cambios.
 
 ## Licencia
 
-NetArcaWs se distribuye bajo [LGPL-3.0-or-later](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/LICENSE), con atribución al proyecto upstream [PyAfipWs](https://github.com/reingart/pyafipws) y a su autor, Mariano Reingart. Consultá [THIRD-PARTY-NOTICES.md](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/THIRD-PARTY-NOTICES.md) para los avisos de terceros.
+NetArcaWs se distribuye bajo [LGPL-3.0-or-later](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/LICENSE), con atribución al proyecto upstream [PyAfipWs](https://github.com/reingart/pyafipws) y a su autor, Mariano Reingart. Consultá [THIRD-PARTY-NOTICES.md](Avisos-de-terceros) para los avisos de terceros.
