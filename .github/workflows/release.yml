@@ -43,20 +43,40 @@ jobs:
         run: dotnet run --project tools/NetArcaWs.Build --configuration Release --no-restore -- release-version
       - run: dotnet build NetArcaWs.slnx --configuration Release --no-restore
       - run: dotnet test --solution NetArcaWs.slnx --configuration Release --no-build --no-restore
-      - run: dotnet pack src/NetArcaWs/NetArcaWs.csproj --configuration Release --no-build --no-restore --output artifacts
-      - run: dotnet pack src/NetArcaWs.Tool/NetArcaWs.Tool.csproj --configuration Release --no-build --no-restore --output artifacts
-      - name: Validate both packages and install tool
+      - run: dotnet run --project tools/NetArcaWs.Build --configuration Release --no-build --no-restore -- persistence-schema --check
+      - run: dotnet run --project tools/NetArcaWs.Build --configuration Release --no-build --no-restore -- persistence-migrations --check
+      - name: Pack all release projects
+        run: |
+          set -euo pipefail
+          projects=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer)
+          for project in "${projects[@]}"; do
+            dotnet pack "src/$project/$project.csproj" --configuration Release --no-build --no-restore --output artifacts
+          done
+      - name: Validate packages, install tool and smoke-test persistence packages
         env:
           PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+          NUGET_PACKAGES: ${{ runner.temp }}/netarcaws-nuget-packages
         run: |
+          set -euo pipefail
+          projects=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer)
+          expected=()
+          for project in "${projects[@]}"; do
+            filename="$project.$PACKAGE_VERSION.nupkg"
+            test -f "artifacts/$filename"
+            expected+=("$filename")
+          done
+          actual=(artifacts/*.nupkg)
+          test "${#actual[@]}" -eq "${#expected[@]}"
           test -f "artifacts/NetArcaWs.$PACKAGE_VERSION.nupkg"
           test -f "artifacts/NetArcaWs.Tool.$PACKAGE_VERSION.nupkg"
           dotnet tool install NetArcaWs.Tool --tool-path artifacts/tool-smoke --source artifacts --version "$PACKAGE_VERSION"
           artifacts/tool-smoke/netarcaws --help
           test "$(artifacts/tool-smoke/netarcaws --version)" = "netarcaws $PACKAGE_VERSION"
+          dotnet restore tests/NetArcaWs.Persistence.PackageSmoke/NetArcaWs.Persistence.PackageSmoke.csproj --configfile tests/NetArcaWs.Persistence.PackageSmoke/NuGet.config -p:PersistencePackageVersion="$PACKAGE_VERSION"
+          dotnet run --project tests/NetArcaWs.Persistence.PackageSmoke/NetArcaWs.Persistence.PackageSmoke.csproj --configuration Release --no-restore -p:PersistencePackageVersion="$PACKAGE_VERSION"
           git rev-parse HEAD > artifacts/BUILD_COMMIT
           cd artifacts
-          sha256sum -- "NetArcaWs.$PACKAGE_VERSION.nupkg" "NetArcaWs.Tool.$PACKAGE_VERSION.nupkg" > SHA256SUMS
+          sha256sum -- "${expected[@]}" > SHA256SUMS
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: nuget-${{ steps.version.outputs.version }}
@@ -108,13 +128,17 @@ jobs:
           BUILD_COMMIT: ${{ steps.release.outputs.commit }}
         run: |
           set -euo pipefail
-          library="NetArcaWs.$PACKAGE_VERSION.nupkg"
-          tool="NetArcaWs.Tool.$PACKAGE_VERSION.nupkg"
-          test -f "$library"
-          test -f "$tool"
-          test "$(find . -maxdepth 1 -type f -name '*.nupkg' | wc -l | tr -d ' ')" = 2
+          packages=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer)
+          expected=()
+          for package in "${packages[@]}"; do
+            filename="$package.$PACKAGE_VERSION.nupkg"
+            test -f "$filename"
+            expected+=("$filename")
+          done
+          actual=( *.nupkg )
+          test "${#actual[@]}" -eq "${#expected[@]}"
           test "$(cat BUILD_COMMIT)" = "$BUILD_COMMIT"
-          awk -v library="$library" -v tool="$tool" 'NF == 2 && $1 ~ /^[0-9a-f]{64}$/ && ($2 == library || $2 == tool || $2 == "./" library || $2 == "./" tool) { sub(/^\.\//, "", $2); seen[$2] = 1; count++ } END { exit !(NR == 2 && count == 2 && seen[library] && seen[tool]) }' SHA256SUMS
+          awk -v expected="${expected[*]}" 'BEGIN { count=split(expected, names, " "); for (i=1;i<=count;i++) wanted[names[i]]=1 } NF == 2 && $1 ~ /^[0-9a-f]{64}$/ { sub(/^\.\//, "", $2); if (wanted[$2] && !seen[$2]) { seen[$2]=1; valid++ } else exit 1; next } { exit 1 } END { exit !(NR == count && valid == count) }' SHA256SUMS
           sha256sum --check SHA256SUMS
       - name: Attach missing release assets
         env:
@@ -123,7 +147,10 @@ jobs:
           PACKAGE_VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          expected=("NetArcaWs.$PACKAGE_VERSION.nupkg" "NetArcaWs.Tool.$PACKAGE_VERSION.nupkg" SHA256SUMS BUILD_COMMIT)
+          packages=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer)
+          expected=()
+          for package in "${packages[@]}"; do expected+=("$package.$PACKAGE_VERSION.nupkg"); done
+          expected+=(SHA256SUMS BUILD_COMMIT)
           assets="$(gh release view "$RELEASE_TAG" --repo ARSASWebDesign/NetArcaWs --json assets --jq '.assets[].name')"
           missing=()
           for asset in "${expected[@]}"; do
@@ -157,10 +184,13 @@ jobs:
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
         with:
           user: ${{ vars.NUGET_USER }}
-      - name: Publish library and tool
+      - name: Publish all packages
         env:
           NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
           PACKAGE_VERSION: ${{ needs.build.outputs.version }}
         run: |
-          dotnet nuget push "artifacts/NetArcaWs.$PACKAGE_VERSION.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
-          dotnet nuget push "artifacts/NetArcaWs.Tool.$PACKAGE_VERSION.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+          set -euo pipefail
+          packages=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer)
+          for package in "${packages[@]}"; do
+            dotnet nuget push "artifacts/$package.$PACKAGE_VERSION.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+          done

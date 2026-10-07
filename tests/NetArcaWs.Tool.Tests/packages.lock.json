@@ -404,7 +404,7 @@
       "netarcaws.tool": {
         "type": "Project",
         "dependencies": {
-          "NetArcaWs": "[0.5.0, )"
+          "NetArcaWs": "[0.6.0, )"
         }
       }
     }

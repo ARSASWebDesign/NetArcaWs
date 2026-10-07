@@ -527,27 +527,27 @@
           "Microsoft.EntityFrameworkCore": "[10.0.12, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.12, )",
-          "NetArcaWs": "[0.5.0, )"
+          "NetArcaWs": "[0.6.0, )"
         }
       },
       "netarcaws.entityframeworkcore.migrations.mariadb": {
         "type": "Project",
         "dependencies": {
           "Microting.EntityFrameworkCore.MySql": "[10.0.12, )",
-          "NetArcaWs.EntityFrameworkCore": "[0.5.0, )"
+          "NetArcaWs.EntityFrameworkCore": "[0.6.0, )"
         }
       },
       "netarcaws.entityframeworkcore.migrations.mysql": {
         "type": "Project",
         "dependencies": {
           "Microting.EntityFrameworkCore.MySql": "[10.0.12, )",
-          "NetArcaWs.EntityFrameworkCore": "[0.5.0, )"
+          "NetArcaWs.EntityFrameworkCore": "[0.6.0, )"
         }
       },
       "netarcaws.entityframeworkcore.migrations.postgresql": {
         "type": "Project",
         "dependencies": {
-          "NetArcaWs.EntityFrameworkCore": "[0.5.0, )",
+          "NetArcaWs.EntityFrameworkCore": "[0.6.0, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )"
         }
       },
@@ -555,14 +555,14 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.EntityFrameworkCore.Sqlite": "[10.0.12, )",
-          "NetArcaWs.EntityFrameworkCore": "[0.5.0, )"
+          "NetArcaWs.EntityFrameworkCore": "[0.6.0, )"
         }
       },
       "netarcaws.entityframeworkcore.migrations.sqlserver": {
         "type": "Project",
         "dependencies": {
           "Microsoft.EntityFrameworkCore.SqlServer": "[10.0.12, )",
-          "NetArcaWs.EntityFrameworkCore": "[0.5.0, )"
+          "NetArcaWs.EntityFrameworkCore": "[0.6.0, )"
         }
       },
       "netarcaws.entityframeworkcore.mysql": {
@@ -572,7 +572,7 @@
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.12, )",
           "Microting.EntityFrameworkCore.MySql": "[10.0.12, )",
-          "NetArcaWs.EntityFrameworkCore": "[0.5.0, )"
+          "NetArcaWs.EntityFrameworkCore": "[0.6.0, )"
         }
       },
       "netarcaws.entityframeworkcore.postgresql": {
@@ -581,7 +581,7 @@
           "Microsoft.EntityFrameworkCore": "[10.0.12, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.12, )",
-          "NetArcaWs.EntityFrameworkCore": "[0.5.0, )",
+          "NetArcaWs.EntityFrameworkCore": "[0.6.0, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )"
         }
       },
@@ -590,7 +590,7 @@
         "dependencies": {
           "Microsoft.EntityFrameworkCore.SqlServer": "[10.0.12, )",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.12, )",
-          "NetArcaWs.EntityFrameworkCore": "[0.5.0, )"
+          "NetArcaWs.EntityFrameworkCore": "[0.6.0, )"
         }
       }
     }
