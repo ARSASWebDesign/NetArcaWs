@@ -15,7 +15,7 @@ public static class PersistenceSchema
     public static IReadOnlyDictionary<string, string> GenerateScripts()
     {
         string[] providers = ["sqlite", "mysql", "mariadb", "postgresql", "sqlserver"];
-        string[] selections = ["invoicing", "wsaa-tickets", "tenant-certificates", "all"];
+        string[] selections = ["invoicing", "wsaa-tickets", "tenant-certificates", "invoice-recovery", "all"];
         var scripts = new SortedDictionary<string, string>(StringComparer.Ordinal);
         foreach (string provider in providers)
         foreach (string selection in selections)
@@ -59,7 +59,7 @@ public static class PersistenceSchema
         {
             if (!result.IsCurrent)
                 throw new InvalidOperationException("Persistence schema drift detected: " + string.Join(", ", result.Drifted));
-            Console.WriteLine("Persistence schema scripts are current (20 provider/selection combinations).");
+            Console.WriteLine("Persistence schema scripts are current (25 provider/selection combinations).");
             return;
         }
 
@@ -81,10 +81,12 @@ public static class PersistenceSchema
         "wsaa-tickets" => NetArcaWsModelOptions.Configure(builder =>
             builder.AddWsaaTickets(ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca)),
         "tenant-certificates" => NetArcaWsModelOptions.Configure(builder => builder.AddCertificates()),
+        "invoice-recovery" => NetArcaWsModelOptions.Configure(builder => builder.AddInvoiceRecovery(ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca)),
         "all" => NetArcaWsModelOptions.Configure(builder =>
             builder.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca)
                 .AddWsaaTickets(ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca)
-                .AddCertificates()),
+                .AddCertificates()
+                .AddInvoiceRecovery(ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca)),
         _ => throw new ArgumentOutOfRangeException(nameof(selection))
     };
 

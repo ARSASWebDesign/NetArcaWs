@@ -79,7 +79,7 @@ La [herramienta de certificados](https://github.com/ARSASWebDesign/NetArcaWs/wik
 
 ## Persistencia opcional
 
-El paquete principal no depende de EF Core; los paquetes opcionales agregan persistencia para SQLite, MySQL/MariaDB, PostgreSQL y SQL Server, con migraciones oficiales por motor y módulo cuando se seleccionan. El store versionado de certificados también es opt-in y requiere un keyring externo administrado por la aplicación; la [guía de certificados multitenant](docs/wiki/Certificados-multitenant.md) documenta su uso y límites. Esta API se incorporó después de la publicación 0.6.0 y estará disponible en la siguiente publicación de los paquetes EF.
+El paquete principal no depende de EF Core; los paquetes opcionales agregan persistencia para SQLite, MySQL/MariaDB, PostgreSQL y SQL Server, con migraciones oficiales por motor y módulo cuando se seleccionan. El store versionado de certificados y la cola/worker de recuperación fiscal son opt-in; la aplicación autoriza los contextos, fija la referencia de credencial y aplica sus migraciones expresamente. SQLite admite procesos del mismo host sobre archivo local; para varios hosts se requiere una base transaccional compartida. Estas APIs se incorporaron después de la publicación 0.6.0 y quedan pendientes de una publicación posterior de los paquetes EF.
 
 La guía [Diario fiscal](https://github.com/ARSASWebDesign/NetArcaWs/wiki/Diario-fiscal) explica configuración y recuperación, y [Modelo relacional](https://github.com/ARSASWebDesign/NetArcaWs/wiki/Modelo-relacional) documenta las tablas y las migraciones oficiales opcionales. El diario durable cubre autorizaciones unitarias WSFEv1, WSFEXv1 y WSMTXCA; una respuesta incierta requiere reconciliación y no se reenvía automáticamente.
 

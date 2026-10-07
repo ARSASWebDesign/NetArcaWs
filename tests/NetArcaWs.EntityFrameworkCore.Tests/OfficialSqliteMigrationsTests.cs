@@ -1,5 +1,7 @@
 using AwesomeAssertions;
+using System.Diagnostics;
 using System.Data.Common;
+using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -11,6 +13,9 @@ using NetArcaWs.EntityFrameworkCore;
 using NetArcaWs.EntityFrameworkCore.Migrations;
 using NetArcaWs.EntityFrameworkCore.Migrations.Sqlite;
 using NetArcaWs.HealthChecks;
+using NetArcaWs.Invoicing;
+using NetArcaWs.Multitenancy;
+using NetArcaWs.Persistence.Probe;
 using NetArcaWs.Services;
 using Xunit;
 
@@ -47,6 +52,278 @@ public sealed class OfficialSqliteMigrationsTests
         (await db.Tables()).Should().BeEquivalentTo("NetArcaCertificateSlots", "NetArcaCertificateVersions",
             "__NetArcaWsCertificateMigrations", "__EFMigrationsLock");
         (await db.Migrator.GetStatusAsync(TestContext.Current.CancellationToken)).Modules.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task InvoiceRecoveryOnlyCreatesItsQueueTableAndIndependentHistory()
+    {
+        await using var db = new TestDatabase(RecoveryOptions());
+        NetArcaWsMigrationStatus status = await db.Migrator.ApplyAsync(TestContext.Current.CancellationToken);
+
+        status.Modules.Should().ContainSingle().Which.Module.Should().Be(NetArcaWsPersistenceModule.InvoiceRecovery);
+        status.Modules.Single().State.Should().Be(NetArcaWsMigrationState.Current);
+        status.Modules.Single().Applied.Should().ContainSingle().Which.Should().Be("20261007000400_InitialInvoiceRecovery");
+        (await db.Tables()).Should().BeEquivalentTo("NetArcaInvoiceRecoveryJobs",
+            "__NetArcaWsInvoiceRecoveryMigrations", "__EFMigrationsLock");
+    }
+
+    [Fact]
+    public async Task AddingInvoiceRecoveryPreservesExistingInvoiceAndTicketRowsAndIsOptIn()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"arca-recovery-migration-{Guid.NewGuid():N}.db");
+        string connectionString = $"Data Source={path};Pooling=False";
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        try
+        {
+            await using var existing = new TestDatabase(connectionString, BothOptions());
+            (await existing.Migrator.ApplyAsync(cancellationToken)).Modules.Should().HaveCount(2);
+            await existing.Execute("INSERT INTO NetArcaInvoices (TenantHash, KeyHash, TenantId, IdempotencyKey, Service, ServiceHash, Environment, Cuit, PointOfSale, VoucherType, VoucherNumber, FiscalHash, Payload, PayloadHash, CanonicalVersion, State, Version, Attempt, CreatedUtcTicks) VALUES ('t','k','tenant','idem','WSFEv1','s',1,1,1,1,1,'f','<synthetic>invoice</synthetic>','p',1,1,1,1,1)");
+            await existing.Execute("INSERT INTO NetArcaWsaaTickets (KeyHash, CertificateHash, Endpoint, Service, State, Fence, Version, Nonce, Ciphertext, Tag, UpdatedUtcTicks) VALUES ('k','c','https://synthetic.invalid/wsaa','wsfev1',3,4,5,X'010203',X'0B16212C37',X'060708',123456789)");
+            byte[] ticketCiphertext = await ReadSqliteBlobAsync(connectionString,
+                "SELECT Ciphertext FROM NetArcaWsaaTickets WHERE KeyHash='k'", cancellationToken);
+
+            await using var recovery = new TestDatabase(connectionString, RecoveryOptions());
+            NetArcaWsMigrationStatus added = await recovery.Migrator.ApplyAsync(cancellationToken);
+            added.Modules.Should().ContainSingle().Which.Applied.Should().ContainSingle()
+                .Which.Should().Be("20261007000400_InitialInvoiceRecovery");
+            (await recovery.Migrator.ApplyAsync(cancellationToken)).Modules.Single().Applied.Should().Equal(added.Modules.Single().Applied);
+            (await ReadSqliteIntAsync(connectionString, "SELECT COUNT(*) FROM NetArcaInvoices WHERE KeyHash='k'", cancellationToken)).Should().Be(1);
+            (await ReadSqliteBlobAsync(connectionString, "SELECT Ciphertext FROM NetArcaWsaaTickets WHERE KeyHash='k'", cancellationToken))
+                .Should().Equal(ticketCiphertext);
+            (await recovery.Tables()).Should().Contain("NetArcaInvoiceRecoveryJobs").And.Contain("__NetArcaWsInvoiceRecoveryMigrations");
+
+            var disabled = new TestDatabase(connectionString, NetArcaWsModelOptions.Configure(_ => { }));
+            await using (disabled)
+            {
+                (await disabled.Migrator.ApplyAsync(cancellationToken)).Modules.Should().BeEmpty();
+                (await disabled.Tables()).Should().Equal(await recovery.Tables());
+            }
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData("untracked")]
+    [InlineData("unknown-history")]
+    [InlineData("missing-table")]
+    public async Task InvoiceRecoveryPreflightRejectsUnknownUntrackedAndIncompleteOwnedSchemaWithoutMutation(string setup)
+    {
+        await using var db = new TestDatabase(RecoveryOptions());
+        if (setup == "untracked")
+            await db.Execute("CREATE TABLE NetArcaInvoiceRecoveryJobs (SyntheticTrap INTEGER NOT NULL)");
+        else if (setup == "unknown-history")
+            await db.Execute("CREATE TABLE __NetArcaWsInvoiceRecoveryMigrations (MigrationId TEXT PRIMARY KEY, ProductVersion TEXT NOT NULL); INSERT INTO __NetArcaWsInvoiceRecoveryMigrations VALUES ('29990101000000_FutureRecovery', '10.0.12')");
+        else
+        {
+            await db.Migrator.ApplyAsync(TestContext.Current.CancellationToken);
+            await db.Execute("DROP TABLE NetArcaInvoiceRecoveryJobs");
+        }
+
+        string[] tablesBefore = await db.Tables();
+        NetArcaWsMigrationStatus before = await db.Migrator.GetStatusAsync(TestContext.Current.CancellationToken);
+        NetArcaWsMigrationState expected = setup switch
+        {
+            "untracked" => NetArcaWsMigrationState.UntrackedSchema,
+            "unknown-history" => NetArcaWsMigrationState.UnknownAppliedMigration,
+            _ => NetArcaWsMigrationState.TrackedSchemaIncomplete
+        };
+        before.Modules.Should().ContainSingle().Which.State.Should().Be(expected);
+        Func<Task> apply = () => db.Migrator.ApplyAsync(TestContext.Current.CancellationToken);
+        await apply.Should().ThrowAsync<NetArcaWsMigrationPreflightException>();
+        NetArcaWsMigrationStatus after = await db.Migrator.GetStatusAsync(TestContext.Current.CancellationToken);
+        after.Modules.Single().State.Should().Be(expected);
+        after.Modules.Single().Applied.Should().Equal(before.Modules.Single().Applied);
+        after.Modules.Single().PresentTables.Should().Equal(before.Modules.Single().PresentTables);
+        (await db.Tables()).Should().Equal(tablesBefore);
+    }
+
+    [Fact]
+    public async Task InvoiceRecoveryDdlFailureRollsBackQueueAndHistoryAndPreservesExistingModuleRows()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"arca-recovery-ddl-failure-{Guid.NewGuid():N}.db");
+        string connectionString = $"Data Source={path};Pooling=False";
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        try
+        {
+            await using var existing = new TestDatabase(connectionString, ExistingDataOptions());
+            (await existing.Migrator.ApplyAsync(cancellationToken)).Modules.Should().HaveCount(3);
+            await SeedExistingModuleRowsAsync(existing, cancellationToken);
+            var factory = new FailDuringRecoveryMigrationFactory(connectionString, new SqliteMigrationContextFactory(connectionString));
+            var recoveryMigrator = new NetArcaWsMigrator(factory, [NetArcaWsPersistenceModule.InvoiceRecovery]);
+
+            Func<Task> apply = () => recoveryMigrator.ApplyAsync(cancellationToken);
+            await apply.Should().ThrowAsync<InvalidOperationException>().WithMessage("Synthetic recovery DDL failure.");
+            (await recoveryMigrator.GetStatusAsync(cancellationToken)).Modules.Should().ContainSingle()
+                .Which.State.Should().Be(NetArcaWsMigrationState.Empty);
+            (await existing.Tables()).Should().Contain("NetArcaInvoices", "NetArcaWsaaTickets", "NetArcaCertificateSlots", "NetArcaCertificateVersions")
+                .And.NotContain("NetArcaInvoiceRecoveryJobs");
+            await AssertExistingModuleRowsAsync(existing, cancellationToken);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task InvoiceRecoveryCancellationRollsBackQueueHistoryAndPreservesExistingModuleRows()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"arca-recovery-cancel-{Guid.NewGuid():N}.db");
+        string connectionString = $"Data Source={path};Pooling=False";
+        using var cancellation = new CancellationTokenSource();
+        try
+        {
+            await using var existing = new TestDatabase(connectionString, ExistingDataOptions());
+            (await existing.Migrator.ApplyAsync(TestContext.Current.CancellationToken)).Modules.Should().HaveCount(3);
+            await SeedExistingModuleRowsAsync(existing, TestContext.Current.CancellationToken);
+            var factory = new CancelDuringRecoveryMigrationFactory(connectionString, new SqliteMigrationContextFactory(connectionString), cancellation);
+            var recoveryMigrator = new NetArcaWsMigrator(factory, [NetArcaWsPersistenceModule.InvoiceRecovery]);
+
+            Func<Task> apply = () => recoveryMigrator.ApplyAsync(cancellation.Token);
+            await apply.Should().ThrowAsync<OperationCanceledException>();
+            cancellation.IsCancellationRequested.Should().BeTrue();
+            (await recoveryMigrator.GetStatusAsync(TestContext.Current.CancellationToken)).Modules.Should().ContainSingle()
+                .Which.State.Should().Be(NetArcaWsMigrationState.Empty);
+            (await existing.Tables()).Should().Contain("NetArcaInvoices", "NetArcaWsaaTickets", "NetArcaCertificateSlots", "NetArcaCertificateVersions")
+                .And.NotContain("NetArcaInvoiceRecoveryJobs");
+            await AssertExistingModuleRowsAsync(existing, TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task Independent_processes_claim_once_then_restart_reclaims_expired_prepared_and_rejects_stale_fence()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"arca-recovery-process-{Guid.NewGuid():N}.db");
+        string connectionString = $"Data Source={path};Pooling=False;Default Timeout=10";
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        NetArcaWsModelOptions options = RecoveryModelOptions();
+        try
+        {
+            await using var migrations = new TestDatabase(connectionString, options);
+            (await migrations.Migrator.ApplyAsync(cancellationToken)).Modules.Should().HaveCount(2);
+            var failure = new RecoveryQueueInsertFailureInterceptor();
+            await using ServiceProvider stores = new ServiceCollection()
+                .AddDbContextFactory<ArcaWsDbContext>(builder => builder.UseSqlite(connectionString).AddInterceptors(failure))
+                .AddNetArcaWsEntityFrameworkStores<ArcaWsDbContext>(options)
+                .BuildServiceProvider();
+            IInvoiceRecoveryQueue queue = stores.GetRequiredService<IInvoiceRecoveryQueue>();
+            IInvoiceJournal journal = stores.GetRequiredService<IInvoiceJournal>();
+
+            string tenant = "sqlite-process-" + Guid.NewGuid().ToString("N");
+            InvoiceSubmission atomic = new(tenant, "atomic-failure", "wsfe",
+                new InvoiceIdentity(ArcaEnvironment.Homologation, 20999888777, 97, 1, 950000), "<synthetic>sqlite-atomic</synthetic>");
+            failure.FailRecoveryInsert = true;
+            Func<Task> failQueueInsert = () => queue.PrepareAndEnqueueAsync(atomic, "synthetic-credential-reference", cancellationToken);
+            await failQueueInsert.Should().ThrowAsync<Exception>();
+            failure.FailRecoveryInsert = false;
+            (await journal.FindAsync(atomic.TenantId, atomic.IdempotencyKey, cancellationToken)).Should().BeNull();
+            (await queue.FindAsync(new InvoiceRecoveryScope(tenant, [ArcaService.Wsfev1]), atomic.IdempotencyKey, cancellationToken)).Should().BeNull();
+            await queue.PrepareAndEnqueueAsync(atomic, "synthetic-credential-reference", cancellationToken);
+            (await queue.PrepareAndEnqueueAsync(atomic, "synthetic-credential-reference", cancellationToken))
+                .Submission.Should().BeEquivalentTo(atomic);
+            Func<Task> conflictingReplay = () => queue.PrepareAndEnqueueAsync(atomic with { Payload = "<synthetic>changed</synthetic>" },
+                "synthetic-credential-reference", cancellationToken);
+            await conflictingReplay.Should().ThrowAsync<InvoiceRecoveryConflictException>();
+            InvoiceSubmission duplicateIdentity = atomic with
+            {
+                TenantId = tenant + "-other",
+                IdempotencyKey = "global-identity",
+                Service = "wsfex"
+            };
+            Func<Task> globalIdentityConflict = () => queue.PrepareAndEnqueueAsync(duplicateIdentity,
+                "synthetic-credential-reference", cancellationToken);
+            await globalIdentityConflict.Should().ThrowAsync<InvoiceRecoveryConflictException>();
+
+            InvoiceSubmission seriesLeft = atomic with
+            {
+                TenantId = tenant + "-series-left", IdempotencyKey = "series-left",
+                Identity = atomic.Identity with { Cuit = 20999888778, VoucherNumber = 950010 }
+            };
+            InvoiceSubmission seriesRight = atomic with
+            {
+                TenantId = tenant + "-series-right", IdempotencyKey = "series-right",
+                Identity = atomic.Identity with { Cuit = 20999888778, VoucherNumber = 950011 }
+            };
+            async Task<bool> TryEnqueueAsync(InvoiceSubmission item)
+            {
+                try { await queue.PrepareAndEnqueueAsync(item, "synthetic-credential-reference", cancellationToken); return true; }
+                catch (InvoiceRecoveryConflictException) { return false; }
+            }
+            bool[] seriesResults = await Task.WhenAll(TryEnqueueAsync(seriesLeft), TryEnqueueAsync(seriesRight));
+            seriesResults.Count(result => result).Should().Be(1);
+
+            InvoiceSubmission processReplay = new(tenant + "-process-replay", "same-key", "wsfe",
+                new InvoiceIdentity(ArcaEnvironment.Homologation, 20999888779, 97, 1, 950020), "<synthetic>sqlite-process-replay</synthetic>");
+            RecoveryPrepareProcessRace replayRace = await RunTwoRecoveryPrepareProcessesAsync(connectionString, processReplay, processReplay, cancellationToken);
+            replayRace.Successes.Should().Be(2);
+            replayRace.Conflicts.Should().Be(0);
+            replayRace.Outputs.Distinct().Should().ContainSingle();
+
+            InvoiceSubmission processGlobalLeft = processReplay with
+            {
+                TenantId = tenant + "-global-left", IdempotencyKey = "global-left",
+                Identity = processReplay.Identity with { Cuit = 20999888780, VoucherNumber = 950021 }
+            };
+            InvoiceSubmission processGlobalRight = processGlobalLeft with
+            {
+                TenantId = tenant + "-global-right", IdempotencyKey = "global-right", Service = "wsfex"
+            };
+            RecoveryPrepareProcessRace globalRace = await RunTwoRecoveryPrepareProcessesAsync(connectionString,
+                processGlobalLeft, processGlobalRight, cancellationToken);
+            globalRace.Successes.Should().Be(1);
+            globalRace.Conflicts.Should().Be(1);
+
+            InvoiceSubmission processSeriesLeft = processReplay with
+            {
+                TenantId = tenant + "-series-left", IdempotencyKey = "series-left",
+                Identity = processReplay.Identity with { Cuit = 20999888781, VoucherNumber = 950022 }
+            };
+            InvoiceSubmission processSeriesRight = processReplay with
+            {
+                TenantId = tenant + "-series-right", IdempotencyKey = "series-right",
+                Identity = processReplay.Identity with { Cuit = 20999888781, VoucherNumber = 950023 }
+            };
+            RecoveryPrepareProcessRace processSeriesRace = await RunTwoRecoveryPrepareProcessesAsync(connectionString,
+                processSeriesLeft, processSeriesRight, cancellationToken);
+            processSeriesRace.Successes.Should().Be(1);
+            processSeriesRace.Conflicts.Should().Be(1);
+
+            string claimTenant = tenant + "-claim";
+            InvoiceSubmission submission = new(claimTenant, "race", "wsfe",
+                new InvoiceIdentity(ArcaEnvironment.Homologation, 20999888777, 98, 1, 950001), "<synthetic>sqlite-process-race</synthetic>");
+            await queue.PrepareAndEnqueueAsync(submission, "synthetic-credential-reference", cancellationToken);
+            int[] race = await RunTwoRecoveryClaimsAsync(connectionString, claimTenant, "5000", cancellationToken);
+            race.Count(code => code == 0).Should().Be(1);
+            race.Count(code => code == 4).Should().Be(1);
+            await Task.Delay(5200, cancellationToken);
+            string reclaimed = await RunProbeAsync(connectionString, "recovery-claim", cancellationToken, claimTenant, "wsfe", "30000");
+            reclaimed.Should().Contain("CLAIMED 2 Unknown");
+
+            InvoiceSubmission staleSubmission = submission with
+            {
+                IdempotencyKey = "stale-fence",
+                Identity = submission.Identity with { Cuit = 20999888778, VoucherNumber = 950002 }
+            };
+            await queue.PrepareAndEnqueueAsync(staleSubmission, "synthetic-credential-reference", cancellationToken);
+            (string nextClaim, string staleResult) = await RunExpiredClaimAsync(connectionString, claimTenant, cancellationToken);
+            nextClaim.Should().Contain("CLAIMED 2 Unknown");
+            staleResult.Should().Contain("STALE_REJECTED");
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(path)) File.Delete(path);
+        }
     }
 
     [Fact]
@@ -369,6 +646,15 @@ public sealed class OfficialSqliteMigrationsTests
             .Should().Contain("NetArcaCertificateSlots").And.Contain("NetArcaCertificateVersions")
             .And.Contain("__NetArcaWsCertificateMigrations");
         File.Exists(certificatePath).Should().BeFalse("registration and offline script generation must not open or migrate the database");
+
+        string recoveryPath = Path.Combine(Path.GetTempPath(), $"netarcaws-recovery-offline-{Guid.NewGuid():N}.db");
+        using var recoveryServices = new ServiceCollection()
+            .AddNetArcaWsSqliteMigrations($"Data Source={recoveryPath}", RecoveryOptions()).BuildServiceProvider();
+        string recoveryScript = recoveryServices.GetRequiredService<INetArcaWsMigrator>()
+            .GenerateScript(NetArcaWsPersistenceModule.InvoiceRecovery);
+        recoveryScript.Should().Contain("NetArcaInvoiceRecoveryJobs").And.Contain("__NetArcaWsInvoiceRecoveryMigrations")
+            .And.NotContain("NetArcaInvoices").And.NotContain("NetArcaWsaaTickets");
+        File.Exists(recoveryPath).Should().BeFalse("registering an opt-in migration must not connect or create schema");
     }
 
     [Fact]
@@ -448,6 +734,206 @@ public sealed class OfficialSqliteMigrationsTests
     private static NetArcaWsModelOptions InvoiceOptions() => NetArcaWsModelOptions.Configure(x => x.AddInvoicing(ArcaService.Wsfev1));
     private static NetArcaWsModelOptions TicketOptions() => NetArcaWsModelOptions.Configure(x => x.AddWsaaTickets(ArcaService.Wsfev1));
     private static NetArcaWsModelOptions CertificateOptions() => NetArcaWsModelOptions.Configure(x => x.AddCertificates());
+    private static NetArcaWsModelOptions RecoveryOptions() => NetArcaWsModelOptions.Configure(x => x.AddInvoiceRecovery(ArcaService.Wsfev1));
+    private static NetArcaWsModelOptions RecoveryModelOptions() => NetArcaWsModelOptions.Configure(x =>
+        x.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1).AddInvoiceRecovery(ArcaService.Wsfev1, ArcaService.Wsfexv1));
+    private static NetArcaWsModelOptions ExistingDataOptions() => NetArcaWsModelOptions.Configure(x =>
+        x.AddInvoicing(ArcaService.Wsfev1).AddWsaaTickets(ArcaService.Wsfev1).AddCertificates());
+
+    private static async Task SeedExistingModuleRowsAsync(TestDatabase db, CancellationToken cancellationToken)
+    {
+        await db.Execute("INSERT INTO NetArcaInvoices (TenantHash, KeyHash, TenantId, IdempotencyKey, Service, ServiceHash, Environment, Cuit, PointOfSale, VoucherType, VoucherNumber, FiscalHash, Payload, PayloadHash, CanonicalVersion, State, Version, Attempt, CreatedUtcTicks) VALUES ('t','k','tenant','idem','WSFEv1','s',1,20999888777,1,1,1,'f','<synthetic>existing-invoice</synthetic>','p',1,1,1,1,1)");
+        await db.Execute("INSERT INTO NetArcaWsaaTickets (KeyHash, CertificateHash, Endpoint, Service, State, Fence, Version, Nonce, Ciphertext, Tag, UpdatedUtcTicks) VALUES ('ticket-key','cert-hash','https://synthetic.invalid/wsaa','wsfev1',3,4,5,X'010203',X'0B16212C37',X'060708',123456789)");
+        await db.Execute("INSERT INTO NetArcaCertificateSlots (TenantHash, Cuit, Environment, ActiveVersionId, Generation) VALUES ('cert-tenant',20999888777,1,'version-1',1)");
+        await db.Execute("INSERT INTO NetArcaCertificateVersions (TenantHash, Cuit, Environment, VersionId, CreatedAtUtcTicks, ThumbprintSha256, NotBeforeUtcTicks, NotAfterUtcTicks, KeyId, Nonce, Ciphertext, Tag) VALUES ('cert-tenant',20999888777,1,'version-1',1,'thumbprint',1,2,'key-1',X'0102',X'0304',X'0506')");
+        (await ReadSqliteIntAsync(db.ConnectionString, "SELECT COUNT(*) FROM NetArcaInvoices WHERE KeyHash='k'", cancellationToken)).Should().Be(1);
+    }
+
+    private static async Task AssertExistingModuleRowsAsync(TestDatabase db, CancellationToken cancellationToken)
+    {
+        (await ReadSqliteIntAsync(db.ConnectionString, "SELECT COUNT(*) FROM NetArcaInvoices WHERE KeyHash='k'", cancellationToken)).Should().Be(1);
+        (await ReadSqliteBlobAsync(db.ConnectionString, "SELECT Ciphertext FROM NetArcaWsaaTickets WHERE KeyHash='ticket-key'", cancellationToken))
+            .Should().Equal(new byte[] { 11, 22, 33, 44, 55 });
+        (await ReadSqliteBlobAsync(db.ConnectionString, "SELECT Ciphertext FROM NetArcaCertificateVersions WHERE VersionId='version-1'", cancellationToken))
+            .Should().Equal(new byte[] { 3, 4 });
+    }
+
+    private static async Task<int[]> RunTwoRecoveryClaimsAsync(string connectionString, string tenant, string leaseMilliseconds,
+        CancellationToken cancellationToken)
+    {
+        string barrier = Path.Combine(Path.GetTempPath(), "netarcaws-sqlite-race-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(barrier);
+        Process? first = null;
+        Process? second = null;
+        try
+        {
+            Dictionary<string, string?> environment = SqliteProbeEnvironment(connectionString);
+            environment["NETARCA_PROBE_BARRIER_DIRECTORY"] = barrier;
+            environment["NETARCA_PROBE_BARRIER_EXPECTED"] = "2";
+            first = StartProbe(environment, "recovery-claim", tenant, "wsfe", leaseMilliseconds);
+            second = StartProbe(environment, "recovery-claim", tenant, "wsfe", leaseMilliseconds);
+            DateTimeOffset deadline = DateTimeOffset.UtcNow.AddSeconds(20);
+            while (Directory.GetFiles(barrier, "*.ready").Length < 2)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (DateTimeOffset.UtcNow >= deadline) throw new TimeoutException("Independent SQLite recovery processes did not reach the claim barrier.");
+                if (first.HasExited || second.HasExited) throw new InvalidOperationException("An independent SQLite recovery process exited before the claim barrier opened.");
+                await Task.Delay(20, cancellationToken);
+            }
+            await File.WriteAllTextAsync(Path.Combine(barrier, "release"), "release", cancellationToken);
+            await Task.WhenAll(first.WaitForExitAsync(cancellationToken), second.WaitForExitAsync(cancellationToken));
+            return [first.ExitCode, second.ExitCode];
+        }
+        finally
+        {
+            await StopProcessAsync(first);
+            await StopProcessAsync(second);
+            if (Directory.Exists(barrier)) Directory.Delete(barrier, recursive: true);
+        }
+    }
+
+    private static async Task<RecoveryPrepareProcessRace> RunTwoRecoveryPrepareProcessesAsync(string connectionString,
+        InvoiceSubmission firstSubmission, InvoiceSubmission secondSubmission, CancellationToken cancellationToken)
+    {
+        string barrier = Path.Combine(Path.GetTempPath(), "netarcaws-sqlite-prepare-race-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(barrier);
+        Process? first = null;
+        Process? second = null;
+        try
+        {
+            Dictionary<string, string?> environment = SqliteProbeEnvironment(connectionString);
+            environment["NETARCA_PROBE_BARRIER_DIRECTORY"] = barrier;
+            environment["NETARCA_PROBE_BARRIER_EXPECTED"] = "2";
+            static string[] Arguments(InvoiceSubmission submission) => ["recovery-prepare", submission.TenantId,
+                submission.IdempotencyKey, submission.Service, submission.Identity.Cuit.ToString(CultureInfo.InvariantCulture),
+                submission.Identity.PointOfSale.ToString(CultureInfo.InvariantCulture), submission.Identity.VoucherNumber.ToString(CultureInfo.InvariantCulture)];
+            first = StartProbe(environment, Arguments(firstSubmission));
+            second = StartProbe(environment, Arguments(secondSubmission));
+            DateTimeOffset deadline = DateTimeOffset.UtcNow.AddSeconds(20);
+            while (Directory.GetFiles(barrier, "*.ready").Length < 2)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (DateTimeOffset.UtcNow >= deadline) throw new TimeoutException("Independent SQLite recovery prepare processes did not reach the barrier.");
+                if (first.HasExited || second.HasExited) throw new InvalidOperationException("An independent SQLite recovery prepare process exited before the barrier opened.");
+                await Task.Delay(20, cancellationToken);
+            }
+            await File.WriteAllTextAsync(Path.Combine(barrier, "release"), "release", cancellationToken);
+            await Task.WhenAll(first.WaitForExitAsync(cancellationToken), second.WaitForExitAsync(cancellationToken));
+            int[] codes = [first.ExitCode, second.ExitCode];
+            if (codes.Any(code => code is not (0 or 3))) throw new InvalidOperationException("An independent SQLite recovery prepare process failed unexpectedly.");
+            string[] outputs = await Task.WhenAll(first.StandardOutput.ReadToEndAsync(cancellationToken), second.StandardOutput.ReadToEndAsync(cancellationToken));
+            return new(codes.Count(code => code == 0), codes.Count(code => code == 3), outputs);
+        }
+        finally
+        {
+            await StopProcessAsync(first);
+            await StopProcessAsync(second);
+            if (Directory.Exists(barrier)) Directory.Delete(barrier, recursive: true);
+        }
+    }
+
+    private static async Task<string> RunProbeAsync(string connectionString, string command, CancellationToken cancellationToken,
+        params string[] arguments)
+    {
+        using Process process = StartProbe(SqliteProbeEnvironment(connectionString), [command, .. arguments]);
+        string output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+        process.ExitCode.Should().Be(0, "the independent SQLite recovery process should complete successfully");
+        return output;
+    }
+
+    private static async Task<(string ReplacementOutput, string StaleOutput)> RunExpiredClaimAsync(string connectionString,
+        string tenant, CancellationToken cancellationToken)
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "netarcaws-sqlite-expiry-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        string ready = Path.Combine(directory, "ready");
+        string release = Path.Combine(directory, "release");
+        Process? previous = null;
+        Process? replacement = null;
+        try
+        {
+            Dictionary<string, string?> environment = SqliteProbeEnvironment(connectionString);
+            environment["NETARCA_PROBE_RECOVERY_READY"] = ready;
+            environment["NETARCA_PROBE_RECOVERY_RELEASE"] = release;
+            previous = StartProbe(environment, "recovery-hold", tenant, "wsfe", "350");
+            DateTimeOffset deadline = DateTimeOffset.UtcNow.AddSeconds(20);
+            while (!File.Exists(ready))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (DateTimeOffset.UtcNow >= deadline) throw new TimeoutException("The independent SQLite claim process did not become ready.");
+                if (previous.HasExited) throw new InvalidOperationException("The independent SQLite claim process exited before the lease-expiry check.");
+                await Task.Delay(20, cancellationToken);
+            }
+            await Task.Delay(500, cancellationToken);
+            replacement = StartProbe(SqliteProbeEnvironment(connectionString), "recovery-claim", tenant, "wsfe", "30000");
+            string replacementOutput = await replacement.StandardOutput.ReadToEndAsync(cancellationToken);
+            await replacement.WaitForExitAsync(cancellationToken);
+            replacement.ExitCode.Should().Be(0);
+            await File.WriteAllTextAsync(release, "release", cancellationToken);
+            string staleOutput = await previous.StandardOutput.ReadToEndAsync(cancellationToken);
+            await previous.WaitForExitAsync(cancellationToken);
+            previous.ExitCode.Should().Be(0);
+            return (replacementOutput, staleOutput);
+        }
+        finally
+        {
+            await StopProcessAsync(previous);
+            await StopProcessAsync(replacement);
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private sealed record RecoveryPrepareProcessRace(int Successes, int Conflicts, string[] Outputs);
+
+    private static Dictionary<string, string?> SqliteProbeEnvironment(string connectionString) => new()
+    {
+        ["NETARCA_PERSISTENCE_DB"] = connectionString,
+        ["NETARCA_PERSISTENCE_DB_KIND"] = "sqlite",
+        ["NETARCA_PERSISTENCE_DB_VERSION"] = "10.0.12"
+    };
+
+    private static Process StartProbe(IReadOnlyDictionary<string, string?> environment, params string[] arguments)
+    {
+        var start = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        start.ArgumentList.Add(typeof(ProbeMarker).Assembly.Location);
+        foreach (string argument in arguments) start.ArgumentList.Add(argument);
+        foreach ((string name, string? value) in environment) start.Environment[name] = value;
+        return Process.Start(start) ?? throw new InvalidOperationException("Could not start an independent SQLite recovery probe.");
+    }
+
+    private static async Task StopProcessAsync(Process? process)
+    {
+        if (process is null) return;
+        if (!process.HasExited) { process.Kill(entireProcessTree: true); await process.WaitForExitAsync(); }
+        process.Dispose();
+    }
+
+    private sealed class RecoveryQueueInsertFailureInterceptor : DbCommandInterceptor
+    {
+        public bool FailRecoveryInsert { get; set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            ThrowIfRecoveryInsert(command);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            ThrowIfRecoveryInsert(command);
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        private void ThrowIfRecoveryInsert(DbCommand command)
+        {
+            if (FailRecoveryInsert && command.CommandText.Contains("NetArcaInvoiceRecoveryJobs", StringComparison.Ordinal) &&
+                command.CommandText.Contains("INSERT", StringComparison.OrdinalIgnoreCase))
+                throw new IOException("Synthetic recovery queue persistence failure.");
+        }
+    }
     private static NetArcaWsModelOptions BothOptions(bool invoicesFirst = true) => NetArcaWsModelOptions.Configure(x =>
     {
         if (invoicesFirst) x.AddInvoicing(ArcaService.Wsfev1).AddWsaaTickets(ArcaService.Wsfev1);
@@ -550,6 +1036,62 @@ public sealed class OfficialSqliteMigrationsTests
         public Task<IReadOnlyList<string>> GetPresentTablesAsync(DbContext context, IReadOnlyList<string> names, CancellationToken cancellationToken) =>
             inner.GetPresentTablesAsync(context, names, cancellationToken);
     }
+
+    private sealed class FailDuringRecoveryMigrationFactory(string connectionString, SqliteMigrationContextFactory inner)
+        : INetArcaWsMigrationContextFactory
+    {
+        public NetArcaWsMigrationProvider Provider => NetArcaWsMigrationProvider.Sqlite;
+        public DbContext CreateContext(NetArcaWsPersistenceModule module) => module == NetArcaWsPersistenceModule.InvoiceRecovery
+            ? new SqliteInvoiceRecoveryMigrationsDbContext(new DbContextOptionsBuilder<SqliteInvoiceRecoveryMigrationsDbContext>()
+                .UseSqlite(connectionString, options => options.MigrationsAssembly(typeof(SqliteMigrationContextFactory).Assembly.FullName)
+                    .MigrationsHistoryTable("__NetArcaWsInvoiceRecoveryMigrations"))
+                .AddInterceptors(new FailRecoveryIndexCreationInterceptor()).Options)
+            : inner.CreateContext(module);
+        public Task<IReadOnlyList<string>> GetPresentTablesAsync(DbContext context, IReadOnlyList<string> names,
+            CancellationToken cancellationToken) => inner.GetPresentTablesAsync(context, names, cancellationToken);
+    }
+
+    private sealed class FailRecoveryIndexCreationInterceptor : DbCommandInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains("CREATE INDEX", StringComparison.OrdinalIgnoreCase) &&
+                command.CommandText.Contains("NetArcaInvoiceRecoveryJobs", StringComparison.Ordinal))
+                throw new InvalidOperationException("Synthetic recovery DDL failure.");
+            return ValueTask.FromResult(result);
+        }
+    }
+
+    private sealed class CancelDuringRecoveryMigrationFactory(string connectionString, SqliteMigrationContextFactory inner,
+        CancellationTokenSource cancellation) : INetArcaWsMigrationContextFactory
+    {
+        public NetArcaWsMigrationProvider Provider => NetArcaWsMigrationProvider.Sqlite;
+        public DbContext CreateContext(NetArcaWsPersistenceModule module) => module == NetArcaWsPersistenceModule.InvoiceRecovery
+            ? new SqliteInvoiceRecoveryMigrationsDbContext(new DbContextOptionsBuilder<SqliteInvoiceRecoveryMigrationsDbContext>()
+                .UseSqlite(connectionString, options => options.MigrationsAssembly(typeof(SqliteMigrationContextFactory).Assembly.FullName)
+                    .MigrationsHistoryTable("__NetArcaWsInvoiceRecoveryMigrations"))
+                .AddInterceptors(new CancelRecoveryIndexCreationInterceptor(cancellation)).Options)
+            : inner.CreateContext(module);
+        public Task<IReadOnlyList<string>> GetPresentTablesAsync(DbContext context, IReadOnlyList<string> names,
+            CancellationToken cancellationToken) => inner.GetPresentTablesAsync(context, names, cancellationToken);
+    }
+
+    private sealed class CancelRecoveryIndexCreationInterceptor(CancellationTokenSource cancellation) : DbCommandInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains("CREATE INDEX", StringComparison.OrdinalIgnoreCase) &&
+                command.CommandText.Contains("NetArcaInvoiceRecoveryJobs", StringComparison.Ordinal))
+            {
+                cancellation.Cancel();
+                throw new OperationCanceledException("Synthetic recovery migration cancellation.", cancellation.Token);
+            }
+            return ValueTask.FromResult(result);
+        }
+    }
+
 
     private sealed class FailReservationTableCreationInterceptor : DbCommandInterceptor
     {

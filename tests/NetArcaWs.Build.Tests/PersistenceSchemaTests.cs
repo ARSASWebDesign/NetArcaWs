@@ -11,12 +11,17 @@ public sealed class PersistenceSchemaTests
     {
         IReadOnlyDictionary<string, string> scripts = PersistenceSchema.GenerateScripts();
 
-        scripts.Should().HaveCount(20);
+        scripts.Should().HaveCount(25);
         scripts.Keys.Should().Contain("sqlite/all.sql");
         scripts.Keys.Should().Contain("mysql/invoicing.sql");
         scripts.Keys.Should().Contain("mariadb/wsaa-tickets.sql");
         scripts.Keys.Should().Contain("postgresql/all.sql");
         scripts.Keys.Should().Contain("sqlserver/all.sql");
+        scripts.Keys.Should().Contain("sqlite/invoice-recovery.sql");
+        scripts["sqlite/invoice-recovery.sql"].Should().Contain("NetArcaInvoiceRecoveryJobs")
+            .And.NotContain("NetArcaInvoices")
+            .And.NotContain("NetArcaWsaaTickets")
+            .And.NotContain("NetArcaCertificateSlots");
         scripts["sqlite/invoicing.sql"].Should().Contain("NetArcaInvoices")
             .And.Contain("NetArcaInvoiceRevisions")
             .And.Contain("NetArcaInvoiceSeriesReservations")
@@ -30,13 +35,13 @@ public sealed class PersistenceSchemaTests
     }
 
     [Fact]
-    public void CertificateSelectionGeneratesTheTwentyDdlAndFifteenMigrationArtifacts()
+    public void ModuleSelectionsGenerateTwentyFiveDdlAndTwentyMigrationArtifacts()
     {
         IReadOnlyDictionary<string, string> ddl = PersistenceSchema.GenerateScripts();
         IReadOnlyDictionary<string, string> migrations = PersistenceMigrations.GenerateScripts();
 
-        ddl.Should().HaveCount(20);
-        migrations.Should().HaveCount(15);
+        ddl.Should().HaveCount(25);
+        migrations.Should().HaveCount(20);
         foreach (string provider in new[] { "sqlite", "mysql", "mariadb", "postgresql", "sqlserver" })
         {
             string certificateDdl = ddl[$"{provider}/tenant-certificates.sql"];
@@ -52,6 +57,19 @@ public sealed class PersistenceSchemaTests
                 .And.Contain("NetArcaCertificateVersions")
                 .And.NotContain("NetArcaInvoices")
                 .And.NotContain("NetArcaWsaaTickets");
+
+            ddl[$"{provider}/invoice-recovery.sql"].Should().Contain("NetArcaInvoiceRecoveryJobs")
+                .And.NotContain("NetArcaInvoices")
+                .And.NotContain("NetArcaWsaaTickets")
+                .And.NotContain("NetArcaCertificateSlots");
+            ddl[$"{provider}/all.sql"].Should().Contain("NetArcaInvoiceRecoveryJobs");
+            migrations[$"{provider}/invoice-recovery/0-latest.sql"].Should()
+                .Contain("20261007000400_InitialInvoiceRecovery")
+                .And.Contain("__NetArcaWsInvoiceRecoveryMigrations")
+                .And.Contain("NetArcaInvoiceRecoveryJobs")
+                .And.NotContain("NetArcaInvoices")
+                .And.NotContain("NetArcaWsaaTickets")
+                .And.NotContain("NetArcaCertificateSlots");
         }
     }
 

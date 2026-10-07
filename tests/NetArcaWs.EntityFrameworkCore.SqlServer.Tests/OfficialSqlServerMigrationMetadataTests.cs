@@ -19,6 +19,7 @@ public sealed class OfficialSqlServerMigrationMetadataTests
     [Theory]
     [InlineData(NetArcaWsPersistenceModule.Invoicing, "__NetArcaWsInvoiceMigrations")]
     [InlineData(NetArcaWsPersistenceModule.WsaaTickets, "__NetArcaWsTicketMigrations")]
+    [InlineData(NetArcaWsPersistenceModule.InvoiceRecovery, "__NetArcaWsInvoiceRecoveryMigrations")]
     public void SqlServer_module_has_an_independent_initial_migration_snapshot_and_default_schema_history(
         NetArcaWsPersistenceModule module, string historyTable)
     {
@@ -31,17 +32,21 @@ public sealed class OfficialSqlServerMigrationMetadataTests
         IMigrationsAssembly migrations = context.GetService<IMigrationsAssembly>();
         Migration initial = migrations.CreateMigration(migrations.Migrations.Single().Value, context.Database.ProviderName!);
         IReadOnlyList<MigrationOperation> operations = initial.UpOperations;
-        operations.OfType<CreateTableOperation>().Select(table => table.Name).Should().BeEquivalentTo(
-            module == NetArcaWsPersistenceModule.Invoicing
-                ? ["NetArcaInvoices", "NetArcaInvoiceRevisions", "NetArcaInvoiceSeriesReservations"]
-                : ["NetArcaWsaaTickets"]);
+        operations.OfType<CreateTableOperation>().Select(table => table.Name).Should().BeEquivalentTo(module switch
+        {
+            NetArcaWsPersistenceModule.Invoicing => ["NetArcaInvoices", "NetArcaInvoiceRevisions", "NetArcaInvoiceSeriesReservations"],
+            NetArcaWsPersistenceModule.WsaaTickets => ["NetArcaWsaaTickets"],
+            _ => ["NetArcaInvoiceRecoveryJobs"]
+        });
         operations.OfType<CreateTableOperation>().Should().OnlyContain(table => table.Schema == "dbo");
         operations.Should().NotContain(operation => operation is RenameTableOperation);
         context.GetService<IHistoryRepository>().GetCreateScript().Should().Contain($"[dbo].[{historyTable}]");
-        context.Model.GetEntityTypes().Select(entity => entity.GetTableName()).Should().BeEquivalentTo(
-            module == NetArcaWsPersistenceModule.Invoicing
-                ? ["NetArcaInvoices", "NetArcaInvoiceRevisions", "NetArcaInvoiceSeriesReservations"]
-                : ["NetArcaWsaaTickets"]);
+        context.Model.GetEntityTypes().Select(entity => entity.GetTableName()).Should().BeEquivalentTo(module switch
+        {
+            NetArcaWsPersistenceModule.Invoicing => ["NetArcaInvoices", "NetArcaInvoiceRevisions", "NetArcaInvoiceSeriesReservations"],
+            NetArcaWsPersistenceModule.WsaaTickets => ["NetArcaWsaaTickets"],
+            _ => ["NetArcaInvoiceRecoveryJobs"]
+        });
     }
 
     [Fact]

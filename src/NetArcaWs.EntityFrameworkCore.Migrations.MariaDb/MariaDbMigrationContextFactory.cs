@@ -11,7 +11,7 @@ public sealed class MariaDbMigrationContextFactory(string connectionString, Mari
     private static readonly HashSet<string> OwnedTables = new(StringComparer.Ordinal)
     {
         "NetArcaInvoices", "NetArcaInvoiceRevisions", "NetArcaInvoiceSeriesReservations", "NetArcaWsaaTickets",
-        "NetArcaCertificateSlots", "NetArcaCertificateVersions", "__NetArcaWsInvoiceMigrations", "__NetArcaWsTicketMigrations", "__NetArcaWsCertificateMigrations"
+        "NetArcaCertificateSlots", "NetArcaCertificateVersions", "NetArcaInvoiceRecoveryJobs", "__NetArcaWsInvoiceMigrations", "__NetArcaWsTicketMigrations", "__NetArcaWsCertificateMigrations", "__NetArcaWsInvoiceRecoveryMigrations"
     };
 
     public NetArcaWsMigrationProvider Provider => NetArcaWsMigrationProvider.MariaDb;
@@ -24,12 +24,14 @@ public sealed class MariaDbMigrationContextFactory(string connectionString, Mari
             .UseMySql(connectionString, serverVersion, options => options.MigrationsAssembly(typeof(MariaDbMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsTicketMigrations")).Options),
         NetArcaWsPersistenceModule.TenantCertificates => new MariaDbTenantCertificatesMigrationsDbContext(new DbContextOptionsBuilder<MariaDbTenantCertificatesMigrationsDbContext>()
             .UseMySql(connectionString, serverVersion, options => options.MigrationsAssembly(typeof(MariaDbMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsCertificateMigrations")).Options),
+        NetArcaWsPersistenceModule.InvoiceRecovery => new MariaDbInvoiceRecoveryMigrationsDbContext(new DbContextOptionsBuilder<MariaDbInvoiceRecoveryMigrationsDbContext>()
+            .UseMySql(connectionString, serverVersion, options => options.MigrationsAssembly(typeof(MariaDbMigrationContextFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsInvoiceRecoveryMigrations")).Options),
         _ => throw new ArgumentOutOfRangeException(nameof(module))
     };
 
     public async Task<IReadOnlyList<string>> GetPresentTablesAsync(DbContext context, IReadOnlyList<string> names, CancellationToken cancellationToken)
     {
-        if (context is not (MariaDbInvoicingMigrationsDbContext or MariaDbWsaaTicketsMigrationsDbContext or MariaDbTenantCertificatesMigrationsDbContext))
+        if (context is not (MariaDbInvoicingMigrationsDbContext or MariaDbWsaaTicketsMigrationsDbContext or MariaDbTenantCertificatesMigrationsDbContext or MariaDbInvoiceRecoveryMigrationsDbContext))
             throw new ArgumentException("A MariaDB migrations context is required.", nameof(context));
         ArgumentNullException.ThrowIfNull(names);
         if (names.Count == 0) return Array.Empty<string>();

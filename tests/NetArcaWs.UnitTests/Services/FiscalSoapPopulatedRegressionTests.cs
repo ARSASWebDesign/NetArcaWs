@@ -5,6 +5,8 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Options;
 using NetArcaWs.Contracts.PadronA5;
 using NetArcaWs.Contracts.WsfeV1;
+using NetArcaWs.Contracts.WsfexV1;
+using NetArcaWs.Contracts.Wsmtxca;
 using NetArcaWs.Cryptography;
 using NetArcaWs.HealthChecks;
 using NetArcaWs.Multitenancy;
@@ -22,6 +24,238 @@ public sealed class FiscalSoapPopulatedRegressionTests
     private const string PadronNamespace = "http://a5.soap.ws.server.puc.sr/";
     private const long TenantCuit = 30123456789;
     private const long SubjectCuit = 30712345678;
+
+    [Theory]
+    [InlineData("es-AR")]
+    [InlineData("fr-FR")]
+    public async Task Wsfe_soap_preserves_supplied_amounts_under_decimal_comma_cultures_without_type_eligibility_claims(
+        string cultureName)
+    {
+        var requests = new List<XDocument>();
+        var handler = new RecordingHttpMessageHandler(async (request, token) =>
+        {
+            requests.Add(XDocument.Parse(await request.Content!.ReadAsStringAsync(token)));
+            return RecordingHttpMessageHandler.Response(HttpStatusCode.OK, CaeResponse());
+        });
+        var service = new Wsfev1Service(CreateTransport(new TestHttpClientFactory(handler)),
+            new RecordingArcaTicketProvider(TicketTestData.Create("SYNTHETIC-TOKEN", "SYNTHETIC-SIGN")));
+        var tenant = CreateTenantContext("invoice-composition");
+        // Synthetic pass-through cases only; this matrix does not validate catalog eligibility.
+        int[] suppliedTypes = [1, 2, 3, 6, 7, 8, 11, 12, 13, 51];
+
+        var originalCulture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo(cultureName);
+            foreach (int type in suppliedTypes)
+            {
+                var request = new FecaeSolicitar
+                {
+                    FeCaeReq = new FecaeRequest
+                    {
+                        FeCabReq = new FecaeCabRequest { CantReg = 1, PtoVta = 12, CbteTipo = (short)type }
+                    }
+                };
+                bool cComposition = type is 11 or 12 or 13;
+                var detail = new FecaeDetRequest
+                {
+                    Concepto = 1,
+                    DocTipo = 80,
+                    DocNro = SubjectCuit,
+                    CbteDesde = 9001,
+                    CbteHasta = 9001,
+                    CbteFch = "20261006",
+                    ImpNeto = cComposition ? 121 : 201.39,
+                    ImpIva = cComposition ? 0 : 33.30,
+                    ImpOpEx = cComposition ? 0 : 12.34,
+                    ImpTotConc = cComposition ? 0 : 5.67,
+                    ImpTrib = 3.21,
+                    ImpTotal = cComposition ? 124.21 : 255.91,
+                    MonId = "PES",
+                    MonCotiz = 1
+                };
+                if (!cComposition)
+                {
+                    detail.Iva.Add(new AlicIva { Id = 5, BaseImp = 123.45, Importe = 25.92 });
+                    detail.Iva.Add(new AlicIva { Id = 4, BaseImp = 67.89, Importe = 7.13 });
+                    detail.Iva.Add(new AlicIva { Id = 9, BaseImp = 10.05, Importe = 0.25 });
+                }
+                request.FeCaeReq.FeDetReq.Add(detail);
+
+                await service.FECAESolicitarAsync(tenant, request, TestContext.Current.CancellationToken);
+            }
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = originalCulture;
+        }
+
+        requests.Should().HaveCount(suppliedTypes.Length);
+        foreach ((XDocument document, int index) in requests.Select((document, index) => (document, index)))
+        {
+            XElement operation = Operation(document, "FECAESolicitar");
+            XElement header = operation.Descendants(XName.Get("FeCabReq", WsfeNamespace)).Single();
+            header.Element(XName.Get("CbteTipo", WsfeNamespace))!.Value.Should().Be(suppliedTypes[index].ToString());
+            XElement detail = operation.Descendants(XName.Get("FECAEDetRequest", WsfeNamespace)).Single();
+            bool cComposition = suppliedTypes[index] is 11 or 12 or 13;
+            ReadAmount(detail, "ImpNeto").Should().Be(cComposition ? 121m : 201.39m);
+            ReadAmount(detail, "ImpIVA").Should().Be(cComposition ? 0m : 33.30m);
+            ReadAmount(detail, "ImpOpEx").Should().Be(cComposition ? 0m : 12.34m);
+            ReadAmount(detail, "ImpTotConc").Should().Be(cComposition ? 0m : 5.67m);
+            ReadAmount(detail, "ImpTrib").Should().Be(3.21m);
+            ReadAmount(detail, "ImpTotal").Should().Be(cComposition ? 124.21m : 255.91m);
+            XElement[] rates = detail.Descendants(XName.Get("AlicIva", WsfeNamespace)).ToArray();
+            if (cComposition)
+            {
+                rates.Should().BeEmpty();
+            }
+            else
+            {
+                rates.Should().HaveCount(3);
+                rates.Select(rate => ReadAmount(rate, "Id")).Should().Equal(5m, 4m, 9m);
+                rates.Select(rate => ReadAmount(rate, "BaseImp")).Should().Equal(123.45m, 67.89m, 10.05m);
+                rates.Select(rate => ReadAmount(rate, "Importe")).Should().Equal(25.92m, 7.13m, 0.25m);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("es-AR")]
+    [InlineData("fr-FR")]
+    public async Task Wsfex_soap_preserves_fractional_amounts_under_decimal_comma_cultures(string cultureName)
+    {
+        XDocument? sent = null;
+        var handler = new RecordingHttpMessageHandler(async (request, token) =>
+        {
+            sent = XDocument.Parse(await request.Content!.ReadAsStringAsync(token));
+            return RecordingHttpMessageHandler.Response(HttpStatusCode.OK, $"""
+                <soap:Envelope xmlns:soap="{SoapNamespace}" xmlns:fex="http://ar.gov.afip.dif.fexv1/"><soap:Body>
+                  <fex:FEXAuthorizeResponse><fex:FEXAuthorizeResult /></fex:FEXAuthorizeResponse>
+                </soap:Body></soap:Envelope>
+                """);
+        });
+        var service = new Wsfexv1Service(CreateTransport(new TestHttpClientFactory(handler)),
+            new RecordingArcaTicketProvider(TicketTestData.Create("SYNTHETIC-TOKEN", "SYNTHETIC-SIGN")));
+        var requestData = new ClsFexRequest
+        {
+            Id = 1,
+            CbteTipo = 19,
+            PuntoVta = 12,
+            CbteNro = 9001,
+            TipoExpo = 1,
+            DstCmp = 200,
+            CuitPaisCliente = 50000000000,
+            MonedaId = "DOL",
+            MonedaCtz = 1,
+            ImpTotal = 13.95m,
+            IdiomaCbte = 1
+        };
+        requestData.Items.Add(new Item
+        {
+            ProCodigo = "SKU-1",
+            ProDs = "Producto sintético",
+            ProQty = 1.25m,
+            ProUmed = 7,
+            ProPrecioUni = 12.40m,
+            ProBonificacion = 1.55m,
+            ProTotalItem = 13.95m
+        });
+        var request = new FexAuthorize { Cmp = requestData };
+
+        var originalCulture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo(cultureName);
+            await service.FEXAuthorizeAsync(CreateTenantContext("fractional-wsfex"), request, TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = originalCulture;
+        }
+
+        XElement item = sent!.Descendants(XName.Get("Item", "http://ar.gov.afip.dif.fexv1/")).Single();
+        ReadElementDecimal(sent.Descendants().Single(element => element.Name.LocalName == "Imp_total"))
+            .Should().Be(13.95m);
+        ReadDecimal(item, "Pro_qty", "http://ar.gov.afip.dif.fexv1/").Should().Be(1.25m);
+        ReadDecimal(item, "Pro_precio_uni", "http://ar.gov.afip.dif.fexv1/").Should().Be(12.40m);
+        ReadDecimal(item, "Pro_bonificacion", "http://ar.gov.afip.dif.fexv1/").Should().Be(1.55m);
+        ReadDecimal(item, "Pro_total_item", "http://ar.gov.afip.dif.fexv1/").Should().Be(13.95m);
+    }
+
+    [Theory]
+    [InlineData("es-AR")]
+    [InlineData("fr-FR")]
+    public async Task Wsmtxca_soap_preserves_fractional_amounts_under_decimal_comma_cultures(string cultureName)
+    {
+        XDocument? sent = null;
+        const string mtxNamespace = "http://impl.service.wsmtxca.afip.gov.ar/service/";
+        var handler = new RecordingHttpMessageHandler(async (request, token) =>
+        {
+            sent = XDocument.Parse(await request.Content!.ReadAsStringAsync(token));
+            return RecordingHttpMessageHandler.Response(HttpStatusCode.OK, $"""
+                <soap:Envelope xmlns:soap="{SoapNamespace}" xmlns:mtx="{mtxNamespace}"><soap:Body>
+                  <mtx:autorizarComprobanteResponse><mtx:resultado>A</mtx:resultado></mtx:autorizarComprobanteResponse>
+                </soap:Body></soap:Envelope>
+                """);
+        });
+        var service = new Wsmtxcav1Service(CreateTransport(new TestHttpClientFactory(handler)),
+            new RecordingArcaTicketProvider(TicketTestData.Create("SYNTHETIC-TOKEN", "SYNTHETIC-SIGN")));
+        var comprobante = new ComprobanteType
+        {
+            CodigoTipoComprobante = 1,
+            NumeroPuntoVenta = 12,
+            NumeroComprobante = 9001,
+            ImporteGravado = 13.95m,
+            ImporteSubtotal = 16.88m,
+            ImporteOtrosTributos = 0m,
+            ImporteTotal = 16.88m,
+            CodigoMoneda = "PES",
+            CotizacionMoneda = 1m
+        };
+        comprobante.ArrayItems.Add(new ItemType
+        {
+            Descripcion = "Producto sintético",
+            Cantidad = 1.25m,
+            CodigoUnidadMedida = 7,
+            PrecioUnitario = 12.40m,
+            ImporteBonificacion = 1.55m,
+            CodigoCondicionIva = 5,
+            ImporteIva = 2.93m,
+            ImporteItem = 16.88m
+        });
+        comprobante.ArraySubtotalesIva.Add(new SubtotalIvaType { Codigo = 5, Importe = 2.93m });
+        var request = new AutorizarComprobanteRequestType
+        {
+            AuthRequest = new AuthRequestType(),
+            ComprobanteCaeRequest = comprobante
+        };
+
+        var originalCulture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo(cultureName);
+            await service.autorizarComprobanteAsync(CreateTenantContext("fractional-mtxca"), request, TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = originalCulture;
+        }
+
+        XElement item = sent!.Descendants().Single(element => element.Name.LocalName == "item");
+        ReadLocalDecimal(item, "cantidad").Should().Be(1.25m);
+        ReadLocalDecimal(item, "precioUnitario").Should().Be(12.40m);
+        ReadLocalDecimal(item, "importeBonificacion").Should().Be(1.55m);
+        ReadLocalDecimal(item, "importeItem").Should().Be(16.88m);
+        ReadLocalDecimal(item, "importeIVA").Should().Be(2.93m);
+        XElement wireComprobante = sent.Descendants().Single(element => element.Name.LocalName == "comprobanteCAERequest");
+        ReadLocalDecimal(wireComprobante, "importeGravado").Should().Be(13.95m);
+        ReadLocalDecimal(wireComprobante, "importeSubtotal").Should().Be(16.88m);
+        ReadLocalDecimal(wireComprobante, "importeOtrosTributos").Should().Be(0m);
+        ReadLocalDecimal(wireComprobante, "importeTotal").Should().Be(16.88m);
+        XElement ivaSubtotal = wireComprobante.Descendants().Single(element => element.Name.LocalName == "subtotalIVA");
+        ReadLocalDecimal(ivaSubtotal, "codigo").Should().Be(5m);
+        ReadLocalDecimal(ivaSubtotal, "importe").Should().Be(2.93m);
+    }
 
     [Fact]
     public async Task Wsfe_populated_CAE_and_CAEA_requests_preserve_fiscal_fields_dates_and_multiple_details()
@@ -195,6 +429,22 @@ public sealed class FiscalSoapPopulatedRegressionTests
     private static XElement Operation(XDocument envelope, string name) => envelope
         .Descendants(XName.Get("Body", SoapNamespace)).Single()
         .Elements(XName.Get(name, WsfeNamespace)).Single();
+
+    private static decimal ReadAmount(XElement parent, string elementName) => decimal.Parse(
+        parent.Element(XName.Get(elementName, WsfeNamespace))!.Value,
+        System.Globalization.CultureInfo.InvariantCulture);
+
+    private static decimal ReadDecimal(XElement parent, string elementName, string xmlNamespace) => decimal.Parse(
+        parent.Element(XName.Get(elementName, xmlNamespace))!.Value,
+        System.Globalization.CultureInfo.InvariantCulture);
+
+    private static decimal ReadLocalDecimal(XElement parent, string elementName) => decimal.Parse(
+        parent.Elements().Single(element => element.Name.LocalName == elementName).Value,
+        System.Globalization.CultureInfo.InvariantCulture);
+
+    private static decimal ReadElementDecimal(XElement element) => decimal.Parse(
+        element.Value,
+        System.Globalization.CultureInfo.InvariantCulture);
 
     private static string CaeResponse() => $"""
         <soap:Envelope xmlns:soap="{SoapNamespace}" xmlns:ws="{WsfeNamespace}"><soap:Body>

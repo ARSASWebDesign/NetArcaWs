@@ -13,13 +13,15 @@ public sealed class NetArcaWsMigrator : INetArcaWsMigrator
     {
         [NetArcaWsPersistenceModule.Invoicing] = ["NetArcaInvoices", "NetArcaInvoiceRevisions", "NetArcaInvoiceSeriesReservations"],
         [NetArcaWsPersistenceModule.WsaaTickets] = ["NetArcaWsaaTickets"],
-        [NetArcaWsPersistenceModule.TenantCertificates] = ["NetArcaCertificateSlots", "NetArcaCertificateVersions"]
+        [NetArcaWsPersistenceModule.TenantCertificates] = ["NetArcaCertificateSlots", "NetArcaCertificateVersions"],
+        [NetArcaWsPersistenceModule.InvoiceRecovery] = ["NetArcaInvoiceRecoveryJobs"]
     };
     private static readonly IReadOnlyDictionary<NetArcaWsPersistenceModule, string> HistoryTables = new Dictionary<NetArcaWsPersistenceModule, string>
     {
         [NetArcaWsPersistenceModule.Invoicing] = "__NetArcaWsInvoiceMigrations",
         [NetArcaWsPersistenceModule.WsaaTickets] = "__NetArcaWsTicketMigrations",
-        [NetArcaWsPersistenceModule.TenantCertificates] = "__NetArcaWsCertificateMigrations"
+        [NetArcaWsPersistenceModule.TenantCertificates] = "__NetArcaWsCertificateMigrations",
+        [NetArcaWsPersistenceModule.InvoiceRecovery] = "__NetArcaWsInvoiceRecoveryMigrations"
     };
 
     public NetArcaWsMigrator(INetArcaWsMigrationContextFactory contextFactory, IReadOnlyList<NetArcaWsPersistenceModule> modules)

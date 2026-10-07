@@ -20,3 +20,9 @@ public sealed class TenantCertificatesDesignTimeFactory : IDesignTimeDbContextFa
     public SqliteTenantCertificatesMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<SqliteTenantCertificatesMigrationsDbContext>()
         .UseSqlite("Data Source=:memory:", x => x.MigrationsAssembly(typeof(TenantCertificatesDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsCertificateMigrations")).Options);
 }
+
+public sealed class InvoiceRecoveryDesignTimeFactory : IDesignTimeDbContextFactory<SqliteInvoiceRecoveryMigrationsDbContext>
+{
+    public SqliteInvoiceRecoveryMigrationsDbContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<SqliteInvoiceRecoveryMigrationsDbContext>()
+        .UseSqlite("Data Source=:memory:", x => x.MigrationsAssembly(typeof(InvoiceRecoveryDesignTimeFactory).Assembly.FullName).MigrationsHistoryTable("__NetArcaWsInvoiceRecoveryMigrations")).Options);
+}

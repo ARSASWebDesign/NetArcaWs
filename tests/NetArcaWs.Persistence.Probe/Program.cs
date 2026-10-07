@@ -5,6 +5,7 @@ using NetArcaWs.EntityFrameworkCore;
 using NetArcaWs.EntityFrameworkCore.MySql;
 using NetArcaWs.EntityFrameworkCore.PostgreSql;
 using NetArcaWs.EntityFrameworkCore.SqlServer;
+using NetArcaWs.EntityFrameworkCore.Migrations.Sqlite;
 using NetArcaWs.HealthChecks;
 using NetArcaWs.Invoicing;
 using NetArcaWs.Multitenancy;
@@ -25,12 +26,29 @@ internal static class Program
             await ProbeStartBarrier.WaitIfConfiguredAsync();
             if (args is ["shared-ticket"])
                 return await RunSharedTicketAsync();
+            bool recovery = args.Length > 0 && args[0].StartsWith("recovery-", StringComparison.Ordinal);
             PersistenceConfiguration configuration = PersistenceConfiguration.FromEnvironment();
-            NetArcaWsModelOptions selection = NetArcaWsModelOptions.Configure(options => options.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1));
+            NetArcaWsModelOptions selection = NetArcaWsModelOptions.Configure(options =>
+            {
+                options.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1);
+                if (recovery) options.AddInvoiceRecovery(ArcaService.Wsfev1, ArcaService.Wsfexv1);
+            });
             var services = new ServiceCollection();
             configuration.RegisterStores(services, selection);
             await using ServiceProvider provider = services.BuildServiceProvider();
             IInvoiceJournal journal = provider.GetRequiredService<IInvoiceJournal>();
+            if (args is ["recovery-prepare", var recoveryTenant, var recoveryKey, var service, var cuit, var pointOfSale, var voucherNumber])
+            {
+                IInvoiceRecoveryQueue queue = provider.GetRequiredService<IInvoiceRecoveryQueue>();
+                var recoverySubmission = new InvoiceSubmission(recoveryTenant, recoveryKey, service,
+                    new InvoiceIdentity(ArcaEnvironment.Homologation, long.Parse(cuit), int.Parse(pointOfSale), 1, long.Parse(voucherNumber)),
+                    "<synthetic>independent-process-recovery</synthetic>");
+                InvoiceOperation operation = await queue.PrepareAndEnqueueAsync(recoverySubmission, "synthetic-credential-reference");
+                Console.WriteLine($"PREPARED {operation.Version} {operation.State}");
+                return 0;
+            }
+            if (args.Length is 4 or 5 && args[0] is "recovery-claim" or "recovery-hold")
+                return await RunRecoveryClaimAsync(provider.GetRequiredService<IInvoiceRecoveryQueue>(), args);
             if (args is ["claim", var tenant, var key])
                 return await journal.TryAcquireAsync(tenant, key, TimeSpan.FromMinutes(1), false) is null ? 4 : 0;
             if (args.Length != 7 || args[0] != "prepare")
@@ -45,10 +63,52 @@ internal static class Program
         {
             return 3;
         }
+        catch (InvoiceRecoveryConflictException)
+        {
+            return 3;
+        }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Persistence probe failed ({ex.GetType().Name}). Set the explicit NETARCA_PERSISTENCE_DB configuration and verify database schema setup.");
             return 2;
+        }
+    }
+
+    private static async Task<int> RunRecoveryClaimAsync(IInvoiceRecoveryQueue queue, string[] args)
+    {
+        string tenant = args[1];
+        ArcaService service = args[2] switch
+        {
+            "wsfe" => ArcaService.Wsfev1,
+            "wsfex" => ArcaService.Wsfexv1,
+            _ => throw new ArgumentException("Recovery probe supports only an explicitly selected invoice service.")
+        };
+        TimeSpan leaseDuration = TimeSpan.FromMilliseconds(long.Parse(args[3]));
+        InvoiceRecoveryScope scope = new(tenant, [service]);
+        InvoiceRecoveryLease? lease = await queue.TryClaimAsync(scope, leaseDuration);
+        if (lease is null) return 4;
+        Console.WriteLine($"CLAIMED {lease.Generation} {lease.CurrentOperation.State}");
+        Console.Out.Flush();
+        if (args[0] == "recovery-claim") return 0;
+
+        string readyPath = ProbeEnvironment.Required("NETARCA_PROBE_RECOVERY_READY");
+        string releasePath = ProbeEnvironment.Required("NETARCA_PROBE_RECOVERY_RELEASE");
+        await File.WriteAllTextAsync(readyPath, "claimed");
+        DateTimeOffset deadline = DateTimeOffset.UtcNow.AddSeconds(45);
+        while (!File.Exists(releasePath))
+        {
+            if (DateTimeOffset.UtcNow >= deadline) throw new TimeoutException("Timed out waiting to verify stale recovery fencing.");
+            await Task.Delay(20);
+        }
+        try
+        {
+            await queue.CompleteAsync(lease, InvoiceRecoveryDisposition.Complete, InvoiceRecoverySafeReason.None);
+            return 5;
+        }
+        catch (InvoiceRecoveryConflictException)
+        {
+            Console.WriteLine("STALE_REJECTED");
+            return 0;
         }
     }
 
@@ -121,8 +181,8 @@ internal sealed record PersistenceConfiguration(string ConnectionString, string 
         string kind = ProbeEnvironment.Required("NETARCA_PERSISTENCE_DB_KIND");
         string version = ProbeEnvironment.Required("NETARCA_PERSISTENCE_DB_VERSION");
         if (!Version.TryParse(version, out Version? parsed)) throw new InvalidOperationException("NETARCA_PERSISTENCE_DB_VERSION must be numeric.");
-        if (kind is not ("mysql" or "mariadb" or "postgresql" or "sqlserver"))
-            throw new InvalidOperationException("NETARCA_PERSISTENCE_DB_KIND must be mysql, mariadb, postgresql, or sqlserver.");
+        if (kind is not ("sqlite" or "mysql" or "mariadb" or "postgresql" or "sqlserver"))
+            throw new InvalidOperationException("NETARCA_PERSISTENCE_DB_KIND must be sqlite, mysql, mariadb, postgresql, or sqlserver.");
         return new PersistenceConfiguration(connectionString, kind, parsed);
     }
 
@@ -130,6 +190,10 @@ internal sealed record PersistenceConfiguration(string ConnectionString, string 
     {
         switch (Kind)
         {
+            case "sqlite":
+                services.AddDbContextFactory<ArcaWsDbContext>(options => options.UseSqlite(ConnectionString));
+                services.AddNetArcaWsEntityFrameworkStores<ArcaWsDbContext>(selection);
+                break;
             case "mysql":
                 services.AddNetArcaWsMySqlStores(ConnectionString, new MySqlServerVersion(Version), selection);
                 break;

@@ -38,6 +38,56 @@ public sealed class TaxCalculatorTests
     }
 
     [Theory]
+    [InlineData(0, 0)]
+    [InlineData(2.5, 3.09)]
+    [InlineData(5, 6.17)]
+    [InlineData(10.5, 12.96)]
+    [InlineData(21, 25.92)]
+    [InlineData(27, 33.33)]
+    public void Vat_returns_expected_amount_for_each_supplied_rate(decimal ratePercent, decimal expected)
+    {
+        TaxCalculator.Vat(123.45m, ratePercent).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(10.5, 90.50, 9.50)]
+    [InlineData(27, 78.74, 21.26)]
+    public void FromGross_keeps_net_and_tax_reconciled_for_nonstandard_supplied_rates(
+        decimal ratePercent, decimal expectedNet, decimal expectedVat)
+    {
+        TaxBreakdown result = TaxCalculator.FromGross(100m, ratePercent);
+
+        result.Net.Should().Be(expectedNet);
+        result.Vat.Should().Be(expectedVat);
+        (result.Net + result.Vat).Should().Be(100m);
+    }
+
+    [Fact]
+    public void Consumer_can_sum_multiple_independently_rounded_tax_bases_and_other_components()
+    {
+        decimal net = 123.45m + 67.89m + 10.05m;
+        decimal vat = TaxCalculator.Vat(123.45m, 21m)
+            + TaxCalculator.Vat(67.89m, 10.5m)
+            + TaxCalculator.Vat(10.05m, 2.5m);
+
+        vat.Should().Be(33.30m);
+        TaxCalculator.Total(net, vat, exempt: 12.34m, untaxed: 5.67m, tributes: 3.21m)
+            .Should().Be(255.91m);
+    }
+
+    [Fact]
+    public void Consumer_grouping_can_change_rounded_vat_and_is_not_a_tax_policy_decision()
+    {
+        decimal byLine = TaxCalculator.Vat(0.03m, 21m)
+            + TaxCalculator.Vat(0.03m, 21m)
+            + TaxCalculator.Vat(0.03m, 21m);
+        decimal byCombinedBase = TaxCalculator.Vat(0.09m, 21m);
+
+        byLine.Should().Be(0.03m);
+        byCombinedBase.Should().Be(0.02m);
+    }
+
+    [Theory]
     [InlineData(-0.01, 21)]
     [InlineData(100, -0.01)]
     public void Vat_rejects_negative_base_or_rate(decimal taxableBase, decimal ratePercent)
