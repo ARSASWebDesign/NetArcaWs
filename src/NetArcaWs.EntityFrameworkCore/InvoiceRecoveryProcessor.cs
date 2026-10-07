@@ -46,7 +46,7 @@ internal sealed class InvoiceRecoveryProcessor(IInvoiceRecoveryQueue queue,
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            await RescheduleIfCurrentAsync(lease, InvoiceRecoverySafeReason.LeaseExpired, CancellationToken.None).ConfigureAwait(false);
+            await RescheduleWithPolicyAsync(lease, InvoiceRecoverySafeReason.None, CancellationToken.None).ConfigureAwait(false);
             throw;
         }
         catch
@@ -66,7 +66,7 @@ internal sealed class InvoiceRecoveryProcessor(IInvoiceRecoveryQueue queue,
         if (!await queue.IsCurrentAsync(lease, cancellationToken).ConfigureAwait(false)) return true;
         if (cancellationToken.IsCancellationRequested)
         {
-            await RescheduleIfCurrentAsync(lease, InvoiceRecoverySafeReason.LeaseExpired, CancellationToken.None).ConfigureAwait(false);
+            await RescheduleWithPolicyAsync(lease, InvoiceRecoverySafeReason.None, CancellationToken.None).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
         }
 
@@ -84,7 +84,7 @@ internal sealed class InvoiceRecoveryProcessor(IInvoiceRecoveryQueue queue,
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // A submission may have reached ARCA. The next claim must reconcile the same identity.
-            await RescheduleIfCurrentAsync(lease, InvoiceRecoverySafeReason.QueryUnavailable, CancellationToken.None).ConfigureAwait(false);
+            await RescheduleWithPolicyAsync(lease, InvoiceRecoverySafeReason.QueryUnavailable, CancellationToken.None).ConfigureAwait(false);
             throw;
         }
         catch
@@ -125,13 +125,6 @@ internal sealed class InvoiceRecoveryProcessor(IInvoiceRecoveryQueue queue,
         await queue.CompleteAsync(lease, InvoiceRecoveryDisposition.Reschedule, reason,
             timeProvider.GetUtcNow() + delay, token).ConfigureAwait(false);
         SafeLog(reason, InvoiceRecoveryDisposition.Reschedule, lease.WorkItem.Attempt);
-    }
-
-    private async Task RescheduleIfCurrentAsync(InvoiceRecoveryLease lease, InvoiceRecoverySafeReason reason, CancellationToken token)
-    {
-        if (!await queue.IsCurrentAsync(lease, token).ConfigureAwait(false)) return;
-        await queue.CompleteAsync(lease, InvoiceRecoveryDisposition.Reschedule, reason,
-            timeProvider.GetUtcNow() + options.BaseBackoff, token).ConfigureAwait(false);
     }
 
     private async Task FinishIfCurrentAsync(InvoiceRecoveryLease lease, InvoiceRecoveryDisposition disposition,

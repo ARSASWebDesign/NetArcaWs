@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using NetArcaWs.HealthChecks;
 using NetArcaWs.Invoicing;
 using NetArcaWs.Services;
@@ -8,7 +9,8 @@ using NetArcaWs.Services;
 namespace NetArcaWs.EntityFrameworkCore;
 
 internal sealed class InvoiceRecoveryHostedService(IServiceScopeFactory scopeFactory,
-    InvoiceRecoveryScope scope, InvoiceRecoveryWorkerOptions options, TimeProvider timeProvider) : BackgroundService
+    InvoiceRecoveryScope scope, InvoiceRecoveryWorkerOptions options, TimeProvider timeProvider,
+    ILogger<InvoiceRecoveryHostedService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -29,6 +31,8 @@ internal sealed class InvoiceRecoveryHostedService(IServiceScopeFactory scopeFac
             catch
             {
                 // Do not include exception messages or tenant/fiscal data in hosted diagnostics.
+                logger.LogWarning(new EventId(1, "InvoiceRecoveryIterationFailed"),
+                    "Invoice recovery iteration failed; retrying after the configured idle interval.");
                 await Task.Delay(options.IdleInterval, timeProvider, stoppingToken).ConfigureAwait(false);
             }
         }
