@@ -74,11 +74,15 @@ Una corrección de rechazo confirmado queda registrada como revisión y requiere
 una llamada explícita a `ResumeAsync` para enviar el nuevo snapshot preparado. No
 hay garantía universal de exactamente una vez.
 
-El coordinador, diario y adaptadores por servicio están disponibles y pasaron la
-suite local. La build Release tuvo 0 warnings y 0 errores. No aplicar retries de
-transporte como sustituto. La aplicación inicia la reconciliación explícitamente;
-no existe worker o backoff integrado. La homologación de negocio autenticada
-sigue pendiente de certificados autorizados.
+El coordinador, diario y adaptadores por servicio están disponibles. El paquete
+core conserva la recuperación explícita con `ResumeAsync`; el paquete EF opcional
+agrega una cola durable, processor y worker alojado con backoff acotado. El host
+los activa de forma explícita y registra `IInvoiceRecoveryContextResolver` para
+volver a autorizar tenant, CUIT, ambiente y la referencia de credencial fijada.
+No existe scheduler distribuido. La extensión es posterior a los paquetes
+públicos 0.6.0 y sus pruebas locales sintéticas no acreditan homologación. No
+aplicar retries de transporte como sustituto. La homologación de negocio
+autenticada sigue pendiente de certificados autorizados.
 
 ## Decisiones relacionadas
 

@@ -223,7 +223,9 @@ validación de contratos de esos flujos pasaron; el transporte común no reinten
 `ResumeAsync` envía solo un snapshot aún `Prepared`; estados
 inciertos se reconcilian sin reenvío. Corregir un rechazo confirmado genera una
 revisión auditable que queda preparada hasta que la aplicación invoque
-explícitamente `ResumeAsync`. Aplican las reglas del
+explícitamente `ResumeAsync`. El paquete EF opcional agrega una cola y un worker
+opt-in para esa misma política; sus APIs son posteriores a 0.6.0 y esperan una
+publicación futura. Aplican las reglas del
 [ADR 0001](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros); una prueba de diario no prueba
 la garantía del ciclo fiscal completo.
 
@@ -232,15 +234,18 @@ la garantía del ciclo fiscal completo.
 El paquete `NetArcaWs.EntityFrameworkCore` implementa `IInvoiceJournal` sobre
 un `DbContext` mediante `IDbContextFactory<TContext>`. El paquete base no
 depende de EF. `NetArcaWsModelOptions` habilita, de forma inmutable, facturación
-(WSFEv1, WSFEXv1 y/o WSMTXCA), tickets WSAA para servicios seleccionados y/o el
-store independiente de certificados. El modelo operativo conserva solo las
-tablas elegidas.
+(WSFEv1, WSFEXv1 y/o WSMTXCA), tickets WSAA para servicios seleccionados, el
+store independiente de certificados y/o la cola `InvoiceRecovery`. Para cada
+servicio de recuperación también debe seleccionarse `AddInvoicing(...)`; la
+selección de modelo no registra el worker ni ejecuta DDL. El modelo operativo
+conserva solo las tablas elegidas.
 
 Los providers de stores MySQL, PostgreSQL y SQL Server son extras separados;
 MySQL/MariaDB requiere una versión explícita. Cinco extras de migraciones
 (`NetArcaWs.EntityFrameworkCore.Migrations.{Sqlite,MySql,MariaDb,PostgreSql,SqlServer}`)
-contienen contextos fijos e historias separadas por motor y módulo. Los tres
-módulos (facturación, tickets WSAA y certificados) se seleccionan por separado.
+contienen contextos fijos e historias separadas por motor y módulo. Los cuatro
+módulos (facturación, tickets WSAA, certificados y recuperación) se seleccionan
+por separado.
 La tarea de
 despliegue registra el paquete elegido, consulta `INetArcaWsMigrator.GetStatusAsync`,
 puede revisar SQL con `GenerateScript(module, fromMigration, toMigration,
@@ -248,11 +253,18 @@ idempotent)` y llama `ApplyAsync` para avanzar. El modelo operativo del consumid
 mantiene su propia historia; la ruta soportada de migrations oficiales usa sus
 contextos dedicados.
 
+El módulo `InvoiceRecovery` agrega `NetArcaInvoiceRecoveryJobs` y su historial
+`__NetArcaWsInvoiceRecoveryMigrations`; su migración inicial es
+`20261007000400_InitialInvoiceRecovery`. El contexto y el apply aislados crean
+solo la tabla de cola. Los artefactos actuales suman 25 DDL nativos y 20 IDs de
+migración: cinco selecciones y cuatro módulos para cada uno de cinco motores.
+Los paquetes publicados 0.6.0 no contienen esta API de recovery.
+
 El registro DI y el inicio normal de la API no conectan ni aplican migraciones.
 El actor de despliegue usa permisos de esquema; runtime usa permisos de datos
 mínimos. Serializá jobs externamente por base: el preflight ocurre antes del lock
-EF y no coordina otros actores. Los tres módulos se pueden aplicar en cualquiera
-de los seis órdenes posibles. Deshabilitarlos preserva tablas, historial y filas. Updates usan paquetes
+EF y no coordina otros actores. Los cuatro módulos se pueden aplicar en cualquiera
+de los 24 órdenes posibles. Deshabilitarlos preserva tablas, historial y filas. Updates usan paquetes
 actualizados más migraciones oficiales pendientes; el consumidor no crea
 migraciones para esas tablas. Un cambio futuro añade una migración por módulo y
 motor, preserva las publicadas y prueba desde la anterior.
@@ -266,9 +278,9 @@ admite scripts idempotentes. Sus migraciones pueden crear además
 motores usan su schema por defecto. La API de conveniencia avanza solamente y no
 promete rollback uniforme de DDL entre motores.
 
-El modelo relacional documenta seis tablas funcionales, 20 DDL actuales (cuatro
-selecciones × cinco motores) y 15 scripts de migración inicial versionados
-(tres módulos × cinco motores). El DDL representa el modelo actual y los scripts
+El modelo relacional documenta siete tablas funcionales, 25 DDL actuales (cinco
+selecciones × cinco motores) y 20 scripts de migración inicial versionados
+(cuatro módulos × cinco motores). El DDL representa el modelo actual y los scripts
 el upgrade real `0`→`latest`; no son intercambiables ni baselines automáticos.
 
 El módulo opcional `TenantCertificates` almacena versiones inmutables cifradas y
@@ -293,6 +305,15 @@ NuGet queda pendiente de la siguiente publicación. Consultar
 [ADR 0005](ADR-0005-ef-core-invoice-journal), la
 [guía del diario](Diario-fiscal) y el
 [modelo relacional](Modelo-relacional).
+
+La cola/worker de recuperación fiscal también es posterior a 0.6.0 y todavía no
+está en los paquetes públicos. Las corridas locales reportadas para el issue #24
+son sintéticas y están desglosadas en `PROGRESS.md`; el consumer smoke con feed
+local nuevo, la instalación de CLI y el pack local de once proyectos pasaron.
+La revisión completa aprobó restore locked, build Release (0 warnings/0 errors),
+630 pruebas (588 aprobadas, 42 skips opt-in, 0 fallos), 25 DDL y 20 scripts de
+migración. El pack se repetirá después de actualizar los README incluidos en los
+paquetes. No se hicieron llamadas a ARCA.
 
 ## Herramienta de certificados
 

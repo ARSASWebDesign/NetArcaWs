@@ -6,7 +6,7 @@
 - Fecha de investigación: 2026-10-06
 - Alcance: operaciones unitarias de autorización CAE en WSFEv1, WSFEXv1 y WSMTXCA
 - Fuera de alcance: emisión batch durable, asignación automática de numeración,
-  reenvíos automáticos, worker alojado y garantía de exactamente una vez
+  reenvíos automáticos, scheduler distribuido y garantía de exactamente una vez
 
 ## Contexto
 
@@ -106,12 +106,51 @@ una base transaccional compartida con las mismas claves únicas y fencing.
 
 `IInvoiceJournal.ListPendingAsync(tenantId, limit)` enumera para la aplicación
 operaciones `Prepared`, `Unknown`, `Conflict` y `ManualReview`, además de
-envíos/reconciliaciones con lease vencida. La aplicación debe programar la
-recuperación: usar `SafeInvoiceService.ResumeAsync` para cada elemento. Este método
-envía solo el snapshot `Prepared`; para los demás llama a reconciliación. No hay
-worker alojado, scheduler, backoff/jitter ni notificación integrados; no se ejecuta
-recuperación en segundo plano. Un pending item no es por sí mismo una instrucción
-para reemitir.
+envíos/reconciliaciones con lease vencida. En el paquete core la aplicación puede
+iniciar la recuperación con `SafeInvoiceService.ResumeAsync`: envía solo el
+snapshot `Prepared` y reconcilia los demás estados. Un elemento pendiente no es
+por sí mismo una instrucción para reemitir.
+
+El paquete opcional `NetArcaWs.EntityFrameworkCore` agrega el módulo
+`InvoiceRecovery`, una cola y un `BackgroundService` de registro explícito.
+`AddInvoiceRecovery(...)` se selecciona por separado de `AddInvoicing(...)`, con
+el mismo servicio en ambos; la selección no migra ni activa el worker. El host
+llama `AddNetArcaWsInvoiceRecoveryWorker(scope, configure)` y registra
+`IInvoiceRecoveryContextResolver`. El resolver de la aplicación vuelve a autorizar
+tenant, CUIT representada y ambiente y resuelve la referencia opaca de credencial
+fijada por esa generación del trabajo. Debe rechazar credenciales revocadas o
+ausentes y no sustituirlas silenciosamente por la versión activa. La biblioteca
+no persiste certificados, claves, Token ni Sign en la cola.
+
+La cola guarda una huella fiscal del snapshot y un pin técnico a la versión del
+diario, pero no duplica el payload. Repetir `PrepareAndEnqueueAsync` con la misma
+huella y referencia no reinicia intento, horario, generación ni claim. `ScheduleAsync`
+requiere la versión exacta vigente, puede reactivar un job completado o suspendido
+compatible y no cambia payload ni llama SOAP; después de una revisión explícita
+de un rechazo, puede fijar el snapshot revisado. `FindAsync` devuelve solo estado,
+intentos, horarios, generación y un motivo seguro; no expone identidad, tenant,
+clave, hash ni referencia de credencial.
+
+Cada claim tiene un fence/generación separado y vence en hasta 30 minutos. Si el
+claim vence mientras el diario sigue `Prepared`, la misma transacción lo cambia
+a `Unknown`, aumenta la versión técnica y reclama para reconciliar. Así el claim
+antiguo no habilita un segundo envío. SOAP ocurre fuera de la transacción. Solo
+un `Prepared` con claim vigente puede llamar a `ResumeAsync`; `Unknown` y los
+estados `Submitting`/`Reconciling` vencidos consultan el comprobante existente.
+Consultas vacías o no disponibles se programan como reconciliación con backoff
+exponencial acotado y jitter; no producen autorización de reenvío. Al alcanzar el
+límite de intentos (10 por defecto), el job se suspende hasta una llamada explícita
+a `ScheduleAsync`. `Authorized` y `Rejected` completan el job; `Rejected` conserva
+la semántica preexistente y libera la reserva de serie. `Conflict` y `ManualReview`
+suspenden para intervención.
+
+SQLite admite archivo local y procesos del mismo host, no NFS ni hosts distintos.
+Una instalación multi-host necesita almacenamiento transaccional compartido y un
+provider soportado con las restricciones únicas y fencing correspondientes; el
+worker no aporta coordinación distribuida ni un scheduler externo. La cola cubre
+solo CAE unitario WSFEv1, WSFEXv1 y WSMTXCA. No hay exactly-once, emisión batch,
+retry HTTP genérico ni failover de ambiente. El código de esta extensión es
+posterior a los paquetes públicos 0.6.0 y aún requiere una publicación posterior.
 
 ## Límites de la política actual
 
@@ -152,14 +191,12 @@ Electrónica MiPyME.
 
 ## Evolución pendiente
 
-Para ampliar esta política se requiere una ADR o revisión de esta decisión con
-pruebas de contrato y reglas oficiales por servicio. Como mínimo: demostrar cómo
-se clasifica “no existe” frente a resultado pendiente; fijar retención y backoff;
-crear un worker idempotente con límite y telemetría; comprobar la regla de
-reenvío de cada operación y su efecto de correlatividad; definir asignación de
-número bajo concurrencia; diseñar lotes con identidad/resultado independiente por
-item; y verificar recuperación tras caída de DB o del proceso. Ninguno de esos
-pasos se debe inferir de `ListPendingAsync` ni habilitar por un retry HTTP.
+Una ampliación futura aún requiere evidencia por contrato para cualquier regla de
+reenvío, decisión sobre asignación concurrente de números, lotes con identidad y
+resultado por item, y políticas de retención/notificación. La cola tampoco
+resuelve lectura remota eventualmente consistente, pérdida/corrupción del storage,
+emisores que omitan el diario ni coordinación entre bases. Ninguna de estas
+condiciones habilita retry HTTP ni una garantía exactly-once.
 
 ## Fuentes oficiales consultadas
 
