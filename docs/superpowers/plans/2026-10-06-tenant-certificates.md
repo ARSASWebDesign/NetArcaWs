@@ -118,4 +118,3 @@
 - [ ] Update ADRs, architecture, progress, README, and relational model with only evidence actually obtained; keep migration execution explicit and opt-in.
 - [ ] Run the repository's locked restore, Release build, solution test, library/tool pack, and consumer sample checks only after focused engine suites pass; report any unavailable provider engine as unverified rather than inferred.
 - [ ] Review `git diff --check`, generated migrations/snapshots, package locks, all public `ToString`/exception surfaces, and ensure no secret-bearing fixtures or output were added.
-
