@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.MySql/NetArcaWs.EntityFrameworkCore.MySql.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.PostgreSql/NetArcaWs.EntityFrameworkCore.PostgreSql.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.SqlServer/NetArcaWs.EntityFrameworkCore.SqlServer.csproj" />
+  </ItemGroup>
+</Project>

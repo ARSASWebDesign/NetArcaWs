@@ -33,6 +33,44 @@ public sealed class WikiMirrorTests
     }
 
     [Fact]
+    public void Run_assigns_distinct_pages_to_optional_provider_readmes()
+    {
+        using var workspace = new BuildTestWorkspace();
+        workspace.Write("README.md", "# Project\n");
+        workspace.Write("docs/wiki/Home.md", "# Home\n");
+        workspace.Write("src/NetArcaWs.EntityFrameworkCore.MySql/README.md", "# MySQL\n");
+        workspace.Write("src/NetArcaWs.EntityFrameworkCore.PostgreSql/README.md", "# PostgreSQL\n");
+        workspace.Write("src/NetArcaWs.EntityFrameworkCore.SqlServer/README.md", "# SQL Server\n");
+
+        WikiMirror.Run(workspace.Root);
+
+        workspace.Read("docs/wiki-export/MySQL-MariaDB-EF-Core.md").Should().Contain("# MySQL");
+        workspace.Read("docs/wiki-export/PostgreSQL-EF-Core.md").Should().Contain("# PostgreSQL");
+        workspace.Read("docs/wiki-export/SQL-Server-EF-Core.md").Should().Contain("# SQL Server");
+    }
+
+    [Fact]
+    public void Run_assigns_distinct_pages_to_all_official_migration_readmes()
+    {
+        using var workspace = new BuildTestWorkspace();
+        workspace.Write("README.md", "# Project\n");
+        workspace.Write("docs/wiki/Home.md", "# Home\n");
+        string[] packages = ["Sqlite", "MySql", "MariaDb", "PostgreSql", "SqlServer"];
+        foreach (string package in packages)
+            workspace.Write($"src/NetArcaWs.EntityFrameworkCore.Migrations.{package}/README.md", $"# {package}\n");
+
+        WikiMirror.Run(workspace.Root);
+
+        foreach (string package in packages)
+        {
+            string manifest = workspace.Read("docs/wiki-export/Fuentes-documentales.md");
+            manifest.Should().Contain($"NetArcaWs.EntityFrameworkCore.Migrations.{package}/README.md");
+            manifest.Should().Contain($" → `Migraciones-{package}-EF-Core");
+            workspace.Read($"docs/wiki-export/Migraciones-{package}-EF-Core.md").Should().Contain($"# {package}");
+        }
+    }
+
+    [Fact]
     public void Run_uses_curated_home_navigation_and_ignores_legacy_sidebar_template()
     {
         using var workspace = new BuildTestWorkspace();
@@ -129,6 +167,21 @@ public sealed class WikiMirrorTests
         sources.Should().NotContain("bin/private.md");
         sources.Should().NotContain("obj/private.md");
         sources.Should().NotContain("OldExport.md");
+    }
+
+    [Fact]
+    public void Run_excludes_private_superpowers_markdown_from_pages_and_manifest()
+    {
+        using var workspace = new BuildTestWorkspace();
+        workspace.Write("docs/wiki/Home.md", "# Home\n");
+        workspace.Write(".superpowers/sdd/netarcaws-ef-plan/mysql-review.md", "private review notes\n");
+
+        WikiMirror.Run(workspace.Root);
+
+        string sources = workspace.Read("docs/wiki-export/Fuentes-documentales.md");
+        sources.Should().Contain("docs/wiki/Home.md");
+        sources.Should().NotContain(".superpowers/");
+        workspace.Exists("docs/wiki-export/Documento-mysql-review.md").Should().BeFalse();
     }
 
     [Fact]

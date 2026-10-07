@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>NetArcaWs.EntityFrameworkCore.PostgreSql</PackageId>
+    <Version>0.5.0</Version>
+    <Authors>NetArcaWs .NET contributors</Authors>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/ARSASWebDesign/NetArcaWs</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/ARSASWebDesign/NetArcaWs</PackageProjectUrl>
+    <Description>Optional PostgreSQL Entity Framework Core provider integration for NetArcaWs persistence.</Description>
+    <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>afip;argentina;efcore;postgresql;invoice-journal;wsaa</PackageTags>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <ProjectReference Include="../NetArcaWs.EntityFrameworkCore/NetArcaWs.EntityFrameworkCore.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="/" />
+    <None Include="../../COPYING" Pack="true" PackagePath="/" />
+    <None Include="../../THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

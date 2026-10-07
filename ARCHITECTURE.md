@@ -57,8 +57,9 @@ no cambia la representación SOAP. No se usa WCF: las fachadas usan
 son la fuente reproducible para la generación, no una afirmación de compatibilidad
 con todos los cambios futuros del servicio.
 
-La verificación Release actual tuvo 256 casos, 253 aprobados y 3 omitidos, con
-0 warnings y 0 errors. Las 183 operaciones se cotejaron con sus WSDL y 369 tipos
+La verificación Release actual tuvo 420 casos, 415 aprobados, 5 omitidos
+(4 dependientes de ARCA y 1 test opt-in de engine), 0 fallos, 0 warnings y 0 errors.
+Las 183 operaciones se cotejaron con sus WSDL y 369 tipos
 raíz XML pasaron round-trip; los 56 tipos con `DateTime` (`xs:date`/`xs:dateTime`)
 conservaron sus valores. Los snapshots QA/producción de WSCDC, WSFECred y WSCPE tienen
 schemas coincidentes. En una corrida anterior a WSCPE respondieron 9 probes
@@ -163,9 +164,10 @@ credenciales son administrados y no garantizan borrado de memoria.
 
 El TA contiene secretos. Su ToString los oculta, pero las propiedades Token,
 Sign y Xml siguen siendo sensibles. El servicio no registra mensajes SOAP.
-No hay reintentos automáticos ni persistencia distribuida. Reinicios, expulsión
-de entradas y procesos independientes pueden perder un TA todavía válido en
-ARCA; el error correspondiente no debe ocultarse ni tratarse como éxito.
+La caché incorporada es local al proceso. El paquete EF optativo agrega tickets
+cifrados compartidos cuando se selecciona explícitamente; el registro del
+paquete base no activa almacenamiento distribuido. Sus invariantes están en
+[ADR 0006](docs/adr/0006-shared-wsaa-tickets.md).
 
 ## Hito 1: agentes y validación
 
@@ -222,6 +224,58 @@ revisión auditable que queda preparada hasta que la aplicación invoque
 explícitamente `ResumeAsync`. Aplican las reglas del
 [ADR 0001](docs/adr/0001-safe-invoice-retries.md); una prueba de diario no prueba
 la garantía del ciclo fiscal completo.
+
+### Persistencia opcional con Entity Framework Core
+
+El paquete `NetArcaWs.EntityFrameworkCore` implementa `IInvoiceJournal` sobre
+un `DbContext` mediante `IDbContextFactory<TContext>`. El paquete base no
+depende de EF. `NetArcaWsModelOptions` habilita, de forma inmutable, facturación
+(WSFEv1, WSFEXv1 y/o WSMTXCA), tickets WSAA para servicios seleccionados o
+ambos. El modelo operativo conserva solo las tablas elegidas.
+
+Los providers de stores MySQL, PostgreSQL y SQL Server son extras separados;
+MySQL/MariaDB requiere una versión explícita. Cinco extras de migraciones
+(`NetArcaWs.EntityFrameworkCore.Migrations.{Sqlite,MySql,MariaDb,PostgreSql,SqlServer}`)
+contienen contextos fijos e historias separadas por motor y módulo. La tarea de
+despliegue registra el paquete elegido, consulta `INetArcaWsMigrator.GetStatusAsync`,
+puede revisar SQL con `GenerateScript(module, fromMigration, toMigration,
+idempotent)` y llama `ApplyAsync` para avanzar. El modelo operativo del consumidor
+mantiene su propia historia; la ruta soportada de migrations oficiales usa sus
+contextos dedicados.
+
+El registro DI y el inicio normal de la API no conectan ni aplican migraciones.
+El actor de despliegue usa permisos de esquema; runtime usa permisos de datos
+mínimos. Serializá jobs externamente por base: el preflight ocurre antes del lock
+EF y no coordina otros actores. Ambos módulos se pueden aplicar en cualquier
+orden. Deshabilitarlos preserva tablas, historial y filas. Updates usan paquetes
+actualizados más migraciones oficiales pendientes; el consumidor no crea
+migraciones para esas tablas. Un cambio futuro añade una migración por módulo y
+motor, preserva las publicadas y prueba desde la anterior.
+
+No se adopta automáticamente el diario SQLite core, `EnsureCreated`, DDL manual
+o esquema con historia del consumidor. Tablas existentes sin historia oficial,
+IDs desconocidos, gaps y esquema incompleto se rechazan; no hay baseline
+automático ni instrucciones para insertar historia o borrar datos. SQLite no
+admite scripts idempotentes. Sus migraciones pueden crear además
+`__EFMigrationsLock`. PostgreSQL usa `public` y SQL Server usa `dbo`; los otros
+motores usan su schema por defecto. La API de conveniencia avanza solamente y no
+promete rollback uniforme de DDL entre motores.
+
+El modelo relacional documenta cuatro tablas funcionales, 15 DDL actuales (tres
+selecciones × cinco motores) y 10 scripts de migración inicial versionados (dos
+módulos × cinco motores). El DDL representa el modelo actual y los scripts el
+upgrade real `0`→`latest`; no son intercambiables ni baselines automáticos.
+
+CI 37547645296 pasó 510 pruebas (491 aprobadas, 19 opt-in skips, 0 fallos),
+build Release con 0 warnings; MySQL 8.4.11 20/20, MariaDB 11.4.13 20/20,
+PostgreSQL 17.6 19/19 y SQL Server Developer 16.0.4295.3 19/19, sin skips de
+motor. La corrida validó también los 10 SQL de migración, 15 DDL, 11 paquetes y
+un consumer/CLI nuevo. Es evidencia limitada a estas versiones/escenarios; no
+hubo llamadas ARCA ni publicación de extras. Certificados y worker siguen en
+[issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19). Consultar
+[ADR 0005](docs/adr/0005-ef-core-invoice-journal.md), la
+[guía del diario](docs/wiki/Diario-fiscal.md) y el
+[modelo relacional](docs/wiki/Modelo-relacional.md).
 
 ## Herramienta de certificados
 

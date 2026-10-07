@@ -10,8 +10,12 @@ Los contratos y las fachadas de Hitos 2–5, su suite, mapeos QName/action y
 roundtrips de serialización fueron verificados. Esto no afirma paridad funcional
 completa con el repositorio Python ni homologación de operaciones autenticadas.
 
-Verificación registrada el 2026-10-06: build Release con 0 warnings y 0 errores;
-256 casos de suite, 253 aprobados y 3 omitidos. Se verificaron las 183
+La verificación de migraciones en CI 37547645296 corrió sobre el base exacto:
+510 pruebas (491 aprobadas, 19 skips opt-in, 0 fallos), build Release con 0
+warnings, y los motores reales MySQL 8.4.11 (20/20), MariaDB 11.4.13 (20/20),
+PostgreSQL 17.6 (19/19) y SQL Server Developer 16.0.4295.3 (19/19), todos sin
+skips de motor. Además pasó 10 scripts de migración, 15 DDL, 11 packs y un
+consumer/CLI nuevo. Se verificaron las 183
 operaciones contra sus WSDL y 369 tipos raíz XML en round-trip; los 56 tipos
 con campos `DateTime` (`xs:date` y `xs:dateTime`) conservaron sus valores. Los
 snapshots QA/producción de WSCDC, WSFECred y WSCPE coinciden en sus schemas. En QA real,
@@ -19,6 +23,14 @@ los nueve probes `Dummy` respondieron y dos pruebas autenticadas se omitieron
 por falta de certificados. Esa corrida precede a WSCPE; su nuevo Dummy solo
 se probó con SOAP simulado en este bloque. Los Dummies prueban disponibilidad, no autorización
 fiscal.
+
+Los escenarios de motores se ejecutaron en MySQL 8.4.11 (20/20), MariaDB
+11.4.13 (20/20), PostgreSQL 17.6 (19/19) y SQL Server Developer 16.0.4295.3
+(19/19), incluidos casos entre procesos y migraciones; son versiones y
+escenarios concretos, sin garantía universal ni homologación ARCA. La corrida
+CI de referencia es [37547645296](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37547645296).
+Los 11 paquetes se empaquetaron y el consumer/CLI local fue probado en esa
+corrida, sin llamadas a ARCA ni publicación de los extras.
 
 ## Extras y adaptaciones propias respecto de PyAfipWs
 
@@ -36,12 +48,14 @@ contrastan con el [upstream](https://github.com/reingart/pyafipws) y la
 | Certificados como contenido | `WsaaCertificateContent`: PEM, PFX/P12 en bytes o Base64, configuración o parámetro por operación; apto para secretos obtenidos de vault/BD por la aplicación |
 | Contexto multitenant explícito | `ArcaTenantContext`: tenant, CUIT representada, entorno y certificado; usado por WSAA y las operaciones autenticadas de las fachadas SOAP actuales; autorización del tenant sigue a cargo de la aplicación |
 | Caché compartida dentro del proceso | `IMemoryCache`, vencimiento real del TA y coordinación de logins concurrentes; rotación separada por huella; no es caché distribuida |
+| Persistencia EF Core opt-in | `NetArcaWs.EntityFrameworkCore` agrega el diario fiscal y, si se selecciona, tickets WSAA cifrados compartidos; el core no depende de EF. Cinco paquetes opcionales de migraciones oficiales versionadas permiten a una tarea de despliegue consultar estado, generar SQL y aplicar los módulos seleccionados |
+| Proveedores relacionales EF opt-in | SQLite usa el provider del consumidor; paquetes separados para MySQL/MariaDB, PostgreSQL y SQL Server. El core sigue sin EF. Paquetes opcionales 0.5.0 sin publicar; ver [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19) |
 | Health checks integrables en ASP.NET Core | `IHealthCheck`, registro opt-in por WS/entorno, timeout, tags y estado de componentes; sin certificados ni login |
 | Herramienta instalable con `dotnet tool` | `cert-dev`, `cert-prod`, `cert-info`; manifiesto local o instalación global, contraseña por variable de entorno y protección contra sobrescrituras |
 | Manejo de recursos y errores | Certificados importados liberados por operación, claves PFX efímeras donde se soportan, XML sin DTD, límites configurables de 4 MiB para request/response y timeout de lectura; secretos ocultos en `ToString` |
 | Validación propia del port | xUnit/AwesomeAssertions, SOAP simulado, pruebas de firmas y aislamiento concurrente entre tenants, suite separada de homologación y CI de build/test/pack/instalación de la CLI |
 | Arquitectura trazable | ADR de certificados en memoria y multitenancy; límites y equivalencias documentados |
-| Diario fiscal y coordinación durable | `SafeInvoiceService` + `IInvoiceJournal` / `InvoiceCoordinator` ofrecen autorización unitaria y reconciliación exacta en WSFE/WSFEX/WSMTXCA; implementación y suite local verificadas. No orquestan escrituras WSFECred ni WSCPE. SQLite sirve a procesos de un host, no NFS ni multi-host; sin worker ni reenvío de estados inciertos |
+| Diario fiscal y coordinación durable | `SafeInvoiceService` + `IInvoiceJournal` / `InvoiceCoordinator` ofrecen autorización unitaria y reconciliación exacta en WSFE/WSFEX/WSMTXCA. SQLite sirve a procesos de un host; un proveedor EF compartido es opt-in y conserva el mismo contrato. No orquestan escrituras WSFECred ni WSCPE; no incluyen worker ni reenvío de estados inciertos |
 | Clientes SOAP por contrato ARCA | 183 operaciones en diez fachadas; sin WCF. Los siete contratos anteriores se verificaron contra sus snapshots; WSCDC, WSFECred y WSCPE se generan desde snapshots de QA/producción coincidentes. La homologación fiscal autenticada se informa aparte |
 | Seguridad de contribuciones y releases | Revisión CODEOWNER, CI/CodeQL/dependencias, tags protegidos y publicación automática con OIDC; [controles y límites](docs/wiki/Seguridad-y-publicacion.md) |
 | Wiki integral del repositorio | [Wiki publicada](https://github.com/ARSASWebDesign/NetArcaWs/wiki); catálogo por servicio, referencia de 183 operaciones, guías WSCDC/WSFECred/WSCPE, ejemplos compilables e inventario upstream trazable |
@@ -49,7 +63,71 @@ contrastan con el [upstream](https://github.com/reingart/pyafipws) y la
 Ver las decisiones de [multitenancy](docs/adr/0002-arca-tenant-context.md),
 [certificados en memoria](docs/adr/0003-in-memory-certificates.md) y
 [reintentos seguros](docs/adr/0001-safe-invoice-retries.md) y
-[contratos SOAP públicos](docs/adr/0004-public-soap-contracts.md).
+[contratos SOAP públicos](docs/adr/0004-public-soap-contracts.md),
+[diario EF Core](docs/adr/0005-ef-core-invoice-journal.md) y
+[tickets WSAA compartidos](docs/adr/0006-shared-wsaa-tickets.md).
+
+## Persistencia EF Core opcional
+
+`NetArcaWs.EntityFrameworkCore` integra el diario fiscal y los tickets WSAA
+cifrados con un contexto EF del consumidor. El paquete principal no depende de
+EF. Los providers se distribuyen por separado como
+`NetArcaWs.EntityFrameworkCore.MySql`,
+`NetArcaWs.EntityFrameworkCore.PostgreSql` y
+`NetArcaWs.EntityFrameworkCore.SqlServer`; esos cuatro paquetes optativos y los cinco paquetes `NetArcaWs.EntityFrameworkCore.Migrations.{Sqlite,MySql,MariaDb,PostgreSql,SqlServer}` usan versión 0.5.0 y todavía no están publicados en NuGet.
+
+La aplicación selecciona de forma inmutable sus módulos y servicios al iniciar:
+
+- Solo facturación: `options.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca)`; se puede elegir uno o más de esos tres servicios.
+- Solo tickets: `options.AddWsaaTickets(ArcaService.Wsfev1, ArcaService.PadronA5)`; se eligen explícitamente los servicios autenticados.
+- Ambos módulos: encadenar `AddInvoicing(...)` y `AddWsaaTickets(...)` en una misma configuración.
+
+Con un `DbContext` del consumidor, registrá su factoría, agregá las entidades al
+modelo y registrá los stores con la misma selección. Para módulos solo de
+facturación, se omite el protector; al seleccionar tickets hay que registrarlo
+antes de los stores:
+
+```csharp
+NetArcaWsModelOptions modelOptions = NetArcaWsModelOptions.Configure(options =>
+    options.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1, ArcaService.Wsmtxca)
+        .AddWsaaTickets(ArcaService.Wsfev1, ArcaService.PadronA5));
+
+services.AddDbContextFactory<MyApplicationDbContext>(options => options.UseSqlite(connectionString));
+services.AddSingleton<IWsaaTicketProtector>(protectorFromApplicationKeyRing); // Keyring externo compartido por réplicas.
+services.AddNetArcaWsEntityFrameworkStores<MyApplicationDbContext>(modelOptions);
+services.AddNetArcaWsInvoicing(); // Base WSAA/fachadas y SafeInvoiceService.
+```
+
+`MyApplicationDbContext.OnModelCreating` debe llamar a
+`modelBuilder.AddNetArcaWs(modelOptions)`. Para contexto dedicado con MySQL o
+MariaDB, el paquete opcional acepta `MySqlServerVersion` o
+`MariaDbServerVersion` explícitos en `AddNetArcaWsMySqlStores`; no detecta la
+versión del servidor. PostgreSQL usa `AddNetArcaWsPostgreSqlStores(connectionString, modelOptions)` y SQL Server usa
+`AddNetArcaWsSqlServerStores(connectionString, modelOptions)`. Esos helpers tampoco
+conectan ni detectan la versión. Las migraciones oficiales se configuran en una tarea de despliegue explícita, nunca en el registro de la API ni en su inicio normal. Seleccioná los módulos con las mismas opciones y registrá exactamente un extra de migraciones. Por ejemplo, para SQLite:
+
+```csharp
+services.AddNetArcaWsSqliteMigrations(connectionString, modelOptions);
+await using ServiceProvider deploymentProvider = services.BuildServiceProvider();
+INetArcaWsMigrator migrator = deploymentProvider.GetRequiredService<INetArcaWsMigrator>();
+NetArcaWsMigrationStatus before = await migrator.GetStatusAsync(cancellationToken);
+string sql = migrator.GenerateScript(NetArcaWsPersistenceModule.Invoicing);
+NetArcaWsMigrationStatus after = await migrator.ApplyAsync(cancellationToken);
+```
+
+En producción, usá el provider del host/job de despliegue dedicado; no registres este paso en el startup de cada API. `GetStatusAsync` y `ApplyAsync` abren conexiones cuando se ejecutan; `GenerateScript` trabaja offline. Ejecutá un solo actor de despliegue por base y serializá jobs: el preflight ocurre fuera del lock interno de EF y no coordina despliegues externos. Usá permisos de cambio de esquema para el actor y permisos runtime mínimos para la API. Aplicá facturación y tickets en cualquier orden; deshabilitar un módulo conserva sus tablas, historial y filas.
+
+Para actualizar, instalá la nueva versión y aplicá sus pendientes oficiales en el despliegue. No generes migraciones del consumidor para las tablas dedicadas. Si cambia el modelo upstream, NetArcaWs agrega una nueva migración por motor/módulo, conserva las publicadas y verifica el camino desde la anterior. Los 15 DDL de `persistence-schema` describen los tres esquemas seleccionados por proveedor; los 10 scripts de `persistence-migrations` son las migraciones iniciales oficiales `0` a `latest`, no idempotentes ni baselines reutilizables. Los historiales guardan lo aplicado en cada módulo; el modelo operativo contiene cuatro tablas funcionales. EF también puede crear `__EFMigrationsLock` en SQLite al migrar.
+
+Las tablas preexistentes sin historia oficial se rechazan. Revisá manualmente propiedad y esquema antes de planificar una adopción futura; no insertes history rows automáticamente ni borres datos o tablas. No se adopta automáticamente el diario SQLite del core, el DDL manual, `EnsureCreated` o un esquema administrado por el consumidor. Consultá la guía [Modelo relacional](docs/wiki/Modelo-relacional.md) para los diccionarios y los comandos locales.
+Cuando solo se seleccionan tickets, registrar el servicio base con
+`services.AddNetArcaWs()`; cuando se usa el diario, registrar el orquestador con
+`AddNetArcaWsInvoicing()`. El registro de tickets requiere
+`IWsaaTicketProtector` con claves compartidas administradas fuera de la base
+de datos. Todas las réplicas que comparten tickets deben usar el mismo keyring.
+El [ADR 0005](docs/adr/0005-ef-core-invoice-journal.md),
+el [ADR 0006](docs/adr/0006-shared-wsaa-tickets.md) y la
+[guía del diario](docs/wiki/Diario-fiscal.md) detallan el uso y sus límites.
 
 ## Contratos SOAP ARCA disponibles
 
@@ -146,10 +224,18 @@ La biblioteca y sus automatizaciones de wiki, contratos y releases usan .NET;
 no se requiere Python. Ver [herramientas de mantenimiento](CONTRIBUTING.md#herramientas-de-mantenimiento-net).
 
 ```sh
-dotnet restore NetArcaWs.slnx
+dotnet restore NetArcaWs.slnx --locked-mode
 dotnet build NetArcaWs.slnx --configuration Release --no-restore
-dotnet test --solution NetArcaWs.slnx --configuration Release --no-restore
+dotnet test --solution NetArcaWs.slnx --configuration Release --no-build --no-restore
 dotnet pack src/NetArcaWs/NetArcaWs.csproj --configuration Release --no-build --output artifacts
+dotnet pack src/NetArcaWs.Tool/NetArcaWs.Tool.csproj --configuration Release --no-build --output artifacts
+dotnet pack src/NetArcaWs.EntityFrameworkCore/NetArcaWs.EntityFrameworkCore.csproj --configuration Release --no-build --output artifacts
+dotnet pack src/NetArcaWs.EntityFrameworkCore.MySql/NetArcaWs.EntityFrameworkCore.MySql.csproj --configuration Release --no-build --output artifacts
+dotnet pack src/NetArcaWs.EntityFrameworkCore.PostgreSql/NetArcaWs.EntityFrameworkCore.PostgreSql.csproj --configuration Release --no-build --output artifacts
+dotnet pack src/NetArcaWs.EntityFrameworkCore.SqlServer/NetArcaWs.EntityFrameworkCore.SqlServer.csproj --configuration Release --no-build --output artifacts
+dotnet run --project tools/NetArcaWs.Build -- persistence-schema --check
+NUGET_PACKAGES=/tmp/netarcaws-package-smoke-packages dotnet restore tests/NetArcaWs.Persistence.PackageSmoke/NetArcaWs.Persistence.PackageSmoke.csproj --configfile tests/NetArcaWs.Persistence.PackageSmoke/NuGet.config -p:PersistencePackageVersion=0.5.0
+NUGET_PACKAGES=/tmp/netarcaws-package-smoke-packages dotnet run --project tests/NetArcaWs.Persistence.PackageSmoke/NetArcaWs.Persistence.PackageSmoke.csproj --configuration Release --no-restore -p:PersistencePackageVersion=0.5.0
 ```
 
 Los tests usan xUnit v3 y AwesomeAssertions 9.6.0, con Microsoft.Testing.Platform.
@@ -159,6 +245,12 @@ puede instalarse desde una carpeta NuGet:
 ```sh
 dotnet add package NetArcaWs --version 0.5.0 --source /ruta/absoluta/a/artifacts
 ```
+
+Los cuatro paquetes `NetArcaWs.EntityFrameworkCore*` también usan versión
+0.5.0; todavía no forman parte de la release pública. Su guía de selección de
+módulos y migraciones está en [Diario fiscal](docs/wiki/Diario-fiscal.md), y el
+diccionario del esquema está en [Modelo relacional](docs/wiki/Modelo-relacional.md).
+Las pruebas usan cargas y tickets sintéticos; no demuestran homologación fiscal.
 
 ## Autenticación
 

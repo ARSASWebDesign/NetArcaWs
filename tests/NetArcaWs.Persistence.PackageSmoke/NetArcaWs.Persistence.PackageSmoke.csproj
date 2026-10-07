@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
+    <PersistencePackageVersion Condition="'$(PersistencePackageVersion)' == ''">0.5.0</PersistencePackageVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NetArcaWs.EntityFrameworkCore" Version="$(PersistencePackageVersion)" />
+    <PackageReference Include="NetArcaWs.EntityFrameworkCore.MySql" Version="$(PersistencePackageVersion)" />
+    <PackageReference Include="NetArcaWs.EntityFrameworkCore.PostgreSql" Version="$(PersistencePackageVersion)" />
+    <PackageReference Include="NetArcaWs.EntityFrameworkCore.SqlServer" Version="$(PersistencePackageVersion)" />
+    <PackageReference Include="NetArcaWs.EntityFrameworkCore.Migrations.Sqlite" Version="$(PersistencePackageVersion)" />
+    <PackageReference Include="NetArcaWs.EntityFrameworkCore.Migrations.MySql" Version="$(PersistencePackageVersion)" />
+    <PackageReference Include="NetArcaWs.EntityFrameworkCore.Migrations.MariaDb" Version="$(PersistencePackageVersion)" />
+    <PackageReference Include="NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql" Version="$(PersistencePackageVersion)" />
+    <PackageReference Include="NetArcaWs.EntityFrameworkCore.Migrations.SqlServer" Version="$(PersistencePackageVersion)" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
+  </ItemGroup>
+</Project>

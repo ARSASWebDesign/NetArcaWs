@@ -44,6 +44,64 @@ The library references these packages and does not statically link them into
 its own managed assembly; deployment assets can include their native runtime
 library.
 
+### Optional MySQL and MariaDB provider
+
+`NetArcaWs.EntityFrameworkCore.MySql` 0.5.0 references
+`Microting.EntityFrameworkCore.MySql` 10.0.12 (MIT), which depends on
+`Microsoft.EntityFrameworkCore.Relational` 10.0.12 (MIT) and
+`MySqlConnector` 2.6.2 (MIT). The provider is an optional package; consumers
+that use SQLite or another EF provider do not acquire this dependency through
+`NetArcaWs` or `NetArcaWs.EntityFrameworkCore`. The package declarations were
+checked in the NuGet package manifests and Gallery on 2026-10-06. See the
+[Microting package](https://www.nuget.org/packages/Microting.EntityFrameworkCore.MySql/10.0.12)
+and [MySqlConnector package](https://www.nuget.org/packages/MySqlConnector/2.6.2).
+`NetArcaWs.EntityFrameworkCore` also references
+`Microsoft.EntityFrameworkCore` and `Microsoft.EntityFrameworkCore.Relational`
+10.0.12 (MIT), plus `Microsoft.Extensions.DependencyInjection.Abstractions`
+10.0.12 (MIT). The package-consumer smoke project uses
+`Microsoft.EntityFrameworkCore.Sqlite` 10.0.12 (MIT) as a development-only
+dependency; it is not included in either persistence package.
+
+### Optional PostgreSQL and SQL Server providers
+
+`NetArcaWs.EntityFrameworkCore.PostgreSql` 0.5.0 references
+`Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.3, whose restored NuGet manifest
+declares the `PostgreSQL` license expression; its `Npgsql` 10.0.3 dependency
+declares the same license. These are optional provider dependencies and are not
+referenced by the core or base EF package. See the
+[Npgsql EF provider](https://www.nuget.org/packages/Npgsql.EntityFrameworkCore.PostgreSQL/10.0.3),
+[Npgsql driver](https://www.nuget.org/packages/Npgsql/10.0.3), and
+[PostgreSQL license](https://www.postgresql.org/about/licence/).
+
+`NetArcaWs.EntityFrameworkCore.SqlServer` 0.5.0 references
+`Microsoft.EntityFrameworkCore.SqlServer` 10.0.12 (MIT), which resolves
+`Microsoft.Data.SqlClient` 6.1.6 (MIT). SqlClient in turn references
+`Microsoft.Data.SqlClient.SNI.runtime` 6.0.2, whose NuGet manifest points to
+its included `LICENSE.txt` with the Microsoft Software License Terms; the
+package contains platform-specific native SNI binaries for Windows. This
+transitive native component is not licensed as MIT in this notice. The
+NetArcaWs SQL Server package itself does not embed SqlClient or SNI files;
+NuGet resolves their dependencies for consumers. Both provider packages are
+optional and neither dependency is referenced by the core or base EF package.
+The provider metadata and included SNI license file were checked in restored
+NuGet artifacts on 2026-10-06. See
+[EF Core SQL Server](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.SqlServer/10.0.12)
+and [Microsoft.Data.SqlClient](https://www.nuget.org/packages/Microsoft.Data.SqlClient/6.1.6),
+plus SqlClient's [NOTICE](https://github.com/dotnet/SqlClient/blob/main/NOTICE.txt)
+and [copyright/license notes](https://github.com/dotnet/SqlClient/blob/main/COPYRIGHT.md).
+
+The five migration extras reference `Microsoft.EntityFrameworkCore.Design`
+10.0.12 (MIT) with `PrivateAssets="all"`; EF Design is build-time tooling and
+does not flow as a consumer dependency. The migration extras use the EF provider
+packages documented above: Microsoft EF SQLite (MIT), Microting for MySQL and
+MariaDB (MIT), Npgsql for PostgreSQL (PostgreSQL license), and Microsoft EF SQL
+Server (MIT). `NetArcaWs.Build` is a local .NET maintenance executable and is
+not packable. It uses provider packages to generate/check DDL and migration SQL
+from the actual models and versioned migrations; they do not become dependencies
+of the core or base EF package. No Python runtime or build system is introduced.
+The SQL Server SNI native component remains under Microsoft Software License
+Terms as stated above, not MIT.
+
 ## Test dependencies
 
 | Package | Version | License |
@@ -52,6 +110,7 @@ library.
 | xunit.v3 | 4.0.1 | Apache-2.0 |
 | xunit.runner.visualstudio | 4.0.0 | Apache-2.0 |
 | AwesomeAssertions | 9.6.0 | Apache-2.0 |
+| Microsoft.EntityFrameworkCore.Sqlite | 10.0.12 | MIT |
 
 AwesomeAssertions is a community-maintained fork with an Apache-2.0 license,
 which permits commercial use subject to its license conditions. See the

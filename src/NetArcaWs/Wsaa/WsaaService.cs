@@ -99,6 +99,21 @@ public sealed partial class WsaaService
         return await AuthenticateCoreAsync(service, certificate, endpoint, tenant.TenantId, tenant.Cuit, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Performs one WSAA login for an authorized tenant without reading or writing the local ticket cache.</summary>
+    public async Task<WsaaTicket> AuthenticateForTenantWithoutCacheAsync(string service, ArcaTenantContext tenant,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateService(service);
+        ArgumentNullException.ThrowIfNull(tenant);
+        cancellationToken.ThrowIfCancellationRequested();
+        Uri endpoint = tenant.Environment == ArcaEnvironment.Production
+            ? WsaaOptions.ProductionEndpoint : WsaaOptions.HomologationEndpoint;
+        using var certificate = tenant.Certificate.LoadCertificate();
+        ValidateSigningCertificate(certificate);
+        string cms = WsaaCryptography.SignTra(CreateTra(service), certificate);
+        return await LoginCmsCoreAsync(cms, endpoint, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Reuses the TA until its actual expiration. Concurrent callers share one login per cache key.</summary>
     public Task<WsaaTicket> AuthenticateAsync(string service, X509Certificate2 certificate,
         CancellationToken cancellationToken = default)
@@ -110,11 +125,7 @@ public sealed partial class WsaaService
         ValidateService(service);
         ArgumentNullException.ThrowIfNull(certificate);
         cancellationToken.ThrowIfCancellationRequested();
-        if (!certificate.HasPrivateKey)
-            throw new CryptographicException("A certificate with its private key is required.");
-        var now = clock.GetUtcNow();
-        if (now < certificate.NotBefore.ToUniversalTime() || now >= certificate.NotAfter.ToUniversalTime())
-            throw new CryptographicException("The signing certificate is outside its validity period.");
+        ValidateSigningCertificate(certificate);
         var key = new TicketCacheKey(tenantId, cuit, endpoint.AbsoluteUri, service,
             certificate.GetCertHashString(HashAlgorithmName.SHA256));
         if (TryGetTicket(key, out var cached)) return cached!;
@@ -134,6 +145,15 @@ public sealed partial class WsaaService
             return ticket;
         }
         finally { gate.Release(); }
+    }
+
+    private void ValidateSigningCertificate(X509Certificate2 certificate)
+    {
+        if (!certificate.HasPrivateKey)
+            throw new CryptographicException("A certificate with its private key is required.");
+        var now = clock.GetUtcNow();
+        if (now < certificate.NotBefore.ToUniversalTime() || now >= certificate.NotAfter.ToUniversalTime())
+            throw new CryptographicException("The signing certificate is outside its validity period.");
     }
 
     /// <summary>Calls loginCms directly without caching. SOAP faults retain ARCA's code and detail.</summary>

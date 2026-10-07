@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>NetArcaWs.EntityFrameworkCore</PackageId>
+    <Version>0.5.0</Version>
+    <Authors>NetArcaWs .NET contributors</Authors>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/ARSASWebDesign/NetArcaWs</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/ARSASWebDesign/NetArcaWs</PackageProjectUrl>
+    <Description>Optional Entity Framework Core invoice journal and encrypted shared WSAA ticket store for NetArcaWs. Consumers select modules and manage schema migrations explicitly.</Description>
+    <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>afip;argentina;efcore;entity-framework;invoice-journal;wsaa;distributed-tickets</PackageTags>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <ProjectReference Include="../NetArcaWs/NetArcaWs.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="/" />
+    <None Include="../../COPYING" Pack="true" PackagePath="/" />
+    <None Include="../../THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

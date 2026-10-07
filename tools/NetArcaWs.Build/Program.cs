@@ -15,6 +15,18 @@ try
         case ["wiki"]:
             WikiMirror.Run(root);
             break;
+        case ["persistence-schema"]:
+            PersistenceSchema.Run(root, check: false);
+            break;
+        case ["persistence-schema", "--check"]:
+            PersistenceSchema.Run(root, check: true);
+            break;
+        case ["persistence-migrations"]:
+            PersistenceMigrations.Run(root, check: false);
+            break;
+        case ["persistence-migrations", "--check"]:
+            PersistenceMigrations.Run(root, check: true);
+            break;
         case ["contracts", "--xscgen", var executable]:
             ContractGenerator.Run(root, Path.GetFullPath(executable));
             break;
@@ -34,7 +46,7 @@ try
             await ReleaseAssets.RunAsync(repository, tag, Path.GetFullPath(directory));
             break;
         default:
-            Console.Error.WriteLine("Commands: operations | wiki | contracts --xscgen PATH | release-version | release-assets OWNER/REPO TAG DIRECTORY");
+            Console.Error.WriteLine("Commands: operations | wiki | persistence-schema [--check] | persistence-migrations [--check] | contracts --xscgen PATH | release-version | release-assets OWNER/REPO TAG DIRECTORY");
             return 2;
     }
     return 0;

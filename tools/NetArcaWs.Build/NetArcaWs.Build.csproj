@@ -3,4 +3,21 @@
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="NetArcaWs.Build.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore/NetArcaWs.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.MySql/NetArcaWs.EntityFrameworkCore.MySql.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.PostgreSql/NetArcaWs.EntityFrameworkCore.PostgreSql.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.SqlServer/NetArcaWs.EntityFrameworkCore.SqlServer.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.Migrations.MySql/NetArcaWs.EntityFrameworkCore.Migrations.MySql.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer.csproj" />
+  </ItemGroup>
 </Project>

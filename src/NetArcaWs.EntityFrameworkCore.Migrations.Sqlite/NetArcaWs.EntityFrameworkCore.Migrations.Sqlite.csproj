@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>NetArcaWs.EntityFrameworkCore.Migrations.Sqlite</PackageId>
+    <Version>0.5.0</Version>
+    <Authors>NetArcaWs .NET contributors</Authors>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/ARSASWebDesign/NetArcaWs</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/ARSASWebDesign/NetArcaWs</PackageProjectUrl>
+    <Description>Official SQLite migrations for NetArcaWs Entity Framework Core persistence modules.</Description>
+    <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" PrivateAssets="all">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <ProjectReference Include="../NetArcaWs.EntityFrameworkCore/NetArcaWs.EntityFrameworkCore.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../LICENSE" Pack="true" PackagePath="/" />
+    <None Include="../../COPYING" Pack="true" PackagePath="/" />
+    <None Include="../../THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="/" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

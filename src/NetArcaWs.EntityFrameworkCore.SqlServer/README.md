@@ -1,0 +1,16 @@
+# NetArcaWs.EntityFrameworkCore.SqlServer
+
+Optional SQL Server integration for the NetArcaWs EF Core persistence package. It is maintained under LGPL-3.0-or-later; see the package license and third-party notices.
+
+Pass the consumer-managed connection string and explicitly select the persistence modules and ARCA services:
+
+```csharp
+var model = NetArcaWsModelOptions.Configure(options =>
+    options.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1));
+
+services.AddNetArcaWsSqlServerStores(
+    configuration.GetConnectionString("ArcaPersistence")!,
+    model);
+```
+
+Registration is local configuration only. It does not connect, create schema, run migrations, or enable SQL Server execution-strategy retries. Apply schema changes explicitly through the application. For shared WSAA tickets, select `AddWsaaTickets(...)` and register an application-managed `IWsaaTicketProtector` backed by keys distributed independently of the database.

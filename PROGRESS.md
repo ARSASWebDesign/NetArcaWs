@@ -16,6 +16,7 @@
 - [x] Health checks independientes y opt-in por WS, sin credenciales.
 - [x] Diseño documentado de reintentos y reconciliación para evitar duplicados.
 - [x] `SafeInvoiceService`, diario durable y reconciliación conservadora para emisión unitaria WSFE/WSFEX/WSMTXCA; SQLite local multi-proceso en un host, no NFS ni multi-host.
+- [x] Incremento EF del issue #19: persistencia opt-in y migraciones oficiales por módulo/proveedor; migración inicial independiente para SQLite, MySQL, MariaDB, PostgreSQL y SQL Server. Una tarea de despliegue debe consultar, revisar y aplicar; API startup no migra. Paquetes extras 0.5.0 sin publicar. CI 37547645296: 510 tests (491 aprobados, 19 skips opt-in, 0 fallos), build Release 0 warnings; MySQL 8.4.11 20/20, MariaDB 11.4.13 20/20, PostgreSQL 17.6 19/19 y SQL Server Developer 16.0.4295.3 19/19, sin skips; 10 migration SQL, 15 DDL, 11 packs y consumer/CLI nuevo. Evidencia por versión/escenario, sin homologación ARCA ni compatibilidad universal. Certificados/worker siguen en el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19).
 - [ ] WSAA: ejecutar homologación real con certificados autorizados.
 - [x] Hito 2: WSFEv1 — 22 operaciones, contrato SOAP y suite verificados.
 - [x] Hito 3: WSFEXv1 — 19 operaciones, contrato SOAP y suite verificados.
@@ -24,18 +25,34 @@
 - [x] WSCDC (6) y WSFECred (21): contratos QA/producción, fachadas multitenant, DI, health checks y referencias de las 27 operaciones. WSFECred permanece fuera de `SafeInvoiceService`/diario.
 - [x] Hito 6: README, arquitectura, ADR y guías integrales actualizados; suite local Release verificada.
 - [x] Publicar en la wiki toda la documentación Markdown local, con navegación y revisión de origen identificada.
-- [x] Hito 7: catálogo por servicios, extras, referencias y ejemplos compilables de las 108 operaciones; seguimiento de servicios restantes en [issue #10](https://github.com/ARSASWebDesign/NetArcaWs/issues/10).
+- [x] Hito 7: catálogo por servicios, extras y ejemplos compilables; el inventario vigente es de 183 operaciones en diez contratos y el seguimiento del alcance original sigue en [issue #10](https://github.com/ARSASWebDesign/NetArcaWs/issues/10).
 
-La verificación actual terminó con build Release de 0 warnings y 0 errors; la
-suite tuvo 240 casos: 237 aprobados y 3 omitidos. Se verificaron las 108
-operaciones contra sus WSDL y 219 tipos raíz XML en round-trip. Los 30 tipos de
-contrato con campos `DateTime` (`xs:date`/`xs:dateTime`) conservaron sus valores.
+La suite CI del incremento EF (37547645296) corrió sobre el base exacto con 510
+casos: 491 aprobados, 19 omitidos opt-in y 0 fallos; build Release con 0
+warnings. Los engines reales ejecutaron sin omisiones: MySQL 8.4.11 20/20,
+MariaDB 11.4.13 20/20, PostgreSQL 17.6 19/19 y SQL Server Developer
+16.0.4295.3 19/19. También se verificaron 10 scripts de migración, 15 DDL,
+11 packs y un consumer/CLI nuevo. La evidencia no incluye llamadas ARCA ni
+publicación de extras.
+
+El inventario SOAP verificado por la suite previa es 183 operaciones contra sus
+WSDL y 369 tipos raíz XML en round-trip. Los 56 tipos con campos `DateTime`
+(`xs:date`/`xs:dateTime`) conservaron sus valores.
 
 En homologación real de QA con `ARCA_RUN_HOMOLOGY=1` el 2026-10-06, la corrida
 de integración tuvo 11 casos: 9 probes `Dummy` aprobados y 2 pruebas autenticadas
-omitidas. En la suite normal, los 3 omitidos corresponden a WSAA sin credenciales,
-servicios autenticados no seleccionados y `Dummy` sin habilitación opt-in. Ningún
-resultado acredita una autorización de negocio con certificado real.
+omitidas. En la suite normal, cuatro casos dependen de credenciales/opt-in de
+ARCA y tres de la configuración opt-in de engines de base. Ningún resultado
+acredita una autorización de negocio con certificado real.
+
+La autenticación WSAA de homologación y las llamadas autenticadas fiscales siguen
+pendientes de certificados autorizados. Tests opt-in de persistencia ejecutados
+con MySQL 8.4.11 (20/20), MariaDB 11.4.13 (20/20), PostgreSQL 17.6 (19/19) y SQL
+Server Developer 16.0.4295.3 (19/19) cubren
+esas versiones y casos entre procesos; no prueban otras versiones ni
+homologación fiscal. Los casos PostgreSQL y SQL Server se ejecutaron en el
+[job público de CI](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37547645296)
+en runner x64. El consumer smoke de los paquetes EF locales corrió con SQLite.
 
 El seguimiento vigente de autenticación y escenarios ejecutados se registra en
 [la issue de homologación](https://github.com/ARSASWebDesign/NetArcaWs/issues/12).
@@ -72,12 +89,14 @@ está publicada. El mirror wiki incluye el inventario de fuentes originales,
 referencias por operación, guías y manifiesto, publicados en la
 [wiki](https://github.com/ARSASWebDesign/NetArcaWs/wiki). La portada organiza
 servicios y extras; se mantiene solo el menú nativo de páginas de GitHub.
-La caché de tickets es local al proceso; compartir certificados entre réplicas no agrega caché distribuida.
+La caché base de tickets sigue siendo local al proceso. La persistencia compartida cifrada es opt-in desde el paquete EF; la aplicación debe distribuir sus claves y controlar el esquema. Las llamadas directas a `WsaaService` usan la caché local. Ver [ADR 0005](docs/adr/0005-ef-core-invoice-journal.md) y [ADR 0006](docs/adr/0006-shared-wsaa-tickets.md).
 Este estado no equivale al 100% del port del repositorio original.
 
 Decisiones: [contexto multitenant](docs/adr/0002-arca-tenant-context.md) y
 [certificados en memoria](docs/adr/0003-in-memory-certificates.md),
 [reintentos seguros](docs/adr/0001-safe-invoice-retries.md) y
-[contratos SOAP fieles a WSDL](docs/adr/0004-public-soap-contracts.md).
+[contratos SOAP fieles a WSDL](docs/adr/0004-public-soap-contracts.md),
+[persistencia EF Core](docs/adr/0005-ef-core-invoice-journal.md) y
+[tickets WSAA compartidos](docs/adr/0006-shared-wsaa-tickets.md).
 Las fuentes de la wiki se mantienen en `docs/wiki/` y `docs/wiki-export/`; la
 revisión del repositorio publicada se registra en `SOURCE_COMMIT` del repositorio wiki.
