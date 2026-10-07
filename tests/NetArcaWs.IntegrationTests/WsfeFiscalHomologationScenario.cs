@@ -4,6 +4,8 @@ using NetArcaWs.HealthChecks;
 using NetArcaWs.Invoicing;
 using NetArcaWs.Multitenancy;
 using NetArcaWs.Services;
+using System.Xml;
+using System.Xml.Serialization;
 
 namespace NetArcaWs.IntegrationTests;
 
@@ -26,15 +28,48 @@ public static class WsfeFiscalHomologationScenario
 
         var wsfe = provider.GetRequiredService<IWsfev1Service>();
         var invoices = provider.GetRequiredService<SafeInvoiceService>();
+        var journal = provider.GetRequiredService<IInvoiceJournal>();
+        var key = Key(tenant, pointOfSale, voucherType, voucherNumber);
+        InvoiceOperation? previous = await journal.FindAsync(tenant.TenantId, key, ct).ConfigureAwait(false);
+        FecaeRequest? frozen = previous is null
+            ? null
+            : ValidateStoredSubmission(previous.Submission, tenant, key, pointOfSale, voucherType, voucherNumber);
+
+        if (previous?.State == InvoiceState.Rejected)
+            throw new InvalidOperationException("The stored invoice was rejected; corrections require an explicit reviewed revision.");
+        if (previous?.State == InvoiceState.Authorized)
+        {
+            FeCompConsResponse authorized = await QueryExactAsync(wsfe, tenant, pointOfSale, voucherType, voucherNumber, frozen!, ct).ConfigureAwait(false);
+            if (!string.Equals(previous.AuthorizationCode, authorized.CodAutorizacion, StringComparison.Ordinal))
+                throw new InvalidOperationException("Stored authorization does not match the exact ARCA voucher consultation.");
+            return new(true, InvoiceState.Authorized);
+        }
+        if (previous is not null && previous.State is not InvoiceState.Prepared)
+        {
+            // Any prior state that may have reached ARCA can only be reconciled. An empty lookup
+            // remains Unknown and never falls through to authorization with this identity.
+            InvoiceOperation recovered = await invoices.ReconcileAsync(tenant, key, ct).ConfigureAwait(false);
+            if (recovered.State != InvoiceState.Authorized)
+                throw new InvalidOperationException($"Stored fiscal operation remains {recovered.State}; no authorization will be resent.");
+            FeCompConsResponse authorized = await QueryExactAsync(wsfe, tenant, pointOfSale, voucherType, voucherNumber, frozen!, ct).ConfigureAwait(false);
+            if (!string.Equals(recovered.AuthorizationCode, authorized.CodAutorizacion, StringComparison.Ordinal))
+                throw new InvalidOperationException("Reconciled authorization does not match the exact ARCA voucher consultation.");
+            return new(true, InvoiceState.Authorized);
+        }
+
         var posResponse = await wsfe.FEParamGetPtosVentaAsync(tenant, new FeParamGetPtosVenta(), ct).ConfigureAwait(false);
         var posResult = posResponse.FeParamGetPtosVentaResult
             ?? throw new InvalidOperationException("ARCA did not return point-of-sale data.");
-        ThrowIfErrors(posResult.Errors.Count);
+        bool listingUnavailable = posResult.Errors.Count == 1 && posResult.Errors[0]?.Code == 602 && posResult.ResultGet.Count == 0;
+        if (!listingUnavailable) ThrowIfErrors(posResult.Errors.Count);
         var pos = posResult.ResultGet.SingleOrDefault(x => x?.Nro == pointOfSale);
-        bool activeClosureDate = string.IsNullOrWhiteSpace(pos?.FchBaja) || pos.FchBaja == "00000000";
-        if (pos is null || !string.Equals(pos.Bloqueado, "N", StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(pos.EmisionTipo, "CAE", StringComparison.OrdinalIgnoreCase) || !activeClosureDate)
-            throw new InvalidOperationException("The requested point of sale is not active and enabled for CAE electronic invoices.");
+        if (!listingUnavailable)
+        {
+            bool activeClosureDate = string.IsNullOrWhiteSpace(pos?.FchBaja) || pos.FchBaja == "00000000";
+            if (pos is null || !string.Equals(pos.Bloqueado, "N", StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(pos.EmisionTipo, "CAE", StringComparison.OrdinalIgnoreCase) || !activeClosureDate)
+                throw new InvalidOperationException("The requested point of sale is not active and enabled for CAE electronic invoices.");
+        }
 
         var lastResponse = await wsfe.FECompUltimoAutorizadoAsync(tenant,
             new FeCompUltimoAutorizado { PtoVta = pointOfSale, CbteTipo = voucherType }, ct).ConfigureAwait(false);
@@ -45,18 +80,14 @@ public static class WsfeFiscalHomologationScenario
             throw new InvalidOperationException("ARCA returned invalid last-number data.");
 
         var clock = provider.GetService<TimeProvider>() ?? TimeProvider.System;
-        var date = clock.GetUtcNow().ToOffset(TimeSpan.FromHours(-3)).ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture);
-        var expected = CreateRequest(pointOfSale, voucherType, voucherNumber, date);
-        var key = Key(tenant, pointOfSale, voucherType, voucherNumber);
+        var date = frozen?.FeDetReq.Single().CbteFch ??
+            clock.GetUtcNow().ToOffset(TimeSpan.FromHours(-3)).ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture);
+        var expected = frozen ?? CreateRequest(pointOfSale, voucherType, voucherNumber, date);
         if (voucherNumber <= last.CbteNro)
         {
-            var priorResponse = await wsfe.FECompConsultarAsync(tenant, Query(pointOfSale, voucherType, voucherNumber), ct).ConfigureAwait(false);
-            var priorResult = priorResponse.FeCompConsultarResult
-                ?? throw new InvalidOperationException("ARCA did not return exact voucher consultation data.");
-            ThrowIfErrors(priorResult.Errors.Count);
-            var prior = priorResult.ResultGet
-                ?? throw new InvalidOperationException("Existing voucher identity could not be confirmed; no invoice was sent.");
-            AssertExact(prior, expected);
+            if (previous is not null)
+                throw new InvalidOperationException("The stored Prepared identity is no longer the immediate next number; it will not be resumed.");
+            FeCompConsResponse prior = await QueryExactAsync(wsfe, tenant, pointOfSale, voucherType, voucherNumber, expected, ct).ConfigureAwait(false);
             return new(true, InvoiceState.Authorized);
         }
 
@@ -67,7 +98,9 @@ public static class WsfeFiscalHomologationScenario
         bool reconciled = false;
         try
         {
-            operation = await invoices.AuthorizeWsfeAsync(tenant, key, expected, ct).ConfigureAwait(false);
+            operation = previous is null
+                ? await invoices.AuthorizeWsfeAsync(tenant, key, expected, ct).ConfigureAwait(false)
+                : await invoices.ResumeAsync(tenant, key, ct).ConfigureAwait(false);
         }
         catch (HttpRequestException)
         {
@@ -89,16 +122,58 @@ public static class WsfeFiscalHomologationScenario
         if (operation.State != InvoiceState.Authorized)
             throw new InvalidOperationException($"Fiscal operation ended in state {operation.State}; consult the same fiscal identity before taking further action.");
 
-        var verifiedResponse = await wsfe.FECompConsultarAsync(tenant, Query(pointOfSale, voucherType, voucherNumber), ct).ConfigureAwait(false);
-        var verifiedResult = verifiedResponse.FeCompConsultarResult
-            ?? throw new InvalidOperationException("ARCA did not return exact voucher consultation data after authorization.");
-        ThrowIfErrors(verifiedResult.Errors.Count);
-        var verified = verifiedResult.ResultGet
-            ?? throw new InvalidOperationException("The authorized voucher could not be confirmed by exact fiscal identity.");
-        AssertExact(verified, expected);
+        FeCompConsResponse verified = await QueryExactAsync(wsfe, tenant, pointOfSale, voucherType, voucherNumber, expected, ct).ConfigureAwait(false);
         if (!ValidCae(operation.AuthorizationCode) || !string.Equals(operation.AuthorizationCode, verified.CodAutorizacion, StringComparison.Ordinal))
             throw new InvalidOperationException("Journal authorization code did not match the exact ARCA voucher consultation.");
         return new(false, operation.State);
+    }
+
+    private static FecaeRequest ValidateStoredSubmission(InvoiceSubmission saved, ArcaTenantContext tenant,
+        string key, int pointOfSale, int voucherType, long voucherNumber)
+    {
+        if (saved.CanonicalVersion != 1 || saved.Service != "wsfe" ||
+            saved.Identity != new InvoiceIdentity(tenant.Environment, tenant.Cuit, pointOfSale, voucherType, voucherNumber))
+            throw new InvoiceConflictException("The stored fiscal identity differs from the explicitly selected homologation identity.");
+
+        FecaeRequest request;
+        try
+        {
+            if (saved.Payload.Length > 4 * 1024 * 1024)
+                throw new InvalidOperationException("Stored fiscal payload exceeds the validation limit.");
+            using var input = new StringReader(saved.Payload);
+            using var reader = XmlReader.Create(input, new XmlReaderSettings
+            {
+                DtdProcessing = DtdProcessing.Prohibit,
+                XmlResolver = null,
+                MaxCharactersInDocument = 4 * 1024 * 1024
+            });
+            request = (FecaeRequest?)new XmlSerializer(typeof(FecaeRequest)).Deserialize(reader)
+                ?? throw new InvalidOperationException("Stored fiscal payload is invalid.");
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or XmlException or InvalidDataException)
+        {
+            throw new InvoiceConflictException("The stored frozen fiscal payload is malformed.");
+        }
+        if (request.FeDetReq.Count != 1 || string.IsNullOrWhiteSpace(request.FeDetReq[0].CbteFch))
+            throw new InvoiceConflictException("The stored frozen fiscal payload is incomplete.");
+        InvoiceSubmission expected = SafeInvoiceService.CreateWsfeSubmission(tenant, key,
+            CreateRequest(pointOfSale, voucherType, voucherNumber, request.FeDetReq[0].CbteFch));
+        if (saved != expected)
+            throw new InvoiceConflictException("The stored frozen fiscal payload differs from this homologation scenario.");
+        return request;
+    }
+
+    private static async Task<FeCompConsResponse> QueryExactAsync(IWsfev1Service wsfe, ArcaTenantContext tenant,
+        int pointOfSale, int voucherType, long voucherNumber, FecaeRequest expected, CancellationToken ct)
+    {
+        var response = await wsfe.FECompConsultarAsync(tenant, Query(pointOfSale, voucherType, voucherNumber), ct).ConfigureAwait(false);
+        var result = response.FeCompConsultarResult
+            ?? throw new InvalidOperationException("ARCA did not return exact voucher consultation data.");
+        ThrowIfErrors(result.Errors.Count);
+        var actual = result.ResultGet
+            ?? throw new InvalidOperationException("Existing voucher identity could not be confirmed; no invoice was sent.");
+        AssertExact(actual, expected);
+        return actual;
     }
 
     private static void ThrowIfErrors(int count)
@@ -148,6 +223,10 @@ public static class WsfeFiscalHomologationScenario
             actual.ImpNeto == sent.ImpNeto && actual.ImpIva == sent.ImpIva &&
             actual.ImpTotConc == 0 && actual.ImpOpEx == 0 && actual.ImpTrib == 0 &&
             actual.MonId == "PES" && actual.MonCotiz == 1 && actual.CondicionIvaReceptorId == 5 &&
+            string.IsNullOrEmpty(actual.FchServDesde) && string.IsNullOrEmpty(actual.FchServHasta) &&
+            string.IsNullOrEmpty(actual.FchVtoPago) && string.IsNullOrEmpty(actual.CanMisMonExt) &&
+            actual.PeriodoAsoc is null && actual.CbtesAsoc.Count == 0 && actual.Tributos.Count == 0 &&
+            actual.Opcionales.Count == 0 && actual.Compradores.Count == 0 && actual.Actividades.Count == 0 &&
             ivaMatches && actual.Resultado == "A" && actual.EmisionTipo == "CAE" && ValidCae(actual.CodAutorizacion);
         if (!match) throw new InvalidOperationException("Exact consultation did not confirm the expected authorized invoice values and identity.");
     }

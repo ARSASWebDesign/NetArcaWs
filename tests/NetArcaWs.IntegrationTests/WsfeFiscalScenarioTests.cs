@@ -8,6 +8,8 @@ using NetArcaWs.HealthChecks;
 using NetArcaWs.Invoicing;
 using NetArcaWs.Multitenancy;
 using NetArcaWs.Services;
+using NetArcaWs.Transport;
+using NetArcaWs.Wsaa;
 using Xunit;
 
 namespace NetArcaWs.IntegrationTests;
@@ -61,6 +63,46 @@ public sealed class WsfeFiscalScenarioTests
     }
 
     [Fact]
+    public async Task Complete_B_and_C_cases_share_one_provider_and_keep_independent_numbering_series()
+    {
+        await WithFixture(async (fake, provider) =>
+        {
+            var tenant = Tenant(ArcaEnvironment.Homologation);
+            var sharedClient = provider.GetRequiredService<IWsfev1Service>();
+            ReferenceEquals(sharedClient, provider.GetRequiredService<IWsfev1Service>()).Should().BeTrue();
+            ReferenceEquals(provider.GetRequiredService<IArcaTicketProvider>(), provider.GetRequiredService<IArcaTicketProvider>()).Should().BeTrue();
+            var listing = await sharedClient.FEParamGetPtosVentaAsync(tenant, new FeParamGetPtosVenta(), Ct);
+            listing.FeParamGetPtosVentaResult!.Errors.Should().BeEmpty();
+            listing.FeParamGetPtosVentaResult.ResultGet.Should().ContainSingle(point => point!.Nro == 9001);
+
+            var b = await WsfeFiscalHomologationScenario.RunAsync(provider, tenant, 9001, 6, 1, Ct);
+            var c = await WsfeFiscalHomologationScenario.RunAsync(provider, tenant, 9001, 11, 1, Ct);
+
+            b.State.Should().Be(InvoiceState.Authorized);
+            c.State.Should().Be(InvoiceState.Authorized);
+            fake.SubmissionCount.Should().Be(2);
+            fake.LastSubmitted!.FeCabReq.CbteTipo.Should().Be(11);
+            fake.LastSubmitted.FeDetReq.Single().ImpTotal.Should().Be(121);
+            fake.LastSubmitted.FeDetReq.Single().ImpNeto.Should().Be(121);
+            fake.LastSubmitted.FeDetReq.Single().Iva.Should().BeEmpty();
+        });
+    }
+
+    [Fact]
+    public async Task Exact_comparison_rejects_unexpected_optional_fiscal_values()
+    {
+        await WithFixture(async (fake, provider) =>
+        {
+            fake.LastVoucherNumber = 1;
+            fake.Existing = ExistingInvoice(6, 1, 121);
+            fake.Existing.CanMisMonExt = "S";
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                WsfeFiscalHomologationScenario.RunAsync(provider, Tenant(ArcaEnvironment.Homologation), 9001, 6, 1, Ct));
+            fake.SubmissionCount.Should().Be(0);
+        });
+    }
+
+    [Fact]
     public async Task Repeating_an_explicit_invoice_consults_existing_record_without_resubmitting()
     {
         await WithFixture(async (fake, provider) =>
@@ -86,6 +128,86 @@ public sealed class WsfeFiscalScenarioTests
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 WsfeFiscalHomologationScenario.RunAsync(provider, Tenant(ArcaEnvironment.Homologation), 9001, 6, 1, Ct));
             exception.Message.Should().Contain("Exact consultation");
+            fake.SubmissionCount.Should().Be(0);
+        });
+    }
+
+    [Fact]
+    public async Task An_unknown_journal_identity_is_only_reconciled_on_a_later_run_and_never_resent()
+    {
+        await WithFixture(async (fake, provider) =>
+        {
+            fake.SubmissionMode = SubmissionMode.Unknown;
+            var tenant = Tenant(ArcaEnvironment.Homologation);
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                WsfeFiscalHomologationScenario.RunAsync(provider, tenant, 9001, 6, 1, Ct));
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                WsfeFiscalHomologationScenario.RunAsync(provider, tenant, 9001, 6, 1, Ct));
+
+            fake.SubmissionCount.Should().Be(1);
+            fake.ExactConsultationCount.Should().Be(2, "both attempts only reconcile the same identity");
+        });
+    }
+
+    [Fact]
+    public async Task A_prepared_identity_resumes_only_when_remote_numbering_confirms_it_is_next()
+    {
+        await WithFixture(async (fake, provider) =>
+        {
+            var tenant = Tenant(ArcaEnvironment.Homologation);
+            var submission = SafeInvoiceService.CreateWsfeSubmission(tenant, "homologation-wsfe-20123456786-9001-6-1",
+                RequestFor(6, 1, "20261006"));
+            await provider.GetRequiredService<IInvoiceJournal>().PrepareAsync(submission, Ct);
+
+            var result = await WsfeFiscalHomologationScenario.RunAsync(provider, tenant, 9001, 6, 1, Ct);
+
+            result.State.Should().Be(InvoiceState.Authorized);
+            fake.SubmissionCount.Should().Be(1);
+        });
+    }
+
+    [Fact]
+    public async Task A_prepared_identity_is_not_resumed_after_remote_numbering_has_advanced()
+    {
+        await WithFixture(async (fake, provider) =>
+        {
+            var tenant = Tenant(ArcaEnvironment.Homologation);
+            var submission = SafeInvoiceService.CreateWsfeSubmission(tenant, "homologation-wsfe-20123456786-9001-6-1",
+                RequestFor(6, 1, "20261006"));
+            await provider.GetRequiredService<IInvoiceJournal>().PrepareAsync(submission, Ct);
+            fake.LastVoucherNumber = 1;
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                WsfeFiscalHomologationScenario.RunAsync(provider, tenant, 9001, 6, 1, Ct));
+
+            fake.SubmissionCount.Should().Be(0);
+        });
+    }
+
+    [Fact]
+    public async Task Homologation_can_use_numbering_read_when_pos_lookup_returns_only_602_and_no_rows()
+    {
+        await WithFixture(async (fake, provider) =>
+        {
+            fake.PointOfSaleErrorCode = 602;
+            fake.IncludePointOfSale = false;
+            var result = await WsfeFiscalHomologationScenario.RunAsync(provider, Tenant(ArcaEnvironment.Homologation), 9001, 6, 1, Ct);
+            result.State.Should().Be(InvoiceState.Authorized);
+            fake.SubmissionCount.Should().Be(1);
+        });
+    }
+
+    [Theory]
+    [InlineData(603)]
+    [InlineData(602)]
+    public async Task Pos_lookup_errors_other_than_empty_602_block_issuance(int errorCode)
+    {
+        await WithFixture(async (fake, provider) =>
+        {
+            fake.PointOfSaleErrorCode = errorCode;
+            if (errorCode == 602) fake.IncludePointOfSale = true;
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                WsfeFiscalHomologationScenario.RunAsync(provider, Tenant(ArcaEnvironment.Homologation), 9001, 6, 1, Ct));
             fake.SubmissionCount.Should().Be(0);
         });
     }
@@ -192,6 +314,7 @@ public sealed class WsfeFiscalScenarioTests
         {
             var fake = WsfeDispatchProxy.CreateOffline();
             var services = new ServiceCollection();
+            services.AddNetArcaWs(options => options.Endpoint = WsaaOptions.HomologationEndpoint);
             services.AddSingleton<IWsfev1Service>((IWsfev1Service)fake);
             services.AddSingleton<IWsfexv1Service>(WsfeDispatchProxy.Create<IWsfexv1Service>());
             services.AddSingleton<IWsmtxcav1Service>(WsfeDispatchProxy.Create<IWsmtxcav1Service>());
@@ -230,13 +353,34 @@ public sealed class WsfeFiscalScenarioTests
         return prior;
     }
 
+    private static FecaeRequest RequestFor(int type, long number, string date)
+    {
+        var detail = new FecaeDetRequest
+        {
+            Concepto = 1, DocTipo = 99, DocNro = 0, CbteDesde = number, CbteHasta = number,
+            CbteFch = date, ImpTotal = 121, ImpTotConc = 0, ImpNeto = type == 6 ? 100 : 121,
+            ImpOpEx = 0, ImpTrib = 0, ImpIva = type == 6 ? 21 : 0, MonId = "PES", MonCotiz = 1,
+            CondicionIvaReceptorId = 5
+        };
+        if (type == 6) detail.Iva.Add(new AlicIva { Id = 5, BaseImp = 100, Importe = 21 });
+        var request = new FecaeRequest
+        {
+            FeCabReq = new FecaeCabRequest { CantReg = 1, PtoVta = 9001, CbteTipo = type }
+        };
+        request.FeDetReq.Add(detail);
+        return request;
+    }
+
     public enum SubmissionMode { Authorized, Unknown, Rejected, TimeoutAfterSave }
 
     public class OfflineWsfe : WsfeDispatchProxy
     {
         private FeCompConsResponse? saved;
         public int LastVoucherNumber { get; set; }
+        public Dictionary<int, int> LastVoucherNumbers { get; } = [];
         public bool PointOfSaleError { get; set; }
+        public int? PointOfSaleErrorCode { get; set; }
+        public bool IncludePointOfSale { get; set; } = true;
         public bool LastNumberError { get; set; }
         public bool QueryError { get; set; }
         public FeCompConsResponse? Existing { get; set; }
@@ -252,13 +396,16 @@ public sealed class WsfeFiscalScenarioTests
             {
                 case nameof(IWsfev1Service.FEParamGetPtosVentaAsync):
                     var points = new FePtoVentaResponse();
-                    points.ResultGet.Add(new PtoVenta { Nro = 9001, Bloqueado = "N", EmisionTipo = "CAE", FchBaja = "00000000" });
+                    if (IncludePointOfSale)
+                        points.ResultGet.Add(new PtoVenta { Nro = 9001, Bloqueado = "N", EmisionTipo = "CAE", FchBaja = "00000000" });
                     if (PointOfSaleError) points.Errors.Add(new Err { Code = 1, Msg = "synthetic" });
+                    if (PointOfSaleErrorCode is int code) points.Errors.Add(new Err { Code = code, Msg = "synthetic" });
                     return Task.FromResult(new FeParamGetPtosVentaResponse { FeParamGetPtosVentaResult = points });
                 case nameof(IWsfev1Service.FECompUltimoAutorizadoAsync):
                     var lastRequest = (FeCompUltimoAutorizado)args[1]!;
                     var last = new FeRecuperaLastCbteResponse
-                    { PtoVta = lastRequest.PtoVta, CbteTipo = lastRequest.CbteTipo, CbteNro = LastVoucherNumber };
+                    { PtoVta = lastRequest.PtoVta, CbteTipo = lastRequest.CbteTipo,
+                        CbteNro = LastVoucherNumbers.GetValueOrDefault(lastRequest.CbteTipo, LastVoucherNumber) };
                     if (LastNumberError) last.Errors.Add(new Err { Code = 1, Msg = "synthetic" });
                     return Task.FromResult(new FeCompUltimoAutorizadoResponse { FeCompUltimoAutorizadoResult = last });
                 case nameof(IWsfev1Service.FECompConsultarAsync):
@@ -279,7 +426,7 @@ public sealed class WsfeFiscalScenarioTests
                     if (SubmissionMode is SubmissionMode.Authorized or SubmissionMode.TimeoutAfterSave)
                     {
                         saved = CopyAsConsultation(header.PtoVta, header.CbteTipo, detail, "A", cae);
-                        LastVoucherNumber = checked((int)detail.CbteHasta);
+                        LastVoucherNumbers[header.CbteTipo] = checked((int)detail.CbteHasta);
                     }
                     if (SubmissionMode == SubmissionMode.TimeoutAfterSave)
                         throw new HttpRequestException("Synthetic transport interruption after remote save.");

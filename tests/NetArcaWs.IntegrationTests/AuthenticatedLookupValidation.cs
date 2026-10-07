@@ -17,7 +17,9 @@ namespace NetArcaWs.IntegrationTests;
 /// <summary>Assertions shared by the opt-in authenticated read-only homologation probes.</summary>
 internal static class AuthenticatedLookupValidation
 {
-    public static async Task<IReadOnlyList<PtoVenta>> ValidateWsfeAsync(
+    public sealed record WsfeLookupResult(IReadOnlyList<PtoVenta> PointsOfSale, bool PointOfSaleListingPending);
+
+    public static async Task<WsfeLookupResult> ValidateWsfeAsync(
         IWsfev1Service client, ArcaTenantContext tenant, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(client);
@@ -39,9 +41,18 @@ internal static class AuthenticatedLookupValidation
 
         FeParamGetPtosVentaResponse points = await client.FEParamGetPtosVentaAsync(tenant, new FeParamGetPtosVenta(), ct);
         FePtoVentaResponse pointResult = Assert.IsType<FePtoVentaResponse>(points?.FeParamGetPtosVentaResult);
-        AssertNoErrors(pointResult.Errors, "WSFE points of sale");
         Assert.NotNull(pointResult.ResultGet);
         PtoVenta[] returnedPoints = pointResult.ResultGet.ToArray();
+        bool pointListingPending = false;
+        if (pointResult.Errors.Count == 1 && pointResult.Errors[0]?.Code == 602 && returnedPoints.Length == 0)
+        {
+            Assert.Equal(ArcaEnvironment.Homologation, tenant.Environment);
+            pointListingPending = true;
+        }
+        else
+        {
+            AssertNoErrors(pointResult.Errors, "WSFE points of sale");
+        }
         Assert.All(returnedPoints, point =>
         {
             Assert.NotNull(point);
@@ -53,7 +64,7 @@ internal static class AuthenticatedLookupValidation
         AssertNoErrors(maxResult.Errors, "WSFE maximum request count");
         Assert.True(maxResult.RegXReq > 0, "WSFE maximum request count should be positive.");
 
-        return returnedPoints;
+        return new WsfeLookupResult(returnedPoints, pointListingPending);
     }
 
     /// <summary>Validates supported response DTOs without emitting response contents.</summary>

@@ -36,7 +36,7 @@ Las pruebas autenticadas y los escenarios de emisión continúan en la
 
 ## Ejecución autenticada
 
-El flujo permite ahora `consultas` y `emision`. La selección de servicios, el
+El flujo ofrece `consultas`, `emision` y `completa`. La selección de servicios, el
 descubrimiento de puntos de venta, la numeración explícita y las condiciones del
 ensayo están detallados en [Pruebas fiscales en homologación](Homologacion-fiscal).
 El modo predeterminado continúa siendo de solo lectura.
@@ -67,6 +67,14 @@ Variable del mismo entorno:
 |---|---|
 | `WSAA_SERVICE` | `wsfe` |
 
+Configurar en el environment privado el secreto `HOMOLOGATION_STATE_TOKEN`: fine-grained
+PAT limitado al repositorio `ARSASWebDesign/NetArcaWs` con permiso de escritura de
+environments. El token solo se entrega al proceso `gh` que persiste el estado cifrado;
+no se imprime ni se publica. La primera ejecución crea automáticamente
+`HOMOLOGATION_STATE` antes de contactar SOAP. No borrar ni modificar manualmente ese
+secreto: contiene el TA y el diario fiscal. Su límite es 48 KiB comprimidos; si se
+alcanza, el ensayo falla cerrado para preservar el estado.
+
 La selección `services` del formulario reemplaza la variable de entorno
 `ARCA_HOMOLOGY_SERVICES`. Padrón consulta los fixtures públicos versionados descritos
 en [Pruebas fiscales](Homologacion-fiscal); no requiere `ARCA_QUERY_CUIT`.
@@ -84,13 +92,15 @@ el ticket WSAA necesario dentro de ese mismo proceso y lo reutiliza en sus
 consultas. Los catálogos y respuestas se comprueban con validaciones funcionales.
 
 El modo `consultas` no autoriza comprobantes. El modo `emision` autoriza una
-factura de prueba B o C exclusivamente en homologación y la consulta después.
-Ningún modo realiza operaciones productivas ni acredita todas las reglas fiscales.
+factura de prueba B o C exclusivamente en homologación y la consulta después. El
+modo `completa` ejecuta nueve selectores de consulta autenticada y comprueba una
+factura B y otra C con números explícitos. Ningún modo realiza operaciones
+productivas ni acredita todas las reglas fiscales.
 
 Se exige `ARCA_REQUIRE_HOMOLOGY=1`: si faltan selección o credenciales, el trabajo
 falla en lugar de omitir la prueba. La CI normal continúa usando pruebas locales
-y deja las pruebas reales opt-in sin ejecutar. Este workflow selecciona una
-prueba autenticada; no pretende ejecutar ni quitar los skips de todas las suites.
+y deja las pruebas reales opt-in sin ejecutar. Este workflow selecciona las pruebas
+autenticadas solicitadas; no pretende quitar los skips de las demás suites.
 
 ## Seguridad y repetición de pruebas
 
@@ -100,18 +110,21 @@ entrega de secretos. Solo ejecutar commits revisados: cualquier código o
 dependencia ejecutados en el paso con credenciales podría extraerlas.
 
 Los PEM temporales se eliminan al finalizar, incluso si la prueba falla. No se
-publican logs como artefactos, archivos de credenciales ni tickets de acceso;
+publican logs como artefactos, archivos de credenciales, tickets o diarios fiscales;
 las verificaciones de negocio usan mensajes genéricos. No activar trazas de
 shell ni agregar impresión de XML. Los runners son efímeros y las ejecuciones
-se serializan; no se cancela una prueba activa para iniciar otra.
+de todos los modos comparten un grupo global de concurrencia; no se cancela una
+prueba activa para iniciar otra.
 
-La serialización evita concurrencia, pero **no conserva un ticket entre runs**.
-Si WSAA ya concedió un TA que sigue vigente, un nuevo login puede responder
-`coe.alreadyAuthenticated`. No se reintenta automáticamente ni se trata ese error
-como éxito. Esperar la expiración del TA anterior o implementar un almacén
-protegido con coordinación de tickets antes de exigir ejecuciones frecuentes;
-ese trabajo continúa en la [issue #9](https://github.com/ARSASWebDesign/NetArcaWs/issues/9).
-No usar el caché de Actions ni artefactos descargables para persistir Token/Sign.
+El estado protegido conserva el TA hasta su vencimiento efectivo (`expirationTime`)
+y el diario fiscal entre ejecuciones. Las mutaciones del diario se guardan antes
+de devolver el control a la llamada SOAP, para que una cancelación o fallo no habilite
+un reenvío inseguro en otro run. El bloqueo para nuevo login se comparte por
+certificado, endpoint y servicio; antes de autorizarlo exige diez minutos desde el
+final del intento previo (incluidos error y cancelación), mientras que un TA vigente
+se reutiliza sin nuevo login. `coe.alreadyAuthenticated`
+no se trata como éxito ni se reintenta automáticamente. No usar el caché de Actions
+ni artefactos descargables para persistir Token/Sign o comprobantes.
 
 La validación real y su evidencia se siguen en la
 [issue #12](https://github.com/ARSASWebDesign/NetArcaWs/issues/12). Generar este

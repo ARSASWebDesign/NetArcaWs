@@ -1,9 +1,9 @@
 # Pruebas fiscales en homologación
 
-El workflow manual **Homologación ARCA** permite consultar servicios autorizados
-y emitir una factura de prueba WSFE. Requiere `main` y la aprobación del entorno
-`homologacion`. Todos los clientes de esta suite usan exclusivamente homologación;
-el escenario de emisión rechaza un contexto de producción antes de resolver clientes.
+El workflow manual **Homologación ARCA** ofrece `consultas`, `emision` y `completa`.
+Requiere `main` y la aprobación del entorno `homologacion`. Todos los clientes de
+esta suite usan exclusivamente homologación; el escenario de emisión rechaza un
+contexto de producción antes de resolver clientes.
 
 ## Consultas y descubrimiento
 
@@ -33,6 +33,31 @@ La ruta A5 corresponde a Constancia de inscripción. No se omiten fallos de perm
 ni respuestas funcionalmente inválidas: la ejecución falla. Las consultas no crean
 autorizaciones WSASS ni conceden acceso a otros servicios. WSCPE conserva pruebas
 públicas Dummy; su escenario autenticado de negocio queda pendiente de datos y permisos.
+
+## Ejecución completa
+
+Seleccionar `mode=completa`, indicar `point_of_sale` y completar por separado
+`voucher_number_b` y `voucher_number_c`. Los números deben ser enteros explícitos
+entre 1 y 99999999. El selector `services` no se usa en este modo. Se ejecutan las
+nueve consultas autenticadas: WSFE, WSFEX, WSMTXCA, WSCDC, WSFECred y los padrones
+A4, A5, A10 y A13. Cada selector informa su resultado y una falla no impide intentar
+los demás. Al final, el ensayo falla si hubo alguna consulta fallida.
+
+Luego se comprueban una factura B tipo 6 y una factura C tipo 11, ambas por $121 PES,
+con la misma POS y los números independientes indicados. Cada solicitud exige que
+su número sea el inmediato siguiente de su propia serie; no se asignan números. Si
+la identidad B no alcanza un resultado concluyente, no se inicia C. La autorización
+no se reintenta automáticamente: los resultados inciertos se consultan por la misma
+identidad y requieren revisión si siguen sin resolverse.
+
+WSFE puede responder el código 602 al listar POS y no devolver filas en homologación.
+En ese caso se informa que el listado queda pendiente, sin presentar la consulta
+como completa. Para la emisión explícita, el ensayo puede continuar solo con una
+respuesta que contenga exactamente ese error y ninguna fila; consulta luego la
+última numeración de la combinación POS/tipo y exige el número inmediato siguiente.
+Si ARCA sí devuelve la POS, se valida que esté habilitada para CAE y no tenga baja.
+Otros errores o respuestas mixtas detienen la emisión. Esta tolerancia se limita a
+este harness de homologación.
 
 ## Personas de prueba para Padrón
 
@@ -129,18 +154,40 @@ con la fecha del escenario y se detiene.
 
 ## Alcance de la persistencia y límites
 
-El diario SQLite se crea en una carpeta temporal privada y se elimina al terminar.
-Sirve para comprobar persistencia y reconciliación dentro del ensayo; **no es un
-diario durable entre ejecuciones de Actions**. No se sube como artefacto ni se publica
-la respuesta fiscal. La numeración explícita y la consulta remota protegen los
-reintentos manuales; la concurrencia del workflow no coordina otros consumidores.
+El ticket WSAA y el diario SQLite se conservan en el secreto privado y cifrado
+`HOMOLOGATION_STATE` del environment protegido `homologacion`. Cada ejecución los
+restaura antes de crear el proveedor de servicios. El mismo TA se reutiliza para
+las consultas y ambas series WSFE mientras no haya vencido; la renovación ocurre
+solo al expirar. El diario conserva identidades y snapshots fiscales para reconciliar
+resultados inciertos entre runs sin reenviar una autorización. No se suben secretos,
+tickets, diarios ni respuestas fiscales como artefactos. El bundle comprimido debe
+respetar el límite de 48 KiB de GitHub Secrets; si lo supera, la persistencia falla
+en cerrado y no se continúa con ARCA. No se eliminan entradas del diario para liberar
+espacio automáticamente.
 
-El ticket WSAA se reutiliza dentro del mismo proceso. No se conserva entre runs:
-si WSAA responde `coe.alreadyAuthenticated`, respetar su período de retención
-antes de solicitar otro. El manual WSAA, sección 10.6, indica 10 minutos en testing
-y 2 en producción, modificables por ARCA sin aviso. Esto es distinto del vencimiento
-del TA: si se conserva, reutilizarlo hasta su `expirationTime`. No usar
-cachés públicos ni artefactos para transferir tickets.
+La configuración manual requiere `HOMOLOGATION_STATE_TOKEN`, un fine-grained PAT
+con acceso únicamente al repositorio `ARSASWebDesign/NetArcaWs` y permiso de escritura
+de environments. El helper usa ese token exclusivamente como credencial del proceso
+`gh` que actualiza el secreto del environment; no se copia a logs. Cargar el token
+en la interfaz de GitHub, nunca en el chat. La caducidad y rotación del PAT siguen la
+política elegida por el mantenedor y se gestionan fuera del harness. `HOMOLOGATION_STATE`
+se crea automáticamente en el primer run. No borrarlo ni modificarlo manualmente:
+contiene el ticket reutilizable y el diario necesarios para evitar reautenticaciones
+o reenvíos inseguros. Si falta el PAT, no está disponible un estado ya creado o falla
+la persistencia previa, el ensayo se detiene antes de autenticar o emitir.
+
+Consultas, emisión y completa comparten el grupo global de concurrencia y el mismo
+estado protegido. Así se conserva el TA entre runs en vez de forzar un nuevo login
+cada diez minutos. El bloqueo de login se comparte por certificado, endpoint y
+servicio WSAA; el TA se aísla por tenant, CUIT, ambiente, servicio, endpoint y
+certificado. Antes de intentar un login se guarda un bloqueo preventivo de once
+minutos, que cubre hasta treinta segundos para actualizar el secreto y una solicitud
+WSAA acotada a treinta segundos. Al terminar con éxito, error o cancelación se guarda
+la hora real de finalización y se exigen diez minutos antes del próximo login para
+esa identidad. Un TA válido se reutiliza hasta su `expirationTime`, sin esperar ni
+autenticar de nuevo. El estado falla en cerrado ante contenido inválido, errores de
+actualización o situaciones del diario que no permitan demostrar que una identidad
+no tuvo un envío anterior.
 
 Las pruebas offline simulan autorización, rechazo, errores y resultados inciertos.
 Solo una ejecución protegida exitosa aporta evidencia del circuito contra ARCA.

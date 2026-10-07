@@ -51,6 +51,7 @@ public sealed class HomologationScriptTests
     [Theory]
     [InlineData("HOMO_CERTIFICATE_PEM")]
     [InlineData("HOMO_PRIVATE_KEY_PEM")]
+    [InlineData("HOMOLOGATION_STATE_TOKEN")]
     [InlineData("ARCA_CUIT")]
     [InlineData("RUNNER_TEMP")]
     public void Run_rejects_missing_required_configuration(string name)
@@ -170,6 +171,28 @@ public sealed class HomologationScriptTests
         AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
     }
 
+    [Fact]
+    public void Run_forwards_complete_mode_with_all_read_selectors_and_two_explicit_numbers()
+    {
+        EnsureBashAvailable();
+        using var workspace = new BuildTestWorkspace();
+        var fixture = CreateFixture(workspace);
+        fixture.Environment["ARCA_HOMOLOGY_MODE"] = "completa";
+        fixture.Environment["ARCA_HOMOLOGY_POINT_OF_SALE"] = "12";
+        fixture.Environment["ARCA_HOMOLOGY_VOUCHER_NUMBER_B"] = "98765";
+        fixture.Environment["ARCA_HOMOLOGY_VOUCHER_NUMBER_C"] = "87654";
+
+        ProcessResult result = RunScript(workspace, fixture.Environment);
+
+        result.ExitCode.Should().Be(0);
+        File.ReadAllText(fixture.Capture("mode")).Should().Be("completa");
+        File.ReadAllText(fixture.Capture("point-of-sale")).Should().Be("12");
+        File.ReadAllText(fixture.Capture("service")).Should().Be("wsfe,wsfex,wsmtxca,wscdc,wsfecred,padron-a4,padron-a5,padron-a10,padron-a13");
+        File.ReadAllText(fixture.Capture("voucher-number-b")).Should().Be("98765");
+        File.ReadAllText(fixture.Capture("voucher-number-c")).Should().Be("87654");
+        AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
+    }
+
     [Theory]
     [InlineData("ARCA_HOMOLOGY_MODE", "unknown")]
     [InlineData("ARCA_HOMOLOGY_SERVICES", "wsfe,wsfex")]
@@ -220,6 +243,54 @@ public sealed class HomologationScriptTests
         AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
     }
 
+    [Theory]
+    [InlineData("ARCA_HOMOLOGY_VOUCHER_NUMBER_B", "0")]
+    [InlineData("ARCA_HOMOLOGY_VOUCHER_NUMBER_B", "100000000")]
+    [InlineData("ARCA_HOMOLOGY_VOUCHER_NUMBER_C", "0")]
+    [InlineData("ARCA_HOMOLOGY_VOUCHER_NUMBER_C", "100000000")]
+    public void Run_rejects_invalid_complete_mode_invoice_numbers_before_materializing_credentials(string name, string value)
+    {
+        EnsureBashAvailable();
+        using var workspace = new BuildTestWorkspace();
+        var fixture = CreateFixture(workspace);
+        SetValidCompleteInputs(fixture.Environment);
+        fixture.Environment[name] = value;
+
+        ProcessResult result = RunScript(workspace, fixture.Environment);
+
+        result.ExitCode.Should().NotBe(0);
+        result.StandardError.Should().Contain(name);
+        File.Exists(fixture.Capture("args")).Should().BeFalse();
+        AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
+    }
+
+    [Theory]
+    [InlineData("ARCA_HOMOLOGY_VOUCHER_NUMBER_B")]
+    [InlineData("ARCA_HOMOLOGY_VOUCHER_NUMBER_C")]
+    public void Run_rejects_missing_complete_mode_invoice_number_before_materializing_credentials(string name)
+    {
+        EnsureBashAvailable();
+        using var workspace = new BuildTestWorkspace();
+        var fixture = CreateFixture(workspace);
+        SetValidCompleteInputs(fixture.Environment);
+        fixture.Environment.Remove(name);
+
+        ProcessResult result = RunScript(workspace, fixture.Environment);
+
+        result.ExitCode.Should().NotBe(0);
+        result.StandardError.Should().Contain(name);
+        File.Exists(fixture.Capture("args")).Should().BeFalse();
+        AssertCredentialDirectoryWasRemoved(fixture.RunnerTemp);
+    }
+
+    private static void SetValidCompleteInputs(Dictionary<string, string> environment)
+    {
+        environment["ARCA_HOMOLOGY_MODE"] = "completa";
+        environment["ARCA_HOMOLOGY_POINT_OF_SALE"] = "1";
+        environment["ARCA_HOMOLOGY_VOUCHER_NUMBER_B"] = "1";
+        environment["ARCA_HOMOLOGY_VOUCHER_NUMBER_C"] = "1";
+    }
+
     [Fact]
     public void Run_rejects_emision_when_any_service_other_than_wsfe_is_selected()
     {
@@ -261,6 +332,7 @@ public sealed class HomologationScriptTests
         File.ReadAllText(fixture.Capture("cert-content")).Should().Be(CertificateFixture);
         File.ReadAllText(fixture.Capture("key-content")).Should().Be(PrivateKeyFixture);
         File.ReadAllText(fixture.Capture("homologation-secret-unset")).Should().Be("true");
+        File.ReadAllText(fixture.Capture("state-token-forwarded")).Should().Be("true");
         File.ReadAllText(fixture.Capture("certificate-mode")).Trim().Should().Be("600");
         File.ReadAllText(fixture.Capture("key-mode")).Trim().Should().Be("600");
         File.ReadAllText(fixture.Capture("directory-mode")).Trim().Should().Be("700");
@@ -312,6 +384,7 @@ public sealed class HomologationScriptTests
             ["GITHUB_EVENT_NAME"] = "workflow_dispatch",
             ["HOMO_CERTIFICATE_PEM"] = CertificateFixture,
             ["HOMO_PRIVATE_KEY_PEM"] = PrivateKeyFixture,
+            ["HOMOLOGATION_STATE_TOKEN"] = "synthetic-fine-grained-token",
             ["ARCA_CUIT"] = "30123456789",
             ["RUNNER_TEMP"] = runnerTemp,
             ["WSAA_SERVICE"] = "wsfe",
@@ -385,10 +458,13 @@ public sealed class HomologationScriptTests
         printf '%s' "${ARCA_HOMOLOGY_POINT_OF_SALE:-}" > "$CAPTURE_DIR/point-of-sale"
         printf '%s' "${ARCA_HOMOLOGY_VOUCHER_TYPE:-}" > "$CAPTURE_DIR/voucher-type"
         printf '%s' "${ARCA_HOMOLOGY_VOUCHER_NUMBER:-}" > "$CAPTURE_DIR/voucher-number"
+        printf '%s' "${ARCA_HOMOLOGY_VOUCHER_NUMBER_B:-}" > "$CAPTURE_DIR/voucher-number-b"
+        printf '%s' "${ARCA_HOMOLOGY_VOUCHER_NUMBER_C:-}" > "$CAPTURE_DIR/voucher-number-c"
         printf '%s' "${ARCA_QUERY_CUIT:-}" > "$CAPTURE_DIR/query-cuit"
         cat "$WSAA_CERT_PATH" > "$CAPTURE_DIR/cert-content"
         cat "$WSAA_KEY_PATH" > "$CAPTURE_DIR/key-content"
         printf '%s' "$(if [[ -z "${HOMO_CERTIFICATE_PEM+x}" && -z "${HOMO_PRIVATE_KEY_PEM+x}" ]]; then printf true; else printf false; fi)" > "$CAPTURE_DIR/homologation-secret-unset"
+        printf '%s' "$(if [[ -n "${HOMOLOGATION_STATE_TOKEN:-}" ]]; then printf true; else printf false; fi)" > "$CAPTURE_DIR/state-token-forwarded"
         printf '%s' "$(stat -c '%a' "$WSAA_CERT_PATH" 2>/dev/null || stat -f '%Lp' "$WSAA_CERT_PATH")" > "$CAPTURE_DIR/certificate-mode"
         printf '%s' "$(stat -c '%a' "$WSAA_KEY_PATH" 2>/dev/null || stat -f '%Lp' "$WSAA_KEY_PATH")" > "$CAPTURE_DIR/key-mode"
         printf '%s' "$(stat -c '%a' "$(dirname "$WSAA_CERT_PATH")" 2>/dev/null || stat -f '%Lp' "$(dirname "$WSAA_CERT_PATH")")" > "$CAPTURE_DIR/directory-mode"
