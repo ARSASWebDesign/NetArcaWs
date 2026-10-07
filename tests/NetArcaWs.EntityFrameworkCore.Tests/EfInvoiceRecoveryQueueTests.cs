@@ -97,6 +97,77 @@ public sealed class EfInvoiceRecoveryQueueTests
     }
 
     [Fact]
+    public async Task Journal_progression_with_unchanged_fiscal_snapshot_can_be_rescheduled_and_reclaimed()
+    {
+        using var db = new RecoveryDatabase();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        InvoiceSubmission submission = Submission();
+        await db.Queue.PrepareAndEnqueueAsync(submission, "cred-v1", cancellationToken);
+        InvoiceRecoveryScope scope = Scope(submission.TenantId);
+        InvoiceRecoveryLease first = (await db.Queue.TryClaimAsync(scope, TimeSpan.FromMinutes(1), cancellationToken))!;
+
+        InvoiceLease invoiceLease = (await db.Journal.TryAcquireAsync(submission.TenantId, submission.IdempotencyKey,
+            TimeSpan.FromMinutes(1), reconciliation: false, cancellationToken))!;
+        InvoiceOperation unknown = await db.Journal.CompleteAsync(invoiceLease, new InvoiceDecision(InvoiceState.Unknown), cancellationToken);
+        InvoiceOperation replay = await db.Queue.PrepareAndEnqueueAsync(submission, "cred-v1", cancellationToken);
+        replay.Version.Should().Be(unknown.Version);
+        InvoiceRecoveryMetadata duringReplay = (await db.Queue.FindAsync(scope, submission.IdempotencyKey, cancellationToken))!;
+        duringReplay.State.Should().Be(InvoiceRecoveryState.Claimed);
+        duringReplay.Generation.Should().Be(first.Generation);
+        duringReplay.Attempt.Should().Be(1);
+        duringReplay.LeaseUntil.Should().Be(first.LeaseUntil);
+        await db.Queue.CompleteAsync(first, InvoiceRecoveryDisposition.Reschedule, InvoiceRecoverySafeReason.QueryUnavailable,
+            db.Clock.GetUtcNow(), cancellationToken);
+
+        InvoiceRecoveryLease reclaimed = (await db.Queue.TryClaimAsync(scope, TimeSpan.FromMinutes(1), cancellationToken))!;
+
+        reclaimed.CurrentOperation.State.Should().Be(InvoiceState.Unknown);
+        reclaimed.CurrentOperation.Version.Should().Be(unknown.Version);
+        reclaimed.WorkItem.InvoiceVersion.Should().Be(unknown.Version);
+    }
+
+    [Fact]
+    public async Task Expired_prepared_transition_persists_new_pin_before_a_later_reschedule_and_reclaim()
+    {
+        using var db = new RecoveryDatabase();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        InvoiceSubmission submission = Submission();
+        await db.Queue.PrepareAndEnqueueAsync(submission, null, cancellationToken);
+        InvoiceRecoveryScope scope = Scope(submission.TenantId);
+        InvoiceRecoveryLease expired = (await db.Queue.TryClaimAsync(scope, TimeSpan.FromSeconds(1), cancellationToken))!;
+        db.Clock.Advance(TimeSpan.FromSeconds(2));
+
+        InvoiceRecoveryLease reconciliation = (await db.Queue.TryClaimAsync(scope, TimeSpan.FromMinutes(1), cancellationToken))!;
+        reconciliation.CurrentOperation.State.Should().Be(InvoiceState.Unknown);
+        await db.Queue.CompleteAsync(reconciliation, InvoiceRecoveryDisposition.Reschedule, InvoiceRecoverySafeReason.QueryEmpty,
+            db.Clock.GetUtcNow(), cancellationToken);
+
+        InvoiceRecoveryLease next = (await db.Queue.TryClaimAsync(scope, TimeSpan.FromMinutes(1), cancellationToken))!;
+        next.CurrentOperation.State.Should().Be(InvoiceState.Unknown);
+        next.WorkItem.InvoiceVersion.Should().Be(reconciliation.CurrentOperation.Version);
+        next.Generation.Should().BeGreaterThan(expired.Generation);
+    }
+
+    [Theory]
+    [InlineData(InvoiceState.Conflict)]
+    [InlineData(InvoiceState.ManualReview)]
+    public async Task Conflict_and_manual_review_are_suspended_with_safe_reason(InvoiceState terminalState)
+    {
+        using var db = new RecoveryDatabase();
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        InvoiceSubmission submission = Submission();
+        await db.Queue.PrepareAndEnqueueAsync(submission, null, cancellationToken);
+        InvoiceLease invoiceLease = (await db.Journal.TryAcquireAsync(submission.TenantId, submission.IdempotencyKey,
+            TimeSpan.FromMinutes(1), reconciliation: false, cancellationToken))!;
+        await db.Journal.CompleteAsync(invoiceLease, new InvoiceDecision(terminalState), cancellationToken);
+
+        (await db.Queue.TryClaimAsync(Scope(submission.TenantId), TimeSpan.FromMinutes(1), cancellationToken)).Should().BeNull();
+        InvoiceRecoveryMetadata metadata = (await db.Queue.FindAsync(Scope(submission.TenantId), submission.IdempotencyKey, cancellationToken))!;
+        metadata.State.Should().Be(InvoiceRecoveryState.Suspended);
+        metadata.LastReason.Should().Be(InvoiceRecoverySafeReason.PersistenceConflict);
+    }
+
+    [Fact]
     public async Task Schedule_requires_exact_current_version_and_pins_explicit_rejected_revision()
     {
         using var db = new RecoveryDatabase();

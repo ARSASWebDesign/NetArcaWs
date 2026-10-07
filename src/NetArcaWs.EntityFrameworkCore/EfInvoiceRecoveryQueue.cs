@@ -34,10 +34,16 @@ public sealed partial class EfInvoiceJournal<TContext> : IInvoiceRecoveryQueue w
                 else
                 {
                     EnsureJobIdentifiers(job, submission.TenantId, submission.IdempotencyKey);
-                    if (job.Service != submission.Service || job.CredentialReference != credentialReference || job.PayloadHash != invoice.PayloadHash || job.CanonicalVersion != invoice.CanonicalVersion ||
-                        job.InvoiceVersion != invoice.Version || job.Environment != invoice.Environment || job.Cuit != invoice.Cuit ||
-                        job.PointOfSale != invoice.PointOfSale || job.VoucherType != invoice.VoucherType || job.VoucherNumber != invoice.VoucherNumber)
+                    if (job.CredentialReference != credentialReference || !FiscalSnapshotMatches(job, invoice) || job.InvoiceVersion > invoice.Version)
                         throw new InvoiceRecoveryConflictException("The queued invoice differs from its pinned snapshot.");
+                    if (job.InvoiceVersion < invoice.Version)
+                    {
+                        int refreshed = await context.Set<InvoiceRecoveryJobEntity>()
+                            .Where(x => x.TenantHash == invoice.TenantHash && x.KeyHash == invoice.KeyHash &&
+                                x.InvoiceVersion == job.InvoiceVersion && x.Generation == job.Generation && x.State == job.State && x.ClaimId == job.ClaimId)
+                            .ExecuteUpdateAsync(update => update.SetProperty(x => x.InvoiceVersion, invoice.Version), token).ConfigureAwait(false);
+                        if (refreshed != 1) throw new InvoiceRecoveryConflictException("The recovery snapshot changed while its technical version was refreshed.");
+                    }
                     // An identical replay is observational: it must not reset schedule, attempts, generation, or credential pin.
                 }
                 await transaction.CommitAsync(token).ConfigureAwait(false);
@@ -131,7 +137,8 @@ public sealed partial class EfInvoiceJournal<TContext> : IInvoiceRecoveryQueue w
             EnsureJobIdentifiers(job, scope.TenantId, job.IdempotencyKey);
             InvoiceJournalEntity? invoice = await context.Set<InvoiceJournalEntity>()
                 .SingleOrDefaultAsync(x => x.TenantHash == tenantHash && x.KeyHash == job.KeyHash, token).ConfigureAwait(false);
-            if (invoice is null || !SnapshotMatches(job, invoice))
+            InvoiceOperation? storedOperation = invoice is null ? null : ToOperation(invoice);
+            if (invoice is null || storedOperation is null || !FiscalSnapshotMatches(job, invoice) || job.InvoiceVersion > invoice.Version)
             {
                 job.State = (int)InvoiceRecoveryState.Suspended;
                 job.LeaseUntilMilliseconds = null; job.ClaimId = null;
@@ -140,7 +147,33 @@ public sealed partial class EfInvoiceJournal<TContext> : IInvoiceRecoveryQueue w
                 await transaction.CommitAsync(token).ConfigureAwait(false);
                 return null;
             }
-            InvoiceOperation operation = ToOperation(invoice);
+            long expectedQueueInvoiceVersion = job.InvoiceVersion;
+            InvoiceOperation operation = storedOperation;
+            if (operation.State is InvoiceState.Conflict or InvoiceState.ManualReview)
+            {
+                int changed = await context.Set<InvoiceRecoveryJobEntity>()
+                    .Where(x => x.TenantHash == tenantHash && x.KeyHash == job.KeyHash && x.Generation == job.Generation &&
+                        x.InvoiceVersion == expectedQueueInvoiceVersion && x.State == job.State && x.ClaimId == job.ClaimId)
+                    .ExecuteUpdateAsync(update => update.SetProperty(x => x.InvoiceVersion, invoice.Version)
+                        .SetProperty(x => x.State, (int)InvoiceRecoveryState.Suspended)
+                        .SetProperty(x => x.LeaseUntilMilliseconds, (long?)null).SetProperty(x => x.ClaimId, (string?)null)
+                        .SetProperty(x => x.LastReason, (int)InvoiceRecoverySafeReason.PersistenceConflict), token).ConfigureAwait(false);
+                if (changed != 1) { await transaction.RollbackAsync(token).ConfigureAwait(false); return null; }
+                await transaction.CommitAsync(token).ConfigureAwait(false);
+                return null;
+            }
+            if (operation.State is InvoiceState.Authorized or InvoiceState.Rejected)
+            {
+                int changed = await context.Set<InvoiceRecoveryJobEntity>()
+                    .Where(x => x.TenantHash == tenantHash && x.KeyHash == job.KeyHash && x.Generation == job.Generation &&
+                        x.InvoiceVersion == expectedQueueInvoiceVersion && x.State == job.State && x.ClaimId == job.ClaimId)
+                    .ExecuteUpdateAsync(update => update.SetProperty(x => x.InvoiceVersion, invoice.Version)
+                        .SetProperty(x => x.State, (int)InvoiceRecoveryState.Completed)
+                        .SetProperty(x => x.LeaseUntilMilliseconds, (long?)null).SetProperty(x => x.ClaimId, (string?)null), token).ConfigureAwait(false);
+                if (changed != 1) { await transaction.RollbackAsync(token).ConfigureAwait(false); return null; }
+                await transaction.CommitAsync(token).ConfigureAwait(false);
+                return null;
+            }
             if (operation.State == InvoiceState.Prepared && job.State == (int)InvoiceRecoveryState.Claimed)
             {
                 int changed = await context.Set<InvoiceJournalEntity>()
@@ -151,25 +184,20 @@ public sealed partial class EfInvoiceJournal<TContext> : IInvoiceRecoveryQueue w
                 if (changed != 1) { await transaction.CommitAsync(token).ConfigureAwait(false); return null; }
                 invoice.State = (int)InvoiceState.Unknown;
                 invoice.Version = checked(invoice.Version + 1);
-        job.InvoiceVersion = invoice.Version;
+                job.InvoiceVersion = invoice.Version;
             }
             else if (operation.State is InvoiceState.Submitting or InvoiceState.Reconciling &&
                 invoice.LeaseUntilMilliseconds is long journalExpiry && journalExpiry > now)
             {
                 // The invoice's own lease still fences its active operation.
-                job.State = (int)InvoiceRecoveryState.Scheduled;
-                job.NextAvailableMilliseconds = journalExpiry;
-                job.LeaseUntilMilliseconds = null;
-                job.ClaimId = null;
-                await context.SaveChangesAsync(token).ConfigureAwait(false);
-                await transaction.CommitAsync(token).ConfigureAwait(false);
-                return null;
-            }
-            else if (operation.State is InvoiceState.Authorized or InvoiceState.Rejected or InvoiceState.Conflict or InvoiceState.ManualReview)
-            {
-                job.State = (int)InvoiceRecoveryState.Completed;
-                job.LeaseUntilMilliseconds = null; job.ClaimId = null;
-                await context.SaveChangesAsync(token).ConfigureAwait(false);
+                int changed = await context.Set<InvoiceRecoveryJobEntity>()
+                    .Where(x => x.TenantHash == tenantHash && x.KeyHash == job.KeyHash && x.Generation == job.Generation &&
+                        x.InvoiceVersion == expectedQueueInvoiceVersion && x.State == job.State && x.ClaimId == job.ClaimId)
+                    .ExecuteUpdateAsync(update => update.SetProperty(x => x.InvoiceVersion, invoice.Version)
+                        .SetProperty(x => x.State, (int)InvoiceRecoveryState.Scheduled)
+                        .SetProperty(x => x.NextAvailableMilliseconds, journalExpiry)
+                        .SetProperty(x => x.LeaseUntilMilliseconds, (long?)null).SetProperty(x => x.ClaimId, (string?)null), token).ConfigureAwait(false);
+                if (changed != 1) { await transaction.RollbackAsync(token).ConfigureAwait(false); return null; }
                 await transaction.CommitAsync(token).ConfigureAwait(false);
                 return null;
             }
@@ -178,13 +206,15 @@ public sealed partial class EfInvoiceJournal<TContext> : IInvoiceRecoveryQueue w
             long expiry = checked(now + Math.Max(1, (long)Math.Ceiling(leaseDuration.TotalMilliseconds)));
             int updated = await context.Set<InvoiceRecoveryJobEntity>()
                 .Where(x => x.TenantHash == tenantHash && x.KeyHash == job.KeyHash && x.Generation == job.Generation &&
+                    x.InvoiceVersion == expectedQueueInvoiceVersion && x.State == job.State && x.ClaimId == job.ClaimId &&
                     (x.State == (int)InvoiceRecoveryState.Scheduled || x.LeaseUntilMilliseconds <= now))
                 .ExecuteUpdateAsync(update => update.SetProperty(x => x.State, (int)InvoiceRecoveryState.Claimed)
                     .SetProperty(x => x.Generation, generation).SetProperty(x => x.ClaimId, claimId)
+                    .SetProperty(x => x.InvoiceVersion, invoice.Version)
                     .SetProperty(x => x.LeaseUntilMilliseconds, expiry).SetProperty(x => x.Attempt, x => x.Attempt + 1), token).ConfigureAwait(false);
-            if (updated != 1) { await transaction.CommitAsync(token).ConfigureAwait(false); return null; }
+            if (updated != 1) { await transaction.RollbackAsync(token).ConfigureAwait(false); return null; }
             job.State = (int)InvoiceRecoveryState.Claimed; job.Generation = generation; job.ClaimId = claimId;
-            job.LeaseUntilMilliseconds = expiry; job.Attempt++;
+            job.InvoiceVersion = invoice.Version; job.LeaseUntilMilliseconds = expiry; job.Attempt++;
             operation = ToOperation(invoice);
             InvoiceRecoveryWorkItem item = ToWorkItem(job);
             var claim = new InvoiceRecoveryLease(item, operation, claimId, generation, DateTimeOffset.FromUnixTimeMilliseconds(expiry));
@@ -265,9 +295,9 @@ public sealed partial class EfInvoiceJournal<TContext> : IInvoiceRecoveryQueue w
         new((ArcaEnvironment)job.Environment, job.Cuit, job.PointOfSale, job.VoucherType, job.VoucherNumber),
         job.CredentialReference, job.Attempt, DateTimeOffset.FromUnixTimeMilliseconds(job.NextAvailableMilliseconds));
 
-    private static bool SnapshotMatches(InvoiceRecoveryJobEntity job, InvoiceJournalEntity invoice) =>
+    private static bool FiscalSnapshotMatches(InvoiceRecoveryJobEntity job, InvoiceJournalEntity invoice) =>
         job.TenantHash == invoice.TenantHash && job.KeyHash == invoice.KeyHash && job.Service == invoice.Service &&
-        job.InvoiceVersion == invoice.Version && job.PayloadHash == invoice.PayloadHash && job.CanonicalVersion == invoice.CanonicalVersion &&
+        job.PayloadHash == invoice.PayloadHash && job.CanonicalVersion == invoice.CanonicalVersion &&
         job.Environment == invoice.Environment && job.Cuit == invoice.Cuit && job.PointOfSale == invoice.PointOfSale &&
         job.VoucherType == invoice.VoucherType && job.VoucherNumber == invoice.VoucherNumber;
 
