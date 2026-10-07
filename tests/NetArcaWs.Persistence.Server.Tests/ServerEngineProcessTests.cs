@@ -6,6 +6,7 @@ using System.Text;
 using AwesomeAssertions;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using NetArcaWs.EntityFrameworkCore;
 using NetArcaWs.Cryptography;
@@ -27,6 +28,47 @@ namespace NetArcaWs.Persistence.Server.Tests;
 
 public sealed class ServerEngineProcessTests
 {
+    [Fact]
+    public async Task Independent_process_restart_reclaims_expired_prepared_recovery_as_unknown_and_rejects_stale_fence()
+    {
+        PersistenceServerSettings? settings = PersistenceServerSettings.FromEnvironment();
+        Assert.SkipWhen(settings is null, "Opt-in PostgreSQL/SQL Server recovery process test.");
+        PersistenceServerSettings selected = settings!;
+        Assert.SkipWhen(selected.Kind is "mysql" or "mariadb", "This suite targets PostgreSQL/SQL Server; MySQL/MariaDB runs in NetArcaWs.EntityFrameworkCore.MySql.Tests.");
+
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        await using ServerTestDatabase database = await ServerTestDatabase.CreateAsync(selected,
+            options => options.AddInvoicing(ArcaService.Wsfev1).AddInvoiceRecovery(ArcaService.Wsfev1));
+        string tenant = "recovery-process-" + Guid.NewGuid().ToString("N");
+        string key = "restart";
+        InvoiceSubmission submission = Submission(tenant, key, "wsfe", 1, 97, 1, 920001);
+        RecoveryPrepareProcessRace replay = await database.RunTwoRecoveryPrepareProcessesAsync(submission, cancellationToken);
+        replay.Successes.Should().Be(2, $"same-submission probe outputs: {string.Join(" | ", replay.Outputs)}");
+        replay.Conflicts.Should().Be(0);
+        replay.Outputs.Should().HaveCount(2);
+        replay.Outputs.Distinct().Should().ContainSingle();
+
+        InvoiceSubmission globalLeft = Submission(tenant + "-global-left", "global-left", "wsfe", 2, 98, 1, 920020);
+        InvoiceSubmission globalRight = Submission(tenant + "-global-right", "global-right", "wsfex", 3, 98, 1, 920020);
+        RecoveryPrepareProcessRace globalRace = await database.RunTwoRecoveryPrepareProcessesAsync(globalLeft, globalRight, cancellationToken);
+        globalRace.Successes.Should().Be(1);
+        globalRace.Conflicts.Should().Be(1);
+
+        InvoiceSubmission seriesLeft = Submission(tenant + "-left", "series-left", "wsfe", 4, 99, 1, 920021);
+        InvoiceSubmission seriesRight = Submission(tenant + "-right", "series-right", "wsfe", 5, 99, 1, 920022);
+        RecoveryPrepareProcessRace seriesRace = await database.RunTwoRecoveryPrepareProcessesAsync(seriesLeft, seriesRight, cancellationToken);
+        seriesRace.Successes.Should().Be(1);
+        seriesRace.Conflicts.Should().Be(1);
+
+        string restartTenant = tenant + "-restart";
+        await database.Services.GetRequiredService<IInvoiceRecoveryQueue>().PrepareAndEnqueueAsync(
+            submission with { TenantId = restartTenant, IdempotencyKey = "restart-only", Identity = submission.Identity with { Cuit = 20999888780 } },
+            "synthetic-credential-reference", cancellationToken);
+        (string replacementOutput, string staleOutput) = await database.RunRecoveryRestartAsync(restartTenant, "wsfe", cancellationToken);
+        replacementOutput.Should().Contain("CLAIMED 2 Unknown");
+        staleOutput.Should().Contain("STALE_REJECTED");
+    }
+
     [Fact]
     public async Task Selected_server_preserves_invoice_uniqueness_replay_series_fencing_and_payload_invariants()
     {
@@ -140,6 +182,7 @@ public sealed class ServerEngineProcessTests
 }
 
 internal sealed record ProcessRaceResult(int Successes, int Conflicts);
+internal sealed record RecoveryPrepareProcessRace(int Successes, int Conflicts, string[] Outputs);
 
 internal sealed class ServerTestDatabase : IAsyncDisposable
 {
@@ -183,13 +226,15 @@ internal sealed class ServerTestDatabase : IAsyncDisposable
                 NetArcaWsPersistenceModule.Invoicing => options.InvoicingEnabled,
                 NetArcaWsPersistenceModule.WsaaTickets => options.WsaaTicketsEnabled,
                 NetArcaWsPersistenceModule.TenantCertificates => options.CertificatesEnabled,
+                NetArcaWsPersistenceModule.InvoiceRecovery => options.InvoiceRecoveryEnabled,
                 _ => false
             }).ToArray();
         return new NetArcaWsMigrator(factory, modules);
     }
 
     public static async Task<ServerTestDatabase> CreateAsync(PersistenceServerSettings settings,
-        Action<NetArcaWsModelOptionsBuilder> configure, bool provision = true, byte[]? certificateProtectionKey = null)
+        Action<NetArcaWsModelOptionsBuilder> configure, bool provision = true, byte[]? certificateProtectionKey = null,
+        DbCommandInterceptor? commandInterceptor = null)
     {
         string databaseName = "netarcaws_probe_" + Guid.NewGuid().ToString("N");
         string connectionString = await CreateDatabaseAsync(settings, databaseName);
@@ -198,6 +243,8 @@ internal sealed class ServerTestDatabase : IAsyncDisposable
         serviceCollection.AddSingleton<IWsaaTicketProtector>(CreateProtector());
         serviceCollection.AddSingleton<IWsaaTicketLoginClient, UnusedLoginClient>();
         RegisterStores(serviceCollection, settings, connectionString, modelOptions, certificateProtectionKey);
+        if (commandInterceptor is not null)
+            serviceCollection.ConfigureDbContext<ArcaWsDbContext>(options => options.AddInterceptors(commandInterceptor));
         ServiceProvider? provider = null;
         try
         {
@@ -268,6 +315,83 @@ internal sealed class ServerTestDatabase : IAsyncDisposable
             await StopIfRunningAsync(left);
             await StopIfRunningAsync(right);
             if (Directory.Exists(barrier)) Directory.Delete(barrier, recursive: true);
+        }
+    }
+
+    public Task<RecoveryPrepareProcessRace> RunTwoRecoveryPrepareProcessesAsync(InvoiceSubmission same,
+        CancellationToken cancellationToken) => RunTwoRecoveryPrepareProcessesAsync(same, same, cancellationToken);
+
+    public async Task<RecoveryPrepareProcessRace> RunTwoRecoveryPrepareProcessesAsync(InvoiceSubmission left,
+        InvoiceSubmission right, CancellationToken cancellationToken)
+    {
+        string barrier = CreateBarrierDirectory();
+        Process? first = null;
+        Process? second = null;
+        try
+        {
+            Dictionary<string, string?> environment = BarrierEnvironment(barrier, 2);
+            first = StartProbe(environment, "recovery-prepare", left.TenantId, left.IdempotencyKey, left.Service,
+                left.Identity.Cuit.ToString(CultureInfo.InvariantCulture), left.Identity.PointOfSale.ToString(CultureInfo.InvariantCulture),
+                left.Identity.VoucherNumber.ToString(CultureInfo.InvariantCulture));
+            second = StartProbe(environment, "recovery-prepare", right.TenantId, right.IdempotencyKey, right.Service,
+                right.Identity.Cuit.ToString(CultureInfo.InvariantCulture), right.Identity.PointOfSale.ToString(CultureInfo.InvariantCulture),
+                right.Identity.VoucherNumber.ToString(CultureInfo.InvariantCulture));
+            await ReleaseBarrierAsync(barrier, 2, cancellationToken);
+            await Task.WhenAll(first.WaitForExitAsync(cancellationToken), second.WaitForExitAsync(cancellationToken));
+            int[] codes = [first.ExitCode, second.ExitCode];
+            if (codes.Any(code => code is not (0 or 3))) throw await ProcessFailureAsync([first, second], codes);
+            string[] outputs = await Task.WhenAll(first.StandardOutput.ReadToEndAsync(cancellationToken),
+                second.StandardOutput.ReadToEndAsync(cancellationToken));
+            return new(codes.Count(code => code == 0), codes.Count(code => code == 3), outputs);
+        }
+        finally
+        {
+            await StopIfRunningAsync(first);
+            await StopIfRunningAsync(second);
+            if (Directory.Exists(barrier)) Directory.Delete(barrier, recursive: true);
+        }
+    }
+
+    public async Task<(string ReplacementOutput, string StaleOutput)> RunRecoveryRestartAsync(string tenant, string service,
+        CancellationToken cancellationToken)
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "netarcaws-recovery-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        string ready = Path.Combine(directory, "ready");
+        string release = Path.Combine(directory, "release");
+        Process? previous = null;
+        Process? replacement = null;
+        try
+        {
+            previous = StartProbe(new Dictionary<string, string?>
+            {
+                ["NETARCA_PROBE_RECOVERY_READY"] = ready,
+                ["NETARCA_PROBE_RECOVERY_RELEASE"] = release
+            }, "recovery-hold", tenant, service, "350");
+            DateTimeOffset deadline = DateTimeOffset.UtcNow.AddSeconds(20);
+            while (!File.Exists(ready))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (DateTimeOffset.UtcNow >= deadline) throw new TimeoutException("The recovery claim process did not become ready.");
+                if (previous.HasExited) throw await ProcessFailureAsync([previous], [previous.ExitCode]);
+                await Task.Delay(20, cancellationToken);
+            }
+            await Task.Delay(500, cancellationToken);
+            replacement = StartProbe(new Dictionary<string, string?>(), "recovery-claim", tenant, service, "30000");
+            string replacementOutput = await replacement.StandardOutput.ReadToEndAsync(cancellationToken);
+            await replacement.WaitForExitAsync(cancellationToken);
+            if (replacement.ExitCode != 0) throw await ProcessFailureAsync([replacement], [replacement.ExitCode]);
+            await File.WriteAllTextAsync(release, "release", cancellationToken);
+            string staleOutput = await previous.StandardOutput.ReadToEndAsync(cancellationToken);
+            await previous.WaitForExitAsync(cancellationToken);
+            if (previous.ExitCode != 0) throw await ProcessFailureAsync([previous], [previous.ExitCode]);
+            return (replacementOutput, staleOutput);
+        }
+        finally
+        {
+            await StopIfRunningAsync(previous);
+            await StopIfRunningAsync(replacement);
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
         }
     }
 

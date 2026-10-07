@@ -13,5 +13,6 @@
   <ItemGroup>
     <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore/NetArcaWs.EntityFrameworkCore.csproj" />
     <ProjectReference Include="../../src/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite.csproj" />
+    <ProjectReference Include="../NetArcaWs.Persistence.Probe/NetArcaWs.Persistence.Probe.csproj" />
   </ItemGroup>
 </Project>

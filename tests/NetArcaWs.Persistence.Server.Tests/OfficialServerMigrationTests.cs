@@ -23,6 +23,115 @@ namespace NetArcaWs.Persistence.Server.Tests;
 public sealed class OfficialServerMigrationTests
 {
     [Fact]
+    public async Task Invoice_recovery_migration_is_additive_independent_and_repeatable_on_selected_server()
+    {
+        PersistenceServerSettings? settings = PersistenceServerSettings.FromEnvironment();
+        Assert.SkipWhen(settings is null, "Opt-in PostgreSQL/SQL Server recovery migration test.");
+        PersistenceServerSettings selected = settings!;
+        Assert.SkipWhen(selected.Kind is not ("postgresql" or "sqlserver"), "This suite targets PostgreSQL/SQL Server.");
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        var failure = new RecoveryQueueInsertFailureInterceptor();
+        await using ServerTestDatabase database = await ServerTestDatabase.CreateAsync(selected,
+            builder => builder.AddInvoicing(ArcaService.Wsfev1, ArcaService.Wsfexv1)
+                .AddInvoiceRecovery(ArcaService.Wsfev1, ArcaService.Wsfexv1), provision: false, commandInterceptor: failure);
+        NetArcaWsModelOptions invoices = Options(NetArcaWsPersistenceModule.Invoicing);
+        NetArcaWsModelOptions recovery = Options(NetArcaWsPersistenceModule.InvoiceRecovery);
+
+        (await database.ApplyOfficialMigrationsAsync(invoices, cancellationToken)).Modules.Should().ContainSingle()
+            .Which.State.Should().Be(NetArcaWsMigrationState.Current);
+        string tenant = "server-recovery-migration-" + Guid.NewGuid().ToString("N");
+        InvoiceSubmission submission = new(tenant, "upgrade", "wsfe",
+            new InvoiceIdentity(ArcaEnvironment.Homologation, 20999888777, 78, 1, 940001), "<synthetic>pre-existing-invoice</synthetic>");
+        await database.Services.GetRequiredService<IInvoiceJournal>().PrepareAsync(submission, cancellationToken);
+
+        NetArcaWsMigrationStatus added = await database.ApplyOfficialMigrationsAsync(recovery, cancellationToken);
+        added.Modules.Should().ContainSingle().Which.Module.Should().Be(NetArcaWsPersistenceModule.InvoiceRecovery);
+        added.Modules.Single().Applied.Should().ContainSingle().Which.Should().Be("20261007000400_InitialInvoiceRecovery");
+        NetArcaWsMigrationStatus repeat = await database.ApplyOfficialMigrationsAsync(recovery, cancellationToken);
+        repeat.Modules.Single().Applied.Should().Equal(added.Modules.Single().Applied);
+        (await database.Services.GetRequiredService<IInvoiceJournal>().FindAsync(tenant, "upgrade", cancellationToken))!
+            .Submission.Should().BeEquivalentTo(submission);
+        IInvoiceRecoveryQueue queue = database.Services.GetRequiredService<IInvoiceRecoveryQueue>();
+        await queue.PrepareAndEnqueueAsync(submission, "synthetic-credential-reference", cancellationToken);
+        (await queue.FindAsync(new InvoiceRecoveryScope(tenant, [ArcaService.Wsfev1]), "upgrade", cancellationToken))!
+            .State.Should().Be(InvoiceRecoveryState.Scheduled);
+        await AssertRecoveryQueueInvariantsAsync(database, queue, submission, failure, cancellationToken);
+        (await database.ApplyOfficialMigrationsAsync(invoices, cancellationToken)).Modules.Should().ContainSingle()
+            .Which.State.Should().Be(NetArcaWsMigrationState.Current);
+    }
+
+    private static async Task AssertRecoveryQueueInvariantsAsync(ServerTestDatabase database, IInvoiceRecoveryQueue queue,
+        InvoiceSubmission original, RecoveryQueueInsertFailureInterceptor failure, CancellationToken cancellationToken)
+    {
+        InvoiceOperation replay = await queue.PrepareAndEnqueueAsync(original, "synthetic-credential-reference", cancellationToken);
+        replay.Submission.Should().BeEquivalentTo(original);
+        Func<Task> changedReplay = () => queue.PrepareAndEnqueueAsync(original with { Payload = "<synthetic>changed</synthetic>" },
+            "synthetic-credential-reference", cancellationToken);
+        await changedReplay.Should().ThrowAsync<InvoiceRecoveryConflictException>();
+
+        InvoiceSubmission globalDuplicate = original with
+        {
+            TenantId = original.TenantId + "-other",
+            IdempotencyKey = "global-identity",
+            Service = "wsfex"
+        };
+        Func<Task> duplicateIdentity = () => queue.PrepareAndEnqueueAsync(globalDuplicate,
+            "synthetic-credential-reference", cancellationToken);
+        await duplicateIdentity.Should().ThrowAsync<InvoiceRecoveryConflictException>();
+
+        InvoiceSubmission atomic = original with
+        {
+            TenantId = original.TenantId + "-atomic",
+            IdempotencyKey = "atomic-failure",
+            Identity = original.Identity with { Cuit = original.Identity.Cuit + 1, VoucherNumber = original.Identity.VoucherNumber + 10 }
+        };
+        failure.FailRecoveryInsert = true;
+        Func<Task> failed = () => queue.PrepareAndEnqueueAsync(atomic, "synthetic-credential-reference", cancellationToken);
+        await failed.Should().ThrowAsync<Exception>();
+        failure.FailRecoveryInsert = false;
+        IInvoiceJournal journal = database.Services.GetRequiredService<IInvoiceJournal>();
+        (await journal.FindAsync(atomic.TenantId, atomic.IdempotencyKey, cancellationToken)).Should().BeNull();
+        (await queue.FindAsync(new InvoiceRecoveryScope(atomic.TenantId, [ArcaService.Wsfev1]), atomic.IdempotencyKey, cancellationToken)).Should().BeNull();
+        await queue.PrepareAndEnqueueAsync(atomic, "synthetic-credential-reference", cancellationToken);
+
+        InvoiceSubmission left = atomic with { TenantId = atomic.TenantId + "-left", IdempotencyKey = "series-left", Identity = atomic.Identity with { Cuit = atomic.Identity.Cuit + 1, VoucherNumber = atomic.Identity.VoucherNumber + 20 } };
+        InvoiceSubmission right = atomic with { TenantId = atomic.TenantId + "-right", IdempotencyKey = "series-right", Identity = atomic.Identity with { Cuit = atomic.Identity.Cuit + 1, VoucherNumber = atomic.Identity.VoucherNumber + 21 } };
+        async Task<bool> TryPrepareAsync(InvoiceSubmission value)
+        {
+            try { await queue.PrepareAndEnqueueAsync(value, "synthetic-credential-reference", cancellationToken); return true; }
+            catch (InvoiceRecoveryConflictException) { return false; }
+        }
+        bool[] results = await Task.WhenAll(TryPrepareAsync(left), TryPrepareAsync(right));
+        results.Count(result => result).Should().Be(1);
+    }
+
+    private sealed class RecoveryQueueInsertFailureInterceptor : DbCommandInterceptor
+    {
+        public bool FailRecoveryInsert { get; set; }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            ThrowIfRecoveryInsert(command);
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            ThrowIfRecoveryInsert(command);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        private void ThrowIfRecoveryInsert(DbCommand command)
+        {
+            if (FailRecoveryInsert && command.CommandText.Contains("INSERT", StringComparison.OrdinalIgnoreCase) &&
+                command.CommandText.Contains("NetArcaInvoiceRecoveryJobs", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Synthetic recovery queue insert failure.");
+        }
+    }
+
+    [Fact]
     public void Certificate_migration_registration_and_script_generation_are_connection_free_for_server_providers()
     {
         NetArcaWsModelOptions certificates = NetArcaWsModelOptions.Configure(options => options.AddCertificates());
@@ -481,7 +590,8 @@ public sealed class OfficialServerMigrationTests
     {
         if (module == NetArcaWsPersistenceModule.Invoicing) builder.AddInvoicing(ArcaService.Wsfev1);
         else if (module == NetArcaWsPersistenceModule.WsaaTickets) builder.AddWsaaTickets(ArcaService.Wsfev1);
-        else builder.AddCertificates();
+        else if (module == NetArcaWsPersistenceModule.TenantCertificates) builder.AddCertificates();
+        else builder.AddInvoiceRecovery(ArcaService.Wsfev1);
     }
 }
 

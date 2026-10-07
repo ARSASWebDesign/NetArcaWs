@@ -63,6 +63,13 @@ public sealed class OfficialMySqlMigrationMetadataTests
     }
 
     [Fact]
+    public void MySqlAndMariaDbInvoiceRecoveryMigrationsContainOnlyTheQueueAndIndependentHistory()
+    {
+        AssertInvoiceRecoveryMigration(MySqlContextFactory().CreateContext(NetArcaWsPersistenceModule.InvoiceRecovery));
+        AssertInvoiceRecoveryMigration(MariaDbContextFactory().CreateContext(NetArcaWsPersistenceModule.InvoiceRecovery));
+    }
+
+    [Fact]
     public void MySqlAndMariaDbModuleModelsPreserveColumnsIndexesAndPrecisions()
     {
         foreach (NetArcaWsPersistenceModule module in Enum.GetValues<NetArcaWsPersistenceModule>())
@@ -215,6 +222,23 @@ public sealed class OfficialMySqlMigrationMetadataTests
                 .Should().BeEquivalentTo("NetArcaCertificateSlots", "NetArcaCertificateVersions");
             context.Model.GetEntityTypes().SelectMany(entity => entity.GetProperties()).Select(property => property.Name)
                 .Should().Contain("Ciphertext").And.Contain("Nonce").And.Contain("Tag").And.Contain("ActiveVersionId");
+        }
+    }
+
+    private static void AssertInvoiceRecoveryMigration(DbContext context)
+    {
+        using (context)
+        {
+            AssertMigrationContext(context, "__NetArcaWsInvoiceRecoveryMigrations");
+            context.Database.HasPendingModelChanges().Should().BeFalse();
+            IMigrationsAssembly migrations = context.GetService<IMigrationsAssembly>();
+            migrations.Migrations.Keys.Should().ContainSingle().Which.Should().Be("20261007000400_InitialInvoiceRecovery");
+            Migration initial = migrations.CreateMigration(migrations.Migrations.Single().Value, context.Database.ProviderName!);
+            initial.UpOperations.OfType<CreateTableOperation>().Select(table => table.Name)
+                .Should().ContainSingle().Which.Should().Be("NetArcaInvoiceRecoveryJobs");
+            context.Model.GetEntityTypes().Select(entity => entity.GetTableName())
+                .Should().ContainSingle().Which.Should().Be("NetArcaInvoiceRecoveryJobs");
+            context.Model.GetEntityTypes().Single().GetIndexes().Should().HaveCount(2);
         }
     }
 
