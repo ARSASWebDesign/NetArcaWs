@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using NetArcaWs.Cryptography;
 using NetArcaWs.EntityFrameworkCore;
@@ -206,6 +207,31 @@ public sealed class EfArcaCertificateStoreTests
     }
 
     [Fact]
+    public async Task MySqlDuplicateKeyUpdateFailureMapsToTypedCasConflict()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"arca-certs-{Guid.NewGuid():N}.db");
+        NetArcaWsModelOptions model = NetArcaWsModelOptions.Configure(x => x.AddCertificates());
+        using var protector = new AesGcmArcaCertificateProtector("k", new Dictionary<string, byte[]> { ["k"] = RandomNumberGenerator.GetBytes(32) });
+        var interceptor = new MySqlDuplicateFailureInterceptor();
+        var factory = new TestFactory(path, model, interceptor);
+        var store = new EfArcaCertificateStore<ArcaWsDbContext>(factory, model, protector);
+        var scope = new ArcaCertificateScope("mysql-cas", 20_123_456_789, ArcaEnvironment.Homologation);
+        using CertificateFixture initial = CertificateFixture.Create("CN=mysql-initial");
+        using CertificateFixture next = CertificateFixture.Create("CN=mysql-next");
+        try
+        {
+            await using (ArcaWsDbContext db = await factory.CreateDbContextAsync(TestContext.Current.CancellationToken)) await db.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            ArcaCertificateVersion head = await store.RotateAsync(scope, initial.Content, cancellationToken: TestContext.Current.CancellationToken);
+            interceptor.FailNextSave = true;
+            Func<Task> rotate = () => store.RotateAsync(scope, next.Content, head.VersionId, TestContext.Current.CancellationToken);
+            await rotate.Should().ThrowAsync<ArcaCertificateConcurrencyException>();
+            (await store.GetActiveAsync(scope, TestContext.Current.CancellationToken))!.Metadata.VersionId.Should().Be(head.VersionId);
+            (await store.ListVersionsAsync(scope, TestContext.Current.CancellationToken)).Should().ContainSingle();
+        }
+        finally { try { File.Delete(path); } catch { } }
+    }
+
+    [Fact]
     public async Task StoreRejectsContextWithDifferentModelFingerprint()
     {
         NetArcaWsModelOptions selected = NetArcaWsModelOptions.Configure(x => x.AddCertificates());
@@ -237,11 +263,40 @@ public sealed class EfArcaCertificateStoreTests
         return await db.Database.SqlQueryRaw<string>("SELECT hex(Ciphertext) AS Value FROM NetArcaCertificateVersions LIMIT 1").SingleAsync();
     }
 
-    private sealed class TestFactory(string path, NetArcaWsModelOptions model) : IDbContextFactory<ArcaWsDbContext>
+    private sealed class TestFactory : IDbContextFactory<ArcaWsDbContext>
     {
-        private readonly DbContextOptions<ArcaWsDbContext> options = new DbContextOptionsBuilder<ArcaWsDbContext>().UseSqlite($"Data Source={path};Pooling=False").Options;
+        private readonly NetArcaWsModelOptions model;
+        private readonly DbContextOptions<ArcaWsDbContext> options;
+        public TestFactory(string path, NetArcaWsModelOptions model, SaveChangesInterceptor? interceptor = null)
+        {
+            this.model = model;
+            var builder = new DbContextOptionsBuilder<ArcaWsDbContext>().UseSqlite($"Data Source={path};Pooling=False");
+            if (interceptor is not null) builder.AddInterceptors(interceptor);
+            options = builder.Options;
+        }
         public ArcaWsDbContext CreateDbContext() => new(options, model);
         public Task<ArcaWsDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default) => Task.FromResult(CreateDbContext());
+    }
+
+    private enum FakeMySqlErrorCode { DuplicateEntry = 1062 }
+    private sealed class MySqlException(int number) : Exception
+    {
+        public int Number { get; } = number;
+        public FakeMySqlErrorCode ErrorCode => (FakeMySqlErrorCode)Number;
+    }
+    private sealed class MySqlDuplicateFailureInterceptor : SaveChangesInterceptor
+    {
+        public bool FailNextSave { get; set; }
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (FailNextSave)
+            {
+                FailNextSave = false;
+                throw new DbUpdateException("Synthetic MySQL duplicate entry", new MySqlException(1062));
+            }
+            return ValueTask.FromResult(result);
+        }
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset time) : TimeProvider { public override DateTimeOffset GetUtcNow() => time; }

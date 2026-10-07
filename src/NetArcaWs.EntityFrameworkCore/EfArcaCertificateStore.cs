@@ -243,9 +243,9 @@ public sealed class EfArcaCertificateStore<TContext> : IArcaCertificateStore whe
             string type = current.GetType().Name;
             if (type == "SqliteException" && current.GetType().GetProperty("SqliteExtendedErrorCode")?.GetValue(current) is int sqliteCode &&
                 sqliteCode is 1555 or 2067) return true;
-            if (current.GetType().GetProperty("Number")?.GetValue(current) is int number && number is 2601 or 2627) return true;
-            if (current.GetType().GetProperty("SqlState")?.GetValue(current) is string sqlState && sqlState == "23505") return true;
-            if (current.GetType().GetProperty("ErrorCode")?.GetValue(current) is int errorCode && errorCode == 1062) return true;
+            if (type == "SqlException" && current.GetType().GetProperty("Number")?.GetValue(current) is int sqlNumber && sqlNumber is 2601 or 2627) return true;
+            if (type == "PostgresException" && current.GetType().GetProperty("SqlState")?.GetValue(current) is string sqlState && sqlState == "23505") return true;
+            if (type == "MySqlException" && current.GetType().GetProperty("Number")?.GetValue(current) is int mySqlNumber && mySqlNumber is 1062 or 1586) return true;
         }
         return false;
     }
