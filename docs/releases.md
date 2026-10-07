@@ -29,19 +29,19 @@ La versión 0.6.0 agrupa once paquetes: `NetArcaWs`, `NetArcaWs.Tool`,
 versión en NuGet; estos enlaces y badges reflejan el feed, sin depender del
 estado de una release de GitHub:
 
-| Paquete | Versión 0.6.0 en NuGet |
+| Paquete | Última versión en NuGet; enlace a 0.6.0 |
 | --- | --- |
-| `NetArcaWs` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs/0.6.0)](https://www.nuget.org/packages/NetArcaWs/0.6.0) |
-| `NetArcaWs.Tool` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.Tool/0.6.0)](https://www.nuget.org/packages/NetArcaWs.Tool/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore.MySql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.MySql/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.MySql/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore.PostgreSql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.PostgreSql/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.PostgreSql/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore.SqlServer` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.SqlServer/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.SqlServer/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore.Migrations.Sqlite` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore.Migrations.MySql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.MySql/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.MySql/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore.Migrations.MariaDb` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore.Migrations.SqlServer` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer/0.6.0)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer/0.6.0) |
+| `NetArcaWs` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs)](https://www.nuget.org/packages/NetArcaWs) · [0.6.0](https://www.nuget.org/packages/NetArcaWs/0.6.0) |
+| `NetArcaWs.Tool` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.Tool)](https://www.nuget.org/packages/NetArcaWs.Tool) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.Tool/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore.MySql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.MySql)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.MySql) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.MySql/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore.PostgreSql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.PostgreSql)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.PostgreSql) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.PostgreSql/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore.SqlServer` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.SqlServer)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.SqlServer) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.SqlServer/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore.Migrations.Sqlite` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore.Migrations.MySql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.MySql)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.MySql) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.MySql/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore.Migrations.MariaDb` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql/0.6.0) |
+| `NetArcaWs.EntityFrameworkCore.Migrations.SqlServer` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer/0.6.0) |
 
 La publicación se verifica por separado para cada paquete: el éxito de la
 release de GitHub no demuestra que los once IDs hayan sido aceptados e
