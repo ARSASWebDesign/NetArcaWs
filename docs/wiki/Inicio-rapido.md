@@ -1,21 +1,23 @@
 # Inicio rápido
 
 NetArcaWs apunta a .NET 10. El repositorio fija SDK `10.0.401` en `global.json`.
-Los paquetes `NetArcaWs` y `NetArcaWs.Tool` versión `0.5.0` fueron aceptados e
-indexados por NuGet.
+Los ejemplos de esta guía usan la versión `0.6.0`. Los badges de [Inicio](Home.md)
+indican las versiones publicadas de la biblioteca y la herramienta; la
+[disponibilidad por paquete](../releases.md#estado-de-activación) cubre todos los extras.
 
 ## Referenciar la biblioteca
 
-La aplicación puede consumir el paquete publicado desde nuget.org:
+La aplicación puede consumir el paquete desde nuget.org cuando esa versión esté
+disponible en el feed:
 
 ```sh
-dotnet add package NetArcaWs --version 0.5.0
+dotnet add package NetArcaWs --version 0.6.0
 ```
 
 También puede usar el paquete local desde la carpeta de artifacts:
 
 ```sh
-dotnet add package NetArcaWs --version 0.5.0 --source /ruta/absoluta/a/artifacts
+dotnet add package NetArcaWs --version 0.6.0 --source /ruta/absoluta/a/artifacts
 ```
 
 La versión concreta debe coincidir con el paquete local generado por el checkout.

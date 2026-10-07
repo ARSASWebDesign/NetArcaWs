@@ -14,7 +14,8 @@ comparar certificado y clave localmente, pero no verifica confianza, revocación
 asociación del servicio o acceso remoto.
 
 El paquete es instalable como tool local o global desde una carpeta local de
-NuGet. La versión 0.5.0 del tool fue aceptada e indexada por NuGet. También
-pueden usarse paquetes construidos localmente. El trámite de homologación se hace en WSASS y el
+NuGet. La versión 0.5.0 del tool fue aceptada e indexada por NuGet; los badges
+de [Inicio](Home.md) indican la versión disponible actualmente. También pueden
+usarse paquetes construidos localmente. El trámite de homologación se hace en WSASS y el
 de producción en Administrador de Certificados/Relaciones, según el
 [procedimiento oficial de ARCA](https://www.arca.gob.ar/ws/programadores/certificados-digitales.asp).

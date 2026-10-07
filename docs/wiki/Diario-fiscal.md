@@ -203,10 +203,11 @@ Para MariaDB se usa `MariaDbServerVersion`. Los paquetes
 `AddNetArcaWsPostgreSqlStores(connectionString, modelOptions)` y
 `AddNetArcaWsSqlServerStores(connectionString, modelOptions)`. Cada helper
 configura el contexto dedicado y los stores, pero no conecta, migra, crea tablas
-ni agrega estrategia de reintentos EF o reintentos SOAP. Los cuatro paquetes
-opcionales de persistencia están en versión 0.5.0 y aún no se publicaron en
-NuGet; consultar el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19)
-para su estado de entrega. El [modelo relacional](Modelo-relacional.md) contiene
+ni agrega estrategia de reintentos EF o reintentos SOAP. Los paquetes
+opcionales de persistencia usan versión 0.6.0: el paquete EF Core, tres
+providers relacionales y cinco paquetes de migraciones oficiales por módulo y
+motor. Consultar el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19)
+para el estado de entrega. El [modelo relacional](Modelo-relacional.md) contiene
 el diccionario de columnas y los scripts DDL por proveedor. El cifrado de tickets requiere que la aplicación
 registre `IWsaaTicketProtector` con claves administradas fuera de la base de
 datos; ver el [ADR 0006](../adr/0006-shared-wsaa-tickets.md).

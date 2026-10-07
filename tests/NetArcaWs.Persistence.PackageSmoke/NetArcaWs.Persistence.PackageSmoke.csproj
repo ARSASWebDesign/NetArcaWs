@@ -3,7 +3,7 @@
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
     <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
-    <PersistencePackageVersion Condition="'$(PersistencePackageVersion)' == ''">0.5.0</PersistencePackageVersion>
+    <PersistencePackageVersion Condition="'$(PersistencePackageVersion)' == ''">0.6.0</PersistencePackageVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="NetArcaWs.EntityFrameworkCore" Version="$(PersistencePackageVersion)" />

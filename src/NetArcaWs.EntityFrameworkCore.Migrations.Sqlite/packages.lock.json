@@ -472,7 +472,7 @@
           "Microsoft.EntityFrameworkCore": "[10.0.12, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.12, )",
-          "NetArcaWs": "[0.5.0, )"
+          "NetArcaWs": "[0.6.0, )"
         }
       }
     }

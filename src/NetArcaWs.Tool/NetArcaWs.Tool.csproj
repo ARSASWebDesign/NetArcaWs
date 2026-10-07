@@ -5,7 +5,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>netarcaws</ToolCommandName>
     <PackageId>NetArcaWs.Tool</PackageId>
-    <Version>0.5.0</Version>
+    <Version>0.6.0</Version>
     <Authors>NetArcaWs .NET contributors</Authors>
     <RepositoryUrl>https://github.com/ARSASWebDesign/NetArcaWs</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

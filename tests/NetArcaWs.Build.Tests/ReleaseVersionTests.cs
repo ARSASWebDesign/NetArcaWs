@@ -9,25 +9,25 @@ public sealed class ReleaseVersionTests
     public void Validate_returns_the_shared_version_when_both_projects_match()
     {
         using var workspace = new BuildTestWorkspace();
-        WriteVersions(workspace, "0.5.0", "0.5.0");
+        WriteVersions(workspace, "0.6.0");
 
-        ReleaseVersion.Validate(workspace.Root).Should().Be("0.5.0");
+        ReleaseVersion.Validate(workspace.Root).Should().Be("0.6.0");
     }
 
     [Fact]
     public void Validate_accepts_a_matching_stable_release_tag_and_flag()
     {
         using var workspace = new BuildTestWorkspace();
-        WriteVersions(workspace, "0.5.0", "0.5.0");
+        WriteVersions(workspace, "0.6.0");
 
-        ReleaseVersion.Validate(workspace.Root, "v0.5.0", prerelease: false).Should().Be("0.5.0");
+        ReleaseVersion.Validate(workspace.Root, "v0.6.0", prerelease: false).Should().Be("0.6.0");
     }
 
     [Fact]
     public void Validate_accepts_a_matching_prerelease_tag_and_flag()
     {
         using var workspace = new BuildTestWorkspace();
-        WriteVersions(workspace, "0.6.0-rc.1", "0.6.0-rc.1");
+        WriteVersions(workspace, "0.6.0-rc.1");
 
         ReleaseVersion.Validate(workspace.Root, "v0.6.0-rc.1", prerelease: true).Should().Be("0.6.0-rc.1");
     }
@@ -43,7 +43,7 @@ public sealed class ReleaseVersionTests
     public void Validate_rejects_noncanonical_or_unsupported_semver(string version)
     {
         using var workspace = new BuildTestWorkspace();
-        WriteVersions(workspace, version, version);
+        WriteVersions(workspace, version);
 
         Action validate = () => ReleaseVersion.Validate(workspace.Root);
 
@@ -54,7 +54,8 @@ public sealed class ReleaseVersionTests
     public void Validate_rejects_different_versions_in_the_library_and_tool_projects()
     {
         using var workspace = new BuildTestWorkspace();
-        WriteVersions(workspace, "0.5.0", "0.5.1");
+        WriteVersions(workspace, "0.6.0");
+        workspace.Write("src/NetArcaWs.EntityFrameworkCore.MySql/NetArcaWs.EntityFrameworkCore.MySql.csproj", ProjectFile("0.6.1"));
 
         Action validate = () => ReleaseVersion.Validate(workspace.Root);
 
@@ -65,7 +66,7 @@ public sealed class ReleaseVersionTests
     public void Validate_rejects_a_release_tag_that_does_not_match_the_version()
     {
         using var workspace = new BuildTestWorkspace();
-        WriteVersions(workspace, "0.5.0", "0.5.0");
+        WriteVersions(workspace, "0.6.0");
 
         Action validate = () => ReleaseVersion.Validate(workspace.Root, "v0.5.1", prerelease: false);
 
@@ -78,17 +79,41 @@ public sealed class ReleaseVersionTests
     public void Validate_rejects_a_prerelease_flag_that_disagrees_with_the_version(string version, string tag, bool prerelease)
     {
         using var workspace = new BuildTestWorkspace();
-        WriteVersions(workspace, version, version);
+        WriteVersions(workspace, version);
 
         Action validate = () => ReleaseVersion.Validate(workspace.Root, tag, prerelease);
 
         validate.Should().Throw<Exception>();
     }
 
-    private static void WriteVersions(BuildTestWorkspace workspace, string libraryVersion, string toolVersion)
+    [Fact]
+    public void Validate_rejects_a_missing_allowlisted_package_project()
     {
-        workspace.Write("src/NetArcaWs/NetArcaWs.csproj", ProjectFile(libraryVersion));
-        workspace.Write("src/NetArcaWs.Tool/NetArcaWs.Tool.csproj", ProjectFile(toolVersion));
+        using var workspace = new BuildTestWorkspace();
+        WriteVersions(workspace, "0.6.0");
+        File.Delete(Path.Combine(workspace.Root, "src", "NetArcaWs.EntityFrameworkCore.Migrations.Sqlite", "NetArcaWs.EntityFrameworkCore.Migrations.Sqlite.csproj"));
+
+        Action validate = () => ReleaseVersion.Validate(workspace.Root);
+
+        validate.Should().Throw<InvalidOperationException>().WithMessage("*allowlist mismatch*");
+    }
+
+    [Fact]
+    public void Validate_rejects_an_unexpected_package_project()
+    {
+        using var workspace = new BuildTestWorkspace();
+        WriteVersions(workspace, "0.6.0");
+        workspace.Write("src/NetArcaWs.Future/NetArcaWs.Future.csproj", ProjectFile("0.6.0"));
+
+        Action validate = () => ReleaseVersion.Validate(workspace.Root);
+
+        validate.Should().Throw<InvalidOperationException>().WithMessage("*allowlist mismatch*");
+    }
+
+    private static void WriteVersions(BuildTestWorkspace workspace, string version)
+    {
+        foreach (string project in ReleaseVersion.PackageProjects)
+            workspace.Write($"src/{project}/{project}.csproj", ProjectFile(version));
     }
 
     private static string ProjectFile(string version) =>

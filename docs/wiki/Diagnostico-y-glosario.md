@@ -88,11 +88,12 @@ El circuito completo de Factura de Crédito Electrónica MiPyME incluye servicio
 y eventos distintos. La matriz de [servicios y cobertura](Servicios-y-cobertura.md)
 explicita esta diferencia.
 
-### ¿Por qué el feed tiene 0.5.0 y `main` contiene más documentación?
+### ¿Por qué NuGet y la rama principal pueden mostrar versiones distintas?
 
-Una versión publicada es inmutable. Las mejoras posteriores en `main` se
-distribuyen con una versión nueva cuando corresponda. No mover un tag ni
-reemplazar los assets de una release para hacerlos coincidir con `main`.
+NuGet solo muestra paquetes que ya fueron aceptados e indexados. La release
+0.6.0 agrega paquetes opcionales de persistencia; usá los badges de [Inicio](Home.md)
+para comprobar las versiones disponibles. Las mejoras posteriores se
+distribuyen con otra versión, sin reemplazar assets de una release publicada.
 
 ## Glosario
 
