@@ -366,6 +366,49 @@ public sealed class ProtectedHomologationStateSession
         finally { gate.Release(); }
     }
 
+    public async Task<IReadOnlyList<ProtectedHomologationMatrixVerificationState>> ListPendingMatrixVerificationsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try { EnsureUsable(); return state.PendingMatrixVerifications.ToArray(); }
+        finally { gate.Release(); }
+    }
+
+    public async Task MarkMatrixVerificationPendingAsync(string keyHash, CancellationToken cancellationToken = default)
+    {
+        ValidateMatrixKeyHash(keyHash);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            EnsureUsable();
+            if (state.PendingMatrixVerifications.Any(item => item.KeyHash == keyHash)) return;
+            if (state.PendingMatrixVerifications.Count >= 512)
+                throw new InvalidOperationException("Protected homologation state has reached its pending matrix verification limit.");
+            await PersistAsync(state with { PendingMatrixVerifications = [.. state.PendingMatrixVerifications, new(keyHash)] }, cancellationToken).ConfigureAwait(false);
+        }
+        finally { gate.Release(); }
+    }
+
+    public async Task ClearMatrixVerificationPendingAsync(string keyHash, CancellationToken cancellationToken = default)
+    {
+        ValidateMatrixKeyHash(keyHash);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            EnsureUsable();
+            if (!state.PendingMatrixVerifications.Any(item => item.KeyHash == keyHash)) return;
+            await PersistAsync(state with { PendingMatrixVerifications = state.PendingMatrixVerifications.Where(item => item.KeyHash != keyHash).ToList() }, cancellationToken).ConfigureAwait(false);
+        }
+        finally { gate.Release(); }
+    }
+
+    private static void ValidateMatrixKeyHash(string keyHash)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyHash);
+        if (keyHash.Length != 64 || keyHash.Any(character => !Uri.IsHexDigit(character)))
+            throw new ArgumentException("Matrix verification identity must be a SHA-256 key hash.", nameof(keyHash));
+    }
+
     private static void ValidateSeriesKey(string service, NetArcaWs.HealthChecks.ArcaEnvironment environment, long cuit, int pointOfSale, int voucherType)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(service);
@@ -440,7 +483,7 @@ public sealed class ProtectedHomologationStateSession
 
     private static void ValidateState(ProtectedHomologationStateBundle state)
     {
-        if (state.Version != 1 || state.SavedAtUtc == default || state.Tickets is null || state.Tickets.Count > 64 || state.LoginGuards is null || state.LoginGuards.Count > 64 || state.VerifiedSeriesSummaries is null || state.VerifiedSeriesSummaries.Count > 512)
+        if (state.Version != 1 || state.SavedAtUtc == default || state.Tickets is null || state.Tickets.Count > 64 || state.LoginGuards is null || state.LoginGuards.Count > 64 || state.VerifiedSeriesSummaries is null || state.VerifiedSeriesSummaries.Count > 512 || state.PendingMatrixVerifications is null || state.PendingMatrixVerifications.Count > 512)
             throw InvalidBundle();
         var seriesKeys = new HashSet<string>(StringComparer.Ordinal);
         foreach (ProtectedHomologationSeriesSummary summary in state.VerifiedSeriesSummaries)
@@ -462,6 +505,10 @@ public sealed class ProtectedHomologationStateSession
             if (guard is null || string.IsNullOrWhiteSpace(guard.IdentityKey) || guard.IdentityKey.Length != 64 || guard.IdentityKey.Any(character => !Uri.IsHexDigit(character)) ||
                 !identities.Add(guard.IdentityKey) || guard.LastAttemptUtc == default || guard.CooldownUntilUtc < guard.LastAttemptUtc.AddMinutes(10) ||
                 guard.CooldownUntilUtc > guard.LastAttemptUtc.AddMinutes(12)) throw InvalidBundle();
+        identities.Clear();
+        foreach (ProtectedHomologationMatrixVerificationState pending in state.PendingMatrixVerifications)
+            if (pending is null || pending.KeyHash is null || pending.KeyHash.Length != 64 || pending.KeyHash.Any(character => !Uri.IsHexDigit(character)) ||
+                !identities.Add(pending.KeyHash)) throw InvalidBundle();
         if (state.JournalSnapshotBase64 is { } snapshot)
         {
             byte[] bytes;
@@ -483,7 +530,13 @@ public sealed record ProtectedHomologationStateBundle(
     string? JournalSnapshotBase64)
 {
     public List<ProtectedHomologationSeriesSummary> VerifiedSeriesSummaries { get; init; } = [];
+    public List<ProtectedHomologationMatrixVerificationState> PendingMatrixVerifications { get; init; } = [];
     public override string ToString() => "ProtectedHomologationStateBundle { redacted }";
+}
+
+public sealed record ProtectedHomologationMatrixVerificationState(string KeyHash)
+{
+    public override string ToString() => "ProtectedHomologationMatrixVerificationState { key redacted }";
 }
 
 public sealed record ProtectedHomologationSeriesSummary(string Service, NetArcaWs.HealthChecks.ArcaEnvironment Environment,

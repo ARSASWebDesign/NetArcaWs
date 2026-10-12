@@ -94,6 +94,12 @@ internal static class FiscalHomologationMatrix
         }
         foreach (FiscalHomologationScenario selected in scenarios)
             channels[selected.Service].ValidateScenario(selected, channelPointsOfSale[selected.Service], receiver);
+        string[] selectedKeys = scenarios.Select(selected => VerificationKey(StableKey(runId, tenant, selected))).ToArray();
+        HashSet<string> selectedKeySet = selectedKeys.ToHashSet(StringComparer.Ordinal);
+        IReadOnlyList<ProtectedHomologationMatrixVerificationState> pendingVerifications =
+            await state.ListPendingMatrixVerificationsAsync(cancellationToken).ConfigureAwait(false);
+        if (pendingVerifications.Any(item => !selectedKeySet.Contains(item.KeyHash)))
+            throw new InvalidOperationException("A prior matrix case lacks durable exact verification; resume its same run before starting another matrix run.");
         foreach (FiscalHomologationScenario selected in scenarios)
             if (!await channels[selected.Service].IsVoucherTypeAvailableAsync(tenant, selected.VoucherType, cancellationToken).ConfigureAwait(false))
                 throw new InvalidOperationException($"Scenario '{selected.Name}' is absent from the runtime service catalogue.");
@@ -115,6 +121,7 @@ internal static class FiscalHomologationMatrix
             await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                string verificationKey = VerificationKey(key);
                 InvoiceIdentity? association = null;
                 if (scenario.OriginalScenarioName is { } originalName)
                 {
@@ -131,9 +138,9 @@ internal static class FiscalHomologationMatrix
                     channel.ValidateFrozenSubmission(existing.Submission, scenario, pos, receiver, association);
                     if (existing.State == InvoiceState.Authorized)
                     {
-                        await channel.VerifyExactAsync(tenant, existing, cancellationToken).ConfigureAwait(false);
-                        await RecordVerifiedSummaryAsync(state, channel.Service, tenant, pos, scenario.VoucherType,
-                            existing.Submission.Identity.VoucherNumber, cancellationToken).ConfigureAwait(false);
+                        await state.MarkMatrixVerificationPendingAsync(verificationKey, cancellationToken).ConfigureAwait(false);
+                        await VerifyRecordAndClearAsync(channel, tenant, existing, state, scenario.VoucherType, pos,
+                            verificationKey, cancellationToken).ConfigureAwait(false);
                         await ReportResultAsync(results, onCaseCompleted,
                             new(scenario.Name, channel.Service, scenario.VoucherType, pos, existing.Submission.Identity.VoucherNumber, true, existing.State), cancellationToken).ConfigureAwait(false);
                         continue;
@@ -141,6 +148,8 @@ internal static class FiscalHomologationMatrix
                     if (existing.State is not (InvoiceState.Prepared or InvoiceState.Unknown or InvoiceState.Conflict or
                         InvoiceState.ManualReview or InvoiceState.Submitting or InvoiceState.Reconciling))
                         throw new InvalidOperationException($"Scenario '{scenario.Name}' remains {existing.State}; no automatic revision or resend is allowed.");
+                    await EnsureNoOtherVerificationPendingAsync(state, verificationKey, cancellationToken).ConfigureAwait(false);
+                    await state.MarkMatrixVerificationPendingAsync(verificationKey, cancellationToken).ConfigureAwait(false);
                     if (existing.State != InvoiceState.Prepared)
                     {
                         if (await protectedJournal.HasUnresolvedOperationsAsync(tenant.TenantId, key, cancellationToken).ConfigureAwait(false))
@@ -148,9 +157,8 @@ internal static class FiscalHomologationMatrix
                         InvoiceOperation reconciled = await channel.ReconcileAsync(tenant, key, cancellationToken).ConfigureAwait(false);
                         if (reconciled.State != InvoiceState.Authorized)
                             throw new InvalidOperationException($"Scenario '{scenario.Name}' remains {reconciled.State}; matrix advancement is stopped.");
-                        await channel.VerifyExactAsync(tenant, reconciled, cancellationToken).ConfigureAwait(false);
-                        await RecordVerifiedSummaryAsync(state, channel.Service, tenant, pos, scenario.VoucherType,
-                            reconciled.Submission.Identity.VoucherNumber, cancellationToken).ConfigureAwait(false);
+                        await VerifyRecordAndClearAsync(channel, tenant, reconciled, state, scenario.VoucherType, pos,
+                            verificationKey, cancellationToken).ConfigureAwait(false);
                         await ReportResultAsync(results, onCaseCompleted, new(scenario.Name, channel.Service,
                             scenario.VoucherType, pos, reconciled.Submission.Identity.VoucherNumber, true, reconciled.State), cancellationToken).ConfigureAwait(false);
                         continue;
@@ -163,14 +171,15 @@ internal static class FiscalHomologationMatrix
                     InvoiceOperation resumed = await channel.SubmitOrResumeAsync(tenant, key, existing.Submission, cancellationToken).ConfigureAwait(false);
                     if (resumed.State != InvoiceState.Authorized)
                         throw new InvalidOperationException($"Scenario '{scenario.Name}' ended in {resumed.State}; matrix advancement is stopped.");
-                    await channel.VerifyExactAsync(tenant, resumed, cancellationToken).ConfigureAwait(false);
-                    await RecordVerifiedSummaryAsync(state, channel.Service, tenant, pos, scenario.VoucherType,
-                        resumed.Submission.Identity.VoucherNumber, cancellationToken).ConfigureAwait(false);
+                    await VerifyRecordAndClearAsync(channel, tenant, resumed, state, scenario.VoucherType, pos,
+                        verificationKey, cancellationToken).ConfigureAwait(false);
                     await ReportResultAsync(results, onCaseCompleted, new(scenario.Name, channel.Service, scenario.VoucherType,
                         pos, resumed.Submission.Identity.VoucherNumber, true, resumed.State), cancellationToken).ConfigureAwait(false);
                     continue;
                 }
 
+                await EnsureNoOtherVerificationPendingAsync(state, verificationKey, cancellationToken).ConfigureAwait(false);
+                await state.MarkMatrixVerificationPendingAsync(verificationKey, cancellationToken).ConfigureAwait(false);
                 if (await protectedJournal.HasUnresolvedOperationsAsync(tenant.TenantId, cancellationToken: cancellationToken).ConfigureAwait(false))
                     throw new InvalidOperationException("A prior matrix fiscal operation is unresolved; no new number was selected.");
                 long last = await channel.QueryLastAuthorizedAsync(tenant, pos, scenario.VoucherType, cancellationToken).ConfigureAwait(false);
@@ -188,8 +197,8 @@ internal static class FiscalHomologationMatrix
                 InvoiceOperation sent = await channel.SubmitOrResumeAsync(tenant, key, submission, cancellationToken).ConfigureAwait(false);
                 if (sent.State != InvoiceState.Authorized)
                     throw new InvalidOperationException($"Scenario '{scenario.Name}' ended in {sent.State}; matrix advancement is stopped.");
-                await channel.VerifyExactAsync(tenant, sent, cancellationToken).ConfigureAwait(false);
-                await RecordVerifiedSummaryAsync(state, channel.Service, tenant, pos, scenario.VoucherType, next, cancellationToken).ConfigureAwait(false);
+                await VerifyRecordAndClearAsync(channel, tenant, sent, state, scenario.VoucherType, pos,
+                    verificationKey, cancellationToken).ConfigureAwait(false);
                 await ReportResultAsync(results, onCaseCompleted,
                     new(scenario.Name, channel.Service, scenario.VoucherType, pos, next, false, sent.State), cancellationToken).ConfigureAwait(false);
             }
@@ -214,6 +223,28 @@ internal static class FiscalHomologationMatrix
         await state.RecordVerifiedSeriesAsync(new(service, tenant.Environment, tenant.Cuit, pos, type,
             Math.Max(number, previous?.LastAuthorizedNumber ?? 0), TimeProvider.System.GetUtcNow()), cancellationToken).ConfigureAwait(false);
     }
+
+    private static async Task VerifyRecordAndClearAsync(IFiscalHomologationChannel channel, ArcaTenantContext tenant,
+        InvoiceOperation operation, ProtectedHomologationStateSession state, int type, int pos, string verificationKey,
+        CancellationToken cancellationToken)
+    {
+        await channel.VerifyExactAsync(tenant, operation, cancellationToken).ConfigureAwait(false);
+        await RecordVerifiedSummaryAsync(state, channel.Service, tenant, pos, type,
+            operation.Submission.Identity.VoucherNumber, cancellationToken).ConfigureAwait(false);
+        await state.ClearMatrixVerificationPendingAsync(verificationKey, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task EnsureNoOtherVerificationPendingAsync(ProtectedHomologationStateSession state,
+        string verificationKey, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<ProtectedHomologationMatrixVerificationState> pending =
+            await state.ListPendingMatrixVerificationsAsync(cancellationToken).ConfigureAwait(false);
+        if (pending.Any(item => item.KeyHash != verificationKey))
+            throw new InvalidOperationException("Another matrix case still lacks durable exact verification; resolve it before advancing to this case.");
+    }
+
+    private static string VerificationKey(string idempotencyKey)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(idempotencyKey))).ToLowerInvariant();
 
     private static string StableKey(string runId, ArcaTenantContext tenant, FiscalHomologationScenario scenario)
     {

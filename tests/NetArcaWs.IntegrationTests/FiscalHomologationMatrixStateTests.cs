@@ -134,9 +134,9 @@ public sealed class FiscalHomologationMatrixStateTests
 
             var first = await FiscalHomologationMatrix.RunAsync("workflow-44", scenarios, tenant, journal, state, channels, points, receiver, Ct);
             var replay = await FiscalHomologationMatrix.RunAsync("workflow-44", scenarios, tenant, journal, state, channels, points, receiver, Ct);
+            var secondRun = await FiscalHomologationMatrix.RunAsync("workflow-45", scenarios, tenant, journal, state, channels, points, receiver, Ct);
             await Assert.ThrowsAsync<InvoiceConflictException>(() => FiscalHomologationMatrix.RunAsync("workflow-44", scenarios,
                 tenant, journal, state, channels, points, new FiscalHomologationReceiver(80, 123, 5, true), Ct));
-            var secondRun = await FiscalHomologationMatrix.RunAsync("workflow-45", scenarios, tenant, journal, state, channels, points, receiver, Ct);
 
             Assert.Equal(1, first[0].Number);
             Assert.True(replay[0].Reused);
@@ -144,6 +144,155 @@ public sealed class FiscalHomologationMatrixStateTests
             Assert.Equal(2, secondRun[0].Number);
             Assert.Equal(2, channel.Submissions);
             Assert.Equal(3, channel.ExactQueries);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public async Task Exact_verification_failure_blocks_other_run_until_same_key_reverifies()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"matrix-verification-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var state = await ProtectedHomologationStateSession.OpenAsync(new MatrixStateStore(Now), Ct, new FixedClock(Now));
+            var journal = await CreateJournalAsync(root, state);
+            var tenant = CreateTenant();
+            var channel = new FakeChannel(journal) { FailNextExact = true };
+            var channels = new Dictionary<string, IFiscalHomologationChannel> { ["test"] = channel };
+            var points = new Dictionary<string, int> { ["test"] = 7 };
+            var receiver = new FiscalHomologationReceiver(80, 0, 5, true);
+            var scenario = new[] { new FiscalHomologationScenario("test", 6, "invoice-b") };
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => FiscalHomologationMatrix.RunAsync("workflow-marker", scenario,
+                tenant, journal, state, channels, points, receiver, Ct));
+            Assert.Single(await state.ListPendingMatrixVerificationsAsync(Ct));
+            Assert.Equal(1, channel.Submissions);
+
+            int cataloguesBeforeBlockedRun = channel.CatalogueQueries;
+            await Assert.ThrowsAsync<InvalidOperationException>(() => FiscalHomologationMatrix.RunAsync("workflow-other", scenario,
+                tenant, journal, state, channels, points, receiver, Ct));
+            Assert.Equal(cataloguesBeforeBlockedRun, channel.CatalogueQueries);
+            Assert.Equal(1, channel.Submissions);
+
+            var newScenario = new FiscalHomologationScenario("test", 6, "invoice-c");
+            int queriesBeforeReorderedRun = channel.LastQueries;
+            await Assert.ThrowsAsync<InvalidOperationException>(() => FiscalHomologationMatrix.RunAsync("workflow-marker",
+                [newScenario, scenario[0]], tenant, journal, state, channels, points, receiver, Ct));
+            Assert.Equal(queriesBeforeReorderedRun, channel.LastQueries);
+            Assert.Equal(1, channel.Submissions);
+            Assert.Single(await state.ListPendingMatrixVerificationsAsync(Ct));
+
+            var resumed = await FiscalHomologationMatrix.RunAsync("workflow-marker", [scenario[0], newScenario],
+                tenant, journal, state, channels, points, receiver, Ct);
+            Assert.True(resumed[0].Reused);
+            Assert.Equal("invoice-c", resumed[1].ScenarioName);
+            Assert.Empty(await state.ListPendingMatrixVerificationsAsync(Ct));
+            Assert.Equal(3, channel.ExactQueries);
+            Assert.Equal(2, channel.Submissions);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public async Task Marker_left_before_prepare_allows_only_same_key_to_resume()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"matrix-marker-before-prepare-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var state = await ProtectedHomologationStateSession.OpenAsync(new MatrixStateStore(Now), Ct, new FixedClock(Now));
+            var journal = await CreateJournalAsync(root, state);
+            var tenant = CreateTenant();
+            var channel = new FakeChannel(journal);
+            var scenario = new FiscalHomologationScenario("test", 6, "invoice-b");
+            await state.MarkMatrixVerificationPendingAsync(VerificationHash("workflow-before-prepare", tenant, scenario), Ct);
+
+            var resumed = await FiscalHomologationMatrix.RunAsync("workflow-before-prepare", [scenario], tenant, journal, state,
+                new Dictionary<string, IFiscalHomologationChannel> { ["test"] = channel },
+                new Dictionary<string, int> { ["test"] = 7 }, new FiscalHomologationReceiver(80, 0, 5, true), Ct);
+
+            Assert.Equal(1, resumed[0].Number);
+            Assert.Equal(1, channel.Submissions);
+            Assert.Empty(await state.ListPendingMatrixVerificationsAsync(Ct));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public async Task Authorized_replay_exact_mismatch_remains_blocking_until_verified()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"matrix-authorized-replay-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var state = await ProtectedHomologationStateSession.OpenAsync(new MatrixStateStore(Now), Ct, new FixedClock(Now));
+            var journal = await CreateJournalAsync(root, state);
+            var tenant = CreateTenant();
+            var channel = new FakeChannel(journal);
+            var scenarios = new[] { new FiscalHomologationScenario("test", 6, "invoice-b") };
+            var channels = new Dictionary<string, IFiscalHomologationChannel> { ["test"] = channel };
+            var points = new Dictionary<string, int> { ["test"] = 7 };
+            var receiver = new FiscalHomologationReceiver(80, 0, 5, true);
+            await FiscalHomologationMatrix.RunAsync("workflow-authorized-replay", scenarios, tenant, journal, state,
+                channels, points, receiver, Ct);
+
+            channel.FailNextExact = true;
+            await Assert.ThrowsAsync<InvalidOperationException>(() => FiscalHomologationMatrix.RunAsync(
+                "workflow-authorized-replay", scenarios, tenant, journal, state, channels, points, receiver, Ct));
+            Assert.Single(await state.ListPendingMatrixVerificationsAsync(Ct));
+            int lastQueriesBeforeNewRun = channel.LastQueries;
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => FiscalHomologationMatrix.RunAsync(
+                "workflow-different-replay", scenarios, tenant, journal, state, channels, points, receiver, Ct));
+            Assert.Equal(lastQueriesBeforeNewRun, channel.LastQueries);
+            Assert.Equal(1, channel.Submissions);
+
+            await FiscalHomologationMatrix.RunAsync("workflow-authorized-replay", scenarios, tenant, journal, state,
+                channels, points, receiver, Ct);
+            Assert.Empty(await state.ListPendingMatrixVerificationsAsync(Ct));
+            Assert.Equal(3, channel.ExactQueries);
+            Assert.Equal(1, channel.Submissions);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public async Task Earlier_authorized_case_can_replay_to_reach_later_pending_case()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"matrix-later-pending-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var state = await ProtectedHomologationStateSession.OpenAsync(new MatrixStateStore(Now), Ct, new FixedClock(Now));
+            var journal = await CreateJournalAsync(root, state);
+            var tenant = CreateTenant();
+            var channel = new FakeChannel(journal);
+            var scenarios = new[]
+            {
+                new FiscalHomologationScenario("test", 6, "invoice-a"),
+                new FiscalHomologationScenario("test", 6, "invoice-b")
+            };
+            var channels = new Dictionary<string, IFiscalHomologationChannel> { ["test"] = channel };
+            var points = new Dictionary<string, int> { ["test"] = 7 };
+            var receiver = new FiscalHomologationReceiver(80, 0, 5, true);
+            await FiscalHomologationMatrix.RunAsync("workflow-two-cases", scenarios, tenant, journal, state,
+                channels, points, receiver, Ct);
+
+            channel.FailExactOnCall = channel.ExactQueries + 2;
+            await Assert.ThrowsAsync<InvalidOperationException>(() => FiscalHomologationMatrix.RunAsync(
+                "workflow-two-cases", scenarios, tenant, journal, state, channels, points, receiver, Ct));
+            Assert.Single(await state.ListPendingMatrixVerificationsAsync(Ct));
+            int submissionsBeforeRecovery = channel.Submissions;
+            int lastQueriesBeforeRecovery = channel.LastQueries;
+
+            var recovered = await FiscalHomologationMatrix.RunAsync("workflow-two-cases", scenarios, tenant, journal, state,
+                channels, points, receiver, Ct);
+
+            Assert.Equal(2, recovered.Count);
+            Assert.Equal(submissionsBeforeRecovery, channel.Submissions);
+            Assert.Equal(lastQueriesBeforeRecovery, channel.LastQueries);
+            Assert.Empty(await state.ListPendingMatrixVerificationsAsync(Ct));
         }
         finally { Directory.Delete(root, recursive: true); }
     }
@@ -313,6 +462,13 @@ public sealed class FiscalHomologationMatrixStateTests
     private static Task<ProtectedSqliteInvoiceJournal> CreateJournalAsync(string root, ProtectedHomologationStateSession state)
         => ProtectedSqliteInvoiceJournal.CreateAsync(state, Path.Combine(root, "protected-journal"), new FixedClock(Now), Ct);
 
+    private static string VerificationHash(string runId, ArcaTenantContext tenant, FiscalHomologationScenario scenario)
+    {
+        string canonical = $"{runId}\n{tenant.TenantId}\n{tenant.Environment}\n{tenant.Cuit}\n{scenario.Service}\n{scenario.VoucherType}\n{scenario.Name}";
+        string idempotencyKey = "homologation-matrix-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(idempotencyKey))).ToLowerInvariant();
+    }
+
     private sealed class MatrixStateStore(DateTimeOffset now, string? initialValue = null, bool exists = false) : IProtectedHomologationStateStore
     {
         private string? value = initialValue;
@@ -346,6 +502,8 @@ public sealed class FiscalHomologationMatrixStateTests
         public int ExactQueries { get; private set; }
         public int LastQueries { get; private set; }
         public int CatalogueQueries { get; private set; }
+        public bool FailNextExact { get; set; }
+        public int? FailExactOnCall { get; set; }
         public InvoiceIdentity? AssociatedInvoice { get; private set; }
         public bool Supports(int voucherType) => voucherType is 6 or 7 or 19;
         public bool CanAssociate(int noteType, int originalType) => noteType == 7 && originalType == 6;
@@ -395,6 +553,12 @@ public sealed class FiscalHomologationMatrixStateTests
         public Task VerifyExactAsync(ArcaTenantContext tenant, InvoiceOperation operation, CancellationToken cancellationToken)
         {
             ExactQueries++;
+            if (FailNextExact || ExactQueries == FailExactOnCall)
+            {
+                FailNextExact = false;
+                FailExactOnCall = null;
+                throw new InvalidOperationException("synthetic exact-query mismatch");
+            }
             return Task.CompletedTask;
         }
     }
