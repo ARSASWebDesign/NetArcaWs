@@ -92,91 +92,86 @@ public sealed class ArcaServicesHomologationTests
     [Trait("Category", "Integration")]
     public async Task Explicitly_enabled_authenticated_scenarios_run_against_homologation()
     {
-        string[] selected = (Environment.GetEnvironmentVariable("ARCA_HOMOLOGY_SERVICES") ?? "")
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(x => x.ToLowerInvariant()).Distinct().ToArray();
-        if (selected.Length == 0 && (Environment.GetEnvironmentVariable("ARCA_HOMOLOGY_MODE") ?? "consultas") != "completa")
-            throw new InvalidOperationException("Set ARCA_HOMOLOGY_SERVICES to at least one supported authenticated read-only lookup.");
         string mode = Environment.GetEnvironmentVariable("ARCA_HOMOLOGY_MODE") ?? "consultas";
-        if (mode is not ("consultas" or "emision" or "completa"))
-            throw new InvalidOperationException("ARCA_HOMOLOGY_MODE must be consultas, emision, or completa.");
-        string[] supported = AuthenticatedHomologationRunner.CompleteReadSelectors.ToArray();
-        if (selected.Any(service => !supported.Contains(service, StringComparer.Ordinal)))
-            throw new InvalidOperationException("An unsupported homologation service was selected.");
-        if (mode == "completa") selected = supported;
-        int pointOfSale = 0, voucherType = 0;
-        long voucherNumber = 0;
-        long voucherNumberB = 0, voucherNumberC = 0;
-        if (mode is "emision" or "completa" || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ARCA_HOMOLOGY_POINT_OF_SALE")))
-        {
-            if (mode != "completa" && (selected.Length != 1 || selected[0] != "wsfe"))
-                throw new InvalidOperationException("Numbering and issuance are supported exclusively for WSFE homologation.");
-            pointOfSale = (int)ReadPositiveSetting("ARCA_HOMOLOGY_POINT_OF_SALE", 99999);
-            if (mode is "consultas" or "emision")
-            {
-                voucherType = (int)ReadPositiveSetting("ARCA_HOMOLOGY_VOUCHER_TYPE", 11);
-                if (voucherType is not (6 or 11))
-                    throw new InvalidOperationException("Only ordinary B and C voucher types are supported by this scenario.");
-            }
-            if (mode == "emision")
-            {
-                voucherNumber = ReadPositiveSetting("ARCA_HOMOLOGY_VOUCHER_NUMBER", 99999999);
-            }
-            if (mode == "completa")
-            {
-                voucherNumberB = ReadPositiveSetting("ARCA_HOMOLOGY_VOUCHER_NUMBER_B", 99999999);
-                voucherNumberC = ReadPositiveSetting("ARCA_HOMOLOGY_VOUCHER_NUMBER_C", 99999999);
-            }
-        }
-        string certificatePath = Environment.GetEnvironmentVariable("WSAA_CERT_PATH")!;
-        string keyPath = Environment.GetEnvironmentVariable("WSAA_KEY_PATH")!;
+        string runId = Environment.GetEnvironmentVariable("GITHUB_RUN_ID") ?? string.Empty;
+        FiscalHomologationMatrixProfile.ValidatePreflight(mode, runId);
+        if (string.Equals(Environment.GetEnvironmentVariable("ARCA_HOMOLOGY_PREFLIGHT_ONLY"), "1", StringComparison.Ordinal))
+            return;
+
+        string[] selected = mode is "consultas" or "completa"
+            ? AuthenticatedHomologationRunner.CompleteReadSelectors.ToArray()
+            : [];
+        string certificatePath = Environment.GetEnvironmentVariable("WSAA_CERT_PATH") ?? string.Empty;
+        string keyPath = Environment.GetEnvironmentVariable("WSAA_KEY_PATH") ?? string.Empty;
         if (string.IsNullOrWhiteSpace(certificatePath) || string.IsNullOrWhiteSpace(keyPath))
-            throw new InvalidOperationException("Set WSAA_CERT_PATH and WSAA_KEY_PATH when ARCA_HOMOLOGY_SERVICES enables authenticated lookups.");
+            throw new InvalidOperationException("Set WSAA_CERT_PATH and WSAA_KEY_PATH for authenticated homologation.");
         if (!string.Equals(Environment.GetEnvironmentVariable("GITHUB_REPOSITORY"), "ARSASWebDesign/NetArcaWs", StringComparison.Ordinal))
             throw new InvalidOperationException("Protected homologation state is restricted to the official repository.");
         CancellationToken token = TestContext.Current.CancellationToken;
+        long cuit = long.Parse(Environment.GetEnvironmentVariable("ARCA_CUIT")!, CultureInfo.InvariantCulture);
+        WsaaCertificateContent content = WsaaCertificateContent.FromPem(await File.ReadAllTextAsync(certificatePath),
+            await File.ReadAllTextAsync(keyPath), Environment.GetEnvironmentVariable("WSAA_KEY_PASSWORD"));
+        var tenant = new ArcaTenantContext("homologation-contract-test", cuit, ArcaEnvironment.Homologation, content);
         var stateStore = ProtectedHomologationStateStore.FromEnvironment("ARSASWebDesign/NetArcaWs");
         ProtectedHomologationStateSession state = await ProtectedHomologationStateSession.OpenAsync(stateStore, token);
-        long cuit = long.Parse(Environment.GetEnvironmentVariable("ARCA_CUIT")!, System.Globalization.CultureInfo.InvariantCulture);
-        WsaaCertificateContent content = WsaaCertificateContent.FromPem(await File.ReadAllTextAsync(certificatePath), await File.ReadAllTextAsync(keyPath), Environment.GetEnvironmentVariable("WSAA_KEY_PASSWORD"));
-        var tenant = new ArcaTenantContext("homologation-contract-test", cuit, ArcaEnvironment.Homologation, content);
         var services = new ServiceCollection();
         services.AddNetArcaWs(options => options.Endpoint = WsaaOptions.HomologationEndpoint);
         using var workspace = new FiscalWorkspace();
         if (mode is "emision" or "completa")
         {
-            TimeProvider clock = TimeProvider.System;
-            ProtectedSqliteInvoiceJournal journal = await ProtectedSqliteInvoiceJournal.CreateAsync(state, workspace.Path, clock, token);
+            ProtectedSqliteInvoiceJournal journal = await ProtectedSqliteInvoiceJournal.CreateAsync(state, workspace.Path, TimeProvider.System, token);
             services.AddNetArcaWsInvoicing();
             services.AddSingleton<IInvoiceJournal>(journal);
         }
         services.AddSingleton<IArcaTicketProvider>(serviceProvider => new ProtectedWsaaTicketProvider(
             state, serviceProvider.GetRequiredService<WsaaService>(), serviceProvider.GetRequiredService<TimeProvider>()));
         using ServiceProvider provider = services.BuildServiceProvider();
-        string[] readOrder = selected.OrderBy(service => !service.StartsWith("padron-", StringComparison.Ordinal)).ToArray();
+
         List<string> failedScenarios = (await AuthenticatedHomologationRunner.RunIndependentAsync(
-            readOrder,
-            service => RunReadSelectorAsync(service, provider, tenant, mode, pointOfSale, voucherType, token),
+            selected.OrderBy(service => !service.StartsWith("padron-", StringComparison.Ordinal)),
+            service => RunReadSelectorAsync(service, provider, tenant, mode, 0, 0, token),
             (service, exception) => ReportAsync(
                 $"- Consulta autenticada fallida: {service} ({exception.GetType().Name}); se continúa con los demás servicios.", token),
             token)).ToList();
-        if (mode == "emision")
+
+        if (mode is "emision" or "completa")
         {
-            await TryRunInvoiceAsync(voucherType, voucherNumber, voucherType == 6 ? "B" : "C",
-                provider, tenant, pointOfSale, failedScenarios, token);
-        }
-        else if (mode == "completa")
-        {
-            bool bCompleted = await TryRunInvoiceAsync(6, voucherNumberB, "B", provider, tenant, pointOfSale, failedScenarios, token);
-            if (bCompleted)
-                await TryRunInvoiceAsync(11, voucherNumberC, "C", provider, tenant, pointOfSale, failedScenarios, token);
-            else
+            var journal = provider.GetRequiredService<IInvoiceJournal>();
+            var channels = await FiscalHomologationMatrixProfile.CreateRuntimeChannelsAsync(provider,
+                provider.GetRequiredService<SafeInvoiceService>(), journal, tenant, runId, token);
+            await ReportAsync("### Matriz fiscal automática: 18 escenarios seleccionados\n" +
+                "La matriz usará solo POS CAE activos encontrados por servicio o el POS ya congelado para este run. " +
+                "Cada comprobante se reconcilia y consulta exactamente antes de avanzar.", token);
+            try
             {
-                failedScenarios.Add("WSFE C (omitted after unresolved B result)");
-                await ReportAsync("- Emisión C no iniciada porque la identidad B no tuvo un resultado concluyente.", token);
+                await FiscalHomologationMatrix.RunAsync(runId, FiscalHomologationMatrixProfile.AllScenarios,
+                    tenant, journal, state, channels.Channels, channels.PointsOfSale,
+                    FiscalHomologationMatrixProfile.RegisteredReceiver, token,
+                    (result, ct) => ReportMatrixCaseAsync(result, ct));
+                await ReportAsync("- Matriz fiscal completada: 18 escenarios autorizados o reutilizados y verificados.", token);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                failedScenarios.Add("fiscal-matrix");
+                await ReportAsync($"- Matriz fiscal detenida: {exception.GetType().Name}. No se seleccionan números ni POS alternativos después de una identidad congelada.", token);
             }
         }
         Assert.True(failedScenarios.Count == 0, "Authenticated homologation scenarios failed: " + string.Join(", ", failedScenarios.Distinct()));
+    }
+
+    private static async Task ReportMatrixCaseAsync(FiscalHomologationCaseResult result, CancellationToken token)
+    {
+        FiscalHomologationScenario scenario = FiscalHomologationMatrixProfile.AllScenarios.Single(x => x.Name == result.ScenarioName);
+        string association = scenario.OriginalScenarioName is null ? "sin asociación" : $"asociada a `{scenario.OriginalScenarioName}`";
+        string amount = result.Service switch
+        {
+            "wsfex" => "total sintético 100 PES",
+            "wsmtxca" when result.VoucherType is 1 or 2 or 3 => "neto 100 + IVA 21 = total 121 PES",
+            "wsmtxca" when result.VoucherType is 6 or 7 or 8 => "precio IVA incluido; neto 100 + IVA 21 = total 121 PES",
+            "wsfe" when result.VoucherType is 11 or 12 or 13 => "total sintético 100 PES",
+            _ => "neto 100 + IVA 21 = total 121 PES"
+        };
+        await ReportAsync($"- **{result.ScenarioName}**: servicio {result.Service}, tipo {result.VoucherType}, POS {result.PointOfSale}, número {result.Number}, estado {result.State}, {(result.Reused ? "reutilizado" : "nuevo")}; {association}; {amount}.", token);
     }
 
     private static async Task RunReadSelectorAsync(string service, IServiceProvider provider, ArcaTenantContext tenant,

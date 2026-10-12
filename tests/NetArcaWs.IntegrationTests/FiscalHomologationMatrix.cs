@@ -246,7 +246,7 @@ internal static class FiscalHomologationMatrix
     private static string VerificationKey(string idempotencyKey)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(idempotencyKey))).ToLowerInvariant();
 
-    private static string StableKey(string runId, ArcaTenantContext tenant, FiscalHomologationScenario scenario)
+    internal static string StableKey(string runId, ArcaTenantContext tenant, FiscalHomologationScenario scenario)
     {
         string canonical = $"{runId}\n{tenant.TenantId}\n{tenant.Environment}\n{tenant.Cuit}\n{scenario.Service}\n{scenario.VoucherType}\n{scenario.Name}";
         return "homologation-matrix-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();

@@ -1,199 +1,53 @@
-# Pruebas fiscales en homologación
+# Homologación fiscal automática
 
-El workflow manual **Homologación ARCA** ofrece `consultas`, `emision` y `completa`.
-Requiere `main` y la aprobación del entorno `homologacion`. Todos los clientes de
-esta suite usan exclusivamente homologación; el escenario de emisión rechaza un
-contexto de producción antes de resolver clientes.
+El workflow **Homologación ARCA** ofrece una sola selección pública: el modo de ejecución. La emisión se autoriza al iniciar manualmente `emision` o `completa` desde `main` del repositorio oficial y al aprobar el environment protegido `homologacion`.
 
-## Consultas y descubrimiento
-
-Seleccionar `mode=consultas`, con `services=wsfe`. Se verifican catálogos, condiciones
-IVA, capacidad de solicitudes y puntos de venta. El resumen de Actions muestra los
-números de los puntos de venta y si son CAE o están bloqueados; no publica CUIT,
-certificados, Token/Sign, CAE ni XML.
-
-Para consultar la numeración, completar además `point_of_sale` y `voucher_type`:
-`6` para factura B o `11` para factura C. El resumen indica el último autorizado y
-el siguiente candidato. Esa lectura no reserva un número: antes de emitir se vuelve
-a comprobar la serie. Utilizar un punto de venta de pruebas dedicado y evitar otras
-aplicaciones que emitan concurrentemente en la misma serie.
-
-El selector `services` también admite estas consultas, separadas por comas y sin
-espacios. Se necesita autorización del certificado para **cada servicio**:
-
-| Selector | Consulta |
+| Modo | Ejecución |
 |---|---|
-| `wsfex` | Monedas de exportación |
-| `wsmtxca` | Monedas de facturación con detalle |
-| `wscdc` | Modalidades de constatación |
-| `wsfecred` | Tipos de retenciones |
-| `padron-a4`, `padron-a5`, `padron-a10`, `padron-a13` | Tres casos públicos: CUIT física, caso publicado como CUIL que hoy devuelve CUIT, y CUIT jurídica |
+| `consultas` | Los nueve selectores de consulta autenticada existentes; no autoriza comprobantes. |
+| `emision` | Los 18 casos de la matriz fiscal; no ejecuta consultas generales. |
+| `completa` | Las nueve consultas autenticadas y los 18 casos de la matriz. |
 
-La ruta A5 corresponde a Constancia de inscripción. No se omiten fallos de permiso
-ni respuestas funcionalmente inválidas: la ejecución falla. Las consultas no crean
-autorizaciones WSASS ni conceden acceso a otros servicios. WSCPE conserva pruebas
-públicas Dummy; su escenario autenticado de negocio queda pendiente de datos y permisos.
+La interfaz no solicita servicios, CUIT de receptor, comprador, punto de venta ni números. El código usa fixtures sintéticos y confirma catálogos y series en homologación antes de cada emisión. Una elección de modo de escritura no prueba que ARCA haya habilitado el certificado, emisor, receptor o escenario.
 
-## Ejecución completa
+## Prerrequisitos protegidos
 
-Seleccionar `mode=completa`, indicar `point_of_sale` y completar por separado
-`voucher_number_b` y `voucher_number_c`. Los números deben ser enteros explícitos
-entre 1 y 99999999. El selector `services` no se usa en este modo. Se ejecutan las
-nueve consultas autenticadas: WSFE, WSFEX, WSMTXCA, WSCDC, WSFECred y los padrones
-A4, A5, A10 y A13. Cada selector informa su resultado y una falla no impide intentar
-los demás. Al final, el ensayo falla si hubo alguna consulta fallida.
+El certificado PEM y clave privada deben corresponder a homologación, gestionarse mediante WSASS y estar asociados a WSFEv1, WSFEXv1 y WSMTXCA según se quiera ejecutar la matriz completa. `ARCA_CUIT` identifica al emisor representado y se guarda como secreto, junto con `WSAA_CERTIFICATE_PEM`, `WSAA_PRIVATE_KEY_PEM`, `WSAA_KEY_PASSWORD` si corresponde, `HOMOLOGATION_STATE` y el PAT limitado `HOMOLOGATION_STATE_TOKEN`. No se solicita ni registra el CUIT representado en inputs. La identidad del emisor no se imprime en el resumen.
 
-Luego se comprueban una factura B tipo 6 y una factura C tipo 11, ambas por $121 PES,
-con la misma POS y los números independientes indicados. Cada solicitud exige que
-su número sea el inmediato siguiente de su propia serie; no se asignan números. Si
-la identidad B no alcanza un resultado concluyente, no se inicia C. La autorización
-no se reintenta automáticamente: los resultados inciertos se consultan por la misma
-identidad y requieren revisión si siguen sin resolverse.
+El test preflight ejecuta los mismos validadores de la matriz antes de materializar PEMs, sin abrir el estado protegido ni crear clientes autenticados. El flujo normal repite la validación. El ticket WSAA se reutiliza mientras siga vigente. El diario fiscal y los metadatos protegidos sobreviven a reintentos del mismo run.
 
-WSFE puede responder el código 602 al listar POS y no devolver filas en homologación.
-En ese caso se informa que el listado queda pendiente, sin presentar la consulta
-como completa. Para la emisión explícita, el ensayo puede continuar solo con una
-respuesta que contenga exactamente ese error y ninguna fila; consulta luego la
-última numeración de la combinación POS/tipo y exige el número inmediato siguiente.
-Si ARCA sí devuelve la POS, se valida que esté habilitada para CAE y no tenga baja.
-Otros errores o respuestas mixtas detienen la emisión. Esta tolerancia se limita a
-este harness de homologación.
+El estado se cifra y guarda en el secreto del environment. El valor Base64 codificado debe permanecer por debajo de 48 KiB; el contenido descomprimido está limitado a 4 MiB. El sistema falla cerrado si supera cualquiera de esos límites, si hay inconsistencia del diario o si no puede persistir cambios. No borrar el secreto ni editarlo manualmente.
 
-## Personas de prueba para Padrón
+## Casos incluidos
 
-La suite conserva tres casos representativos del [listado público oficial de A4](https://www.afip.gob.ar/ws/ws_sr_padron_a4/datos-prueba-padron-a4.txt),
-consultado el 6 de octubre de 2026:
+La matriz incluye facturas, notas de débito y notas de crédito, en ese orden para conservar la asociación con la factura verificada:
 
-| Identificador público | Tipo de persona | Tipo de clave |
+| Servicio | Casos | Tipos |
 |---|---|---|
-| `20188192514` | `FISICA` | `CUIT` |
-| `20188027963` | `FISICA` | `CUIT` (publicado en el grupo CUIL) |
-| `30202020204` | `JURIDICA` | `CUIT` |
+| WSFEv1 | A, B y C | 1/2/3, 6/7/8 y 11/12/13 |
+| WSFEXv1 | Exportación E | 19/20/21 |
+| WSMTXCA | A y B con detalle | 1/2/3 y 6/7/8 |
 
-Se mantienen en `tests/NetArcaWs.IntegrationTests/PadronTestCases.cs`, exclusivamente
-para homologación. No se consulta la CUIT representada como dato de prueba ni se
-usa `ARCA_QUERY_CUIT`. La autenticación continúa usando los secretos del entorno
-protegido. Los datos públicos no conceden acceso a los servicios.
+Los demás tipos que puedan figurar en catálogos no se ejecutan ni se cuentan como aprobados. WSFECred es un servicio distinto y queda fuera de esta matriz. No hay emisión CAEA ni de lotes.
 
-El [catálogo oficial](https://www.afip.gob.ar/ws/documentacion/catalogo.asp) enlaza
-ese listado solo para A4. No encontramos un listado equivalente para Constancia,
-A10 o A13. El 6 de octubre de 2026 los tres casos seleccionados pasaron las doce
-consultas locales autenticadas (cuatro servicios), reutilizando tickets privados
-y aplicando el mismo validador de la suite: identidad, tipos, datos mínimos y
-ausencia de errores funcionales. Esto valida esos casos, no una base compartida.
+Las facturas usan datos sintéticos por $121 PES cuando llevan IVA 21 (neto 100 + IVA 21); factura C usa $100 PES sin desglose de IVA. WSMTXCA B representa precios con IVA incluido; conserva neto 100, IVA 21 y total 121. Exportación usa una línea sintética por 100 PES, tipo de exportación de servicios y moneda PES con cotización 1. Las notas incluyen la referencia exacta a la factura A/B/C/E de su misma serie. El resumen presenta servicio, tipo, POS, número, estado, reutilización, asociación e importes esperados; no imprime identidad fiscal, comprador, Token/Sign, CAE ni payload SOAP.
 
-La CUIT física anterior producía un error del servidor al calcular el identificador
-AT en A4/Constancia. Se reemplazó por otra identidad del mismo listado. Los diez
-identificadores publicados como CUIL no proporcionaron una respuesta CUIL válida
-al contrastarlos: las respuestas obtenidas indicaron CUIT; hubo además un caso
-inactivo en A13. Se conserva la procedencia mediante `PublishedKeyType` y la etiqueta
-`listado CUIL`, pero el tipo esperado es el realmente observado, CUIT.
-**La cobertura autenticada de una respuesta CUIL sigue pendiente.** Las pruebas
-sintéticas mantienen la aceptación de CUIL y el rechazo de discrepancias de tipo;
-no se flexibilizó el validador ni se modificaron los clientes SOAP. Una ejecución
-verde de esta matriz no debe presentarse como validación real de CUIL.
+El receptor A es una fixture sintética basada en el receptor RI que aparece en un [ejemplo oficial de comprobante QR de ARCA](https://www.afip.gob.ar/fe/qr/documentos/30000000007_001_00010_00000094.pdf). Su presencia en un ejemplo no demuestra que esté hoy habilitado para una operación; la respuesta de homologación es la autoridad. B/C usan receptor consumidor final tipo 99/0, condición IVA 5.
 
-Cada respuesta debe contener datos y coincidir exactamente en identificador,
-`tipoPersona` y `tipoClave`. No se infiere el tipo por el prefijo del número.
-Si un caso falla, se prueban los siguientes casos y padrones seleccionados; al final
-la suite falla si hubo cualquier error. No se omiten casos inexistentes ni se
-transforman errores SOAP en resultados aprobados. El resumen informa servicio,
-categoría y resultado, sin nombres, domicilios, XML ni mensajes remotos.
+Para WSFEX se usa una pareja de códigos de país/CUIT-país tomada de un ejemplo de request del [manual oficial](https://www.afip.gob.ar/ws/documentacion/manuales/WSFEX-Manualparaeldesarrollador_V3.1.1_ARCA.pdf), con nombre, domicilio e identificación fiscal extranjera inventados para testing. Los catálogos actuales de país destino, CUIT-país, monedas, idiomas, unidades y tipo de exportación se validan en ejecución. La pareja de ejemplo no prueba habilitación ni que siga vigente; si no coincide con los catálogos actuales, el caso falla antes de preparar una factura.
 
-Los fallos incluyen una categoría fija para distinguir la causa sin publicar el
-contenido de la respuesta:
+## POS, numeración y reintentos
 
-| Categoría | Significado |
-|---|---|
-| `AlreadyAuthenticated` | WSAA rechazó un nuevo login con ese código (con o sin prefijo XML válido); no se recuperó el ticket anterior |
-| `Authentication` | Otro error SOAP de WSAA |
-| `PersonNotFound` | El padrón devolvió el mensaje conocido de persona inexistente |
-| `SoapFault` | Otro error SOAP del servicio; no se interpreta como persona inexistente |
-| `Transport`, `Timeout` | Fallo HTTP/conectividad o tiempo agotado |
-| `InvalidResponse` | XML o respuesta incompatibles con el contrato |
-| `MissingPerson` | Falta el nodo de persona o datos generales |
-| `FunctionalError` | Constancia devolvió errores funcionales |
-| `InvalidPersonData` | La persona carece de los datos mínimos exigidos |
-| `IdentityMismatch` | El identificador devuelto difiere del solicitado |
-| `PersonTypeMismatch`, `KeyTypeMismatch` | Difiere el tipo de persona o de clave esperado |
-| `Unexpected` | Fallo no clasificado; requiere investigación adicional |
+Para cada servicio se consulta su catálogo de POS CAE activos, no bloqueados y sin baja. Cuando hay más de uno, se elige determinísticamente el menor POS válido. WSFE, WSFEX y WSMTXCA mantienen elecciones independientes aunque coincidan numéricamente. Si el mismo run ya tiene una operación fiscal congelada, el POS de ese snapshot se restaura y se revalida; no se cambia a otra serie. Si el servicio no publica un POS apto, el caso falla en vez de asumir un valor de ejemplo.
 
-Solo se emiten estas etiquetas controladas; no se imprimen códigos o mensajes
-arbitrarios del servidor ni valores recibidos. Una categoría señala la primera
-comprobación fallida, no prueba que el resto de los campos sea correcto. La
-cancelación solicitada detiene la suite y no se confunde con un timeout.
+Cada número se obtiene como último autorizado más uno para el servicio/POS/tipo y se persiste con el request fiscal antes del envío. Para WSFEX también se conserva el próximo ID de request. Se vuelve a consultar la serie inmediatamente antes de autorizar. Si el número o ID dejó de ser el siguiente, se detiene; no se cambia automáticamente el número.
 
-Esta matriz cubre `getPersona`; no acredita las demás operaciones ni reglas de cada
-padrón. Las comprobaciones locales usan respuestas sintéticas; la disponibilidad
-real de estos casos se registra por ejecución en la issue de homologación.
+`GITHUB_RUN_ID` forma parte de la clave estable de los 18 escenarios. Reintentar el mismo run conserva identidades, fechas, POS y payload congelado. Una nueva ejecución manual tiene otro ID y crea nuevas claves; igualmente verifica y persiste cada serie antes de emitir. Una operación incierta se reconcilia por la misma identidad. No se repite una autorización automáticamente ni se inicia el siguiente caso mientras haya un resultado no terminal. Las notas esperan a que su factura asociada quede autorizada y verificada.
 
-## Emisión de prueba WSFE
+Todas las modalidades comparten un grupo de concurrencia. El estado y el diario quedan protegidos por el environment, y solo los procesos del repositorio oficial desde `main` pueden acceder a esos secretos. El workflow no se ejecuta para PRs ni forks.
 
-Seleccionar `mode=emision`, `services=wsfe`, `point_of_sale`, `voucher_type` y
-`voucher_number`. Los tres valores fiscales deben ser explícitos. El workflow no
-elige automáticamente el siguiente número en cada ejecución.
+## Lectura de resultados
 
-El escenario usa una factura de bienes a consumidor final sin identificación
-individual (documento 99/0), condición IVA 5 y fecha argentina del día. Importe
-total: **$121 PES**, cotización 1. Para B: neto 100 e IVA 21, alícuota 5. Para C:
-neto 121, IVA cero y sin renglones de IVA. El tipo debe estar habilitado para la
-CUIT de homologación; no se intenta cambiar su condición tributaria.
+Cada resumen de caso se escribe al completar la consulta exacta posterior y al guardar el avance durable. Si una ejecución se interrumpe, las filas ya informadas corresponden a casos verificados; el caso sin fila debe reanudarse con el mismo run. Si falla una validación de catálogo o un prerrequisito, el caso falla explícitamente: no se cuenta como omitido o exitoso.
 
-El flujo verifica punto de venta activo y CAE, errores de ARCA y última numeración.
-Si el número ya existe, exige coincidencia con los datos del escenario y comprueba
-su autorización; no vuelve a emitir. Si no existe, solo admite el número inmediato
-al último autorizado, solicita el CAE una vez con `SafeInvoiceService` y consulta
-el comprobante para confirmar identidad, importes, IVA, fecha, moneda y código.
-
-Si hay un resultado incierto, intenta reconciliar mediante consulta, sin repetir
-automáticamente la autorización. Una discrepancia, rechazo o incertidumbre restante
-hace fallar el ensayo. No cambiar de número para sortear una ejecución fallida:
-consultar primero la identidad enviada. La coincidencia de una factura existente
-se informa como tal, no como una nueva emisión. Un reintento en otro día no coincide
-con la fecha del escenario y se detiene.
-
-## Alcance de la persistencia y límites
-
-El ticket WSAA y el diario SQLite se conservan en el secreto privado y cifrado
-`HOMOLOGATION_STATE` del environment protegido `homologacion`. Cada ejecución los
-restaura antes de crear el proveedor de servicios. El mismo TA se reutiliza para
-las consultas y ambas series WSFE mientras no haya vencido; la renovación ocurre
-solo al expirar. El diario conserva identidades y snapshots fiscales para reconciliar
-resultados inciertos entre runs sin reenviar una autorización. No se suben secretos,
-tickets, diarios ni respuestas fiscales como artefactos. El bundle comprimido debe
-respetar el límite de 48 KiB de GitHub Secrets; si lo supera, la persistencia falla
-en cerrado y no se continúa con ARCA. No se eliminan entradas del diario para liberar
-espacio automáticamente.
-
-La configuración manual requiere `HOMOLOGATION_STATE_TOKEN`, un fine-grained PAT
-con acceso únicamente al repositorio `ARSASWebDesign/NetArcaWs` y permiso de escritura
-de environments. El helper usa ese token exclusivamente como credencial del proceso
-`gh` que actualiza el secreto del environment; no se copia a logs. Cargar el token
-en la interfaz de GitHub, nunca en el chat. La caducidad y rotación del PAT siguen la
-política elegida por el mantenedor y se gestionan fuera del harness. `HOMOLOGATION_STATE`
-se crea automáticamente en el primer run. No borrarlo ni modificarlo manualmente:
-contiene el ticket reutilizable y el diario necesarios para evitar reautenticaciones
-o reenvíos inseguros. Si falta el PAT, no está disponible un estado ya creado o falla
-la persistencia previa, el ensayo se detiene antes de autenticar o emitir.
-
-Consultas, emisión y completa comparten el grupo global de concurrencia y el mismo
-estado protegido. Así se conserva el TA entre runs en vez de forzar un nuevo login
-cada diez minutos. El bloqueo de login se comparte por certificado, endpoint y
-servicio WSAA; el TA se aísla por tenant, CUIT, ambiente, servicio, endpoint y
-certificado. Antes de intentar un login se guarda un bloqueo preventivo de once
-minutos, que cubre hasta treinta segundos para actualizar el secreto y una solicitud
-WSAA acotada a treinta segundos. Al terminar con éxito, error o cancelación se guarda
-la hora real de finalización y se exigen diez minutos antes del próximo login para
-esa identidad. Un TA válido se reutiliza hasta su `expirationTime`, sin esperar ni
-autenticar de nuevo. El estado falla en cerrado ante contenido inválido, errores de
-actualización o situaciones del diario que no permitan demostrar que una identidad
-no tuvo un envío anterior.
-
-Las pruebas offline simulan autorización, rechazo, errores y resultados inciertos.
-Solo una ejecución protegida exitosa aporta evidencia del circuito contra ARCA.
-Este escenario no cubre CAEA, exportación, FCE, notas de crédito, lotes, servicios
-ni todas las reglas fiscales. El alcance efectivamente ejecutado se registra en
-[la issue de homologación](https://github.com/ARSASWebDesign/NetArcaWs/issues/12).
-
-Referencia de diseño: [manual oficial WSFEv1 4.7](https://www.afip.gob.ar/ws/documentacion/manuales/manual-desarrollador-ARCA-COMPG.pdf),
-publicado en el [catálogo de facturación ARCA](https://www.afip.gob.ar/ws/documentacion/ws-factura-electronica.asp).
+El resumen es evidencia por escenario, no homologación universal de la biblioteca. La habilitación de cada emisor y certificado depende de sus relaciones WSASS y las reglas ARCA vigentes. El estado de esta matriz y los resultados de pruebas locales se reportan por separado de la validación protegida en vivo.

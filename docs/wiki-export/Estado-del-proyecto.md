@@ -129,3 +129,29 @@ y las facturas B6 y C11 en POS 1, número explícito 1 cada una, fueron autoriza
 confirmadas por consulta exacta, usando el mismo TA WSFE y un diario SQLite privado;
 cada identidad tuvo un solo intento. Ninguna de estas evidencias sustituye la
 ejecución protegida del modo `completa` tras integrar el workflow.
+
+## Matriz fiscal automática en homologación
+
+El formulario manual expone únicamente `mode=consultas|emision|completa`. `consultas`
+usa los nueve selectores autenticados; `emision` ejecuta los 18 escenarios tipados
+WSFE A/B/C, WSFEX E y WSMTXCA A/B; `completa` ejecuta consultas y matriz. Los
+datos de receptor y comprador son fixtures sintéticos en tests. La fixture RI A
+proviene del receptor de un [ejemplo QR oficial de ARCA](https://www.afip.gob.ar/fe/qr/documentos/30000000007_001_00010_00000094.pdf);
+esto no acredita su elegibilidad actual. Los códigos WSFEX de destino y país-CUIT
+se toman de un ejemplo de manual y se confirman contra los catálogos vigentes en
+cada ejecución.
+
+El harness restaura los POS y payloads congelados por `GITHUB_RUN_ID`, o elige el
+menor POS CAE activo de cada servicio desde su catálogo. Los números se basan en
+el último autorizado y se persisten antes del envío. Notas requieren que la factura
+relacionada ya esté autorizada y verificada. Una inconsistencia, falta de catálogo,
+serie ocupada o resultado incierto detiene el avance sin cambiar automáticamente
+POS, número o comprobante. La prevalidación usa los validadores C# antes de crear
+archivos PEM o abrir estado protegido, sin recibir certificado, CUIT emisor ni PAT;
+el test normal repite la validación.
+
+Los cambios locales tienen pruebas sintéticas de script, perfil, asociaciones,
+proyecciones fiscales, reinicio de operaciones y estado durable. Esto no prueba
+la autenticación, elegibilidad o aceptación real de los fixtures en ARCA. La
+validación autenticada local integral sigue pendiente antes de la entrega a GitHub;
+no se ejecutó una emisión en esta actualización.
