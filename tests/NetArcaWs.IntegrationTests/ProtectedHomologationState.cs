@@ -316,6 +316,63 @@ public sealed class ProtectedHomologationStateSession
         finally { gate.Release(); }
     }
 
+    public async Task<ProtectedHomologationSeriesSummary?> FindVerifiedSeriesAsync(
+        string service, NetArcaWs.HealthChecks.ArcaEnvironment environment, long cuit, int pointOfSale, int voucherType,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateSeriesKey(service, environment, cuit, pointOfSale, voucherType);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            EnsureUsable();
+            return state.VerifiedSeriesSummaries.SingleOrDefault(item =>
+                item.Service == service && item.Environment == environment && item.Cuit == cuit &&
+                item.PointOfSale == pointOfSale && item.VoucherType == voucherType);
+        }
+        finally { gate.Release(); }
+    }
+
+    public async Task<IReadOnlyList<ProtectedHomologationSeriesSummary>> ListVerifiedSeriesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try { EnsureUsable(); return state.VerifiedSeriesSummaries.ToArray(); }
+        finally { gate.Release(); }
+    }
+
+    /// <summary>Call only after an exact positive service query confirms the authorized series number.</summary>
+    public async Task RecordVerifiedSeriesAsync(ProtectedHomologationSeriesSummary summary,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(summary);
+        ValidateSeriesKey(summary.Service, summary.Environment, summary.Cuit, summary.PointOfSale, summary.VoucherType);
+        if (summary.LastAuthorizedNumber < 0 || summary.ConfirmedAtUtc == default)
+            throw new ArgumentOutOfRangeException(nameof(summary));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            EnsureUsable();
+            var previous = state.VerifiedSeriesSummaries.SingleOrDefault(item =>
+                item.Service == summary.Service && item.Environment == summary.Environment && item.Cuit == summary.Cuit &&
+                item.PointOfSale == summary.PointOfSale && item.VoucherType == summary.VoucherType);
+            if (previous is not null && summary.LastAuthorizedNumber < previous.LastAuthorizedNumber)
+                throw new InvalidOperationException("A confirmed fiscal series summary cannot move backwards.");
+            List<ProtectedHomologationSeriesSummary> next = state.VerifiedSeriesSummaries
+                .Where(item => !(item.Service == summary.Service && item.Environment == summary.Environment &&
+                    item.Cuit == summary.Cuit && item.PointOfSale == summary.PointOfSale && item.VoucherType == summary.VoucherType))
+                .Append(summary).ToList();
+            await PersistAsync(state with { VerifiedSeriesSummaries = next }, cancellationToken).ConfigureAwait(false);
+        }
+        finally { gate.Release(); }
+    }
+
+    private static void ValidateSeriesKey(string service, NetArcaWs.HealthChecks.ArcaEnvironment environment, long cuit, int pointOfSale, int voucherType)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(service);
+        if (!Enum.IsDefined(environment) || service.Length > 32 || cuit <= 0 || pointOfSale is <= 0 or > 99999 || voucherType <= 0)
+            throw new ArgumentOutOfRangeException(nameof(pointOfSale), "Fiscal series identity is invalid.");
+    }
+
     private async Task PersistAsync(ProtectedHomologationStateBundle candidate, CancellationToken cancellationToken)
     {
         try
@@ -383,8 +440,16 @@ public sealed class ProtectedHomologationStateSession
 
     private static void ValidateState(ProtectedHomologationStateBundle state)
     {
-        if (state.Version != 1 || state.SavedAtUtc == default || state.Tickets is null || state.Tickets.Count > 64 || state.LoginGuards is null || state.LoginGuards.Count > 64)
+        if (state.Version != 1 || state.SavedAtUtc == default || state.Tickets is null || state.Tickets.Count > 64 || state.LoginGuards is null || state.LoginGuards.Count > 64 || state.VerifiedSeriesSummaries is null || state.VerifiedSeriesSummaries.Count > 512)
             throw InvalidBundle();
+        var seriesKeys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (ProtectedHomologationSeriesSummary summary in state.VerifiedSeriesSummaries)
+        {
+            if (summary is null || !Enum.IsDefined(summary.Environment) || string.IsNullOrWhiteSpace(summary.Service) || summary.Service.Length > 32 || summary.Cuit <= 0 ||
+                summary.PointOfSale is <= 0 or > 99999 || summary.VoucherType <= 0 || summary.LastAuthorizedNumber < 0 || summary.ConfirmedAtUtc == default ||
+                !seriesKeys.Add($"{summary.Service}:{summary.Environment}:{summary.Cuit}:{summary.PointOfSale}:{summary.VoucherType}"))
+                throw InvalidBundle();
+        }
         var identities = new HashSet<string>(StringComparer.Ordinal);
         foreach (ProtectedHomologationTicketState ticket in state.Tickets)
         {
@@ -417,7 +482,14 @@ public sealed record ProtectedHomologationStateBundle(
     List<ProtectedHomologationLoginGuardState> LoginGuards,
     string? JournalSnapshotBase64)
 {
+    public List<ProtectedHomologationSeriesSummary> VerifiedSeriesSummaries { get; init; } = [];
     public override string ToString() => "ProtectedHomologationStateBundle { redacted }";
+}
+
+public sealed record ProtectedHomologationSeriesSummary(string Service, NetArcaWs.HealthChecks.ArcaEnvironment Environment,
+    long Cuit, int PointOfSale, int VoucherType, long LastAuthorizedNumber, DateTimeOffset ConfirmedAtUtc)
+{
+    public override string ToString() => "ProtectedHomologationSeriesSummary { identity redacted }";
 }
 
 public sealed record ProtectedHomologationTicketState(string IdentityKey, string TicketXml)
