@@ -157,12 +157,19 @@ internal sealed class FiscalHomologationWsfexChannel(
         ClsFexRequest expected = Deserialize(operation.Submission.Payload);
         var response = await service.FEXGetCMPAsync(tenant, new FexGetCmp
         { Cmp = new ClsFexGetCmp { PuntoVta = id.PointOfSale, CbteTipo = checked((short)id.VoucherType), CbteNro = id.VoucherNumber } }, cancellationToken).ConfigureAwait(false);
+        EnsureNoQueryErrors(response.FexGetCmpResult);
         ClsFexGetCmpr? actual = response.FexGetCmpResult?.FexResultGet;
         if (actual is null || actual.Resultado != "A" || actual.Id != operation.Submission.RemoteRequestId ||
             actual.PuntoVta != id.PointOfSale || actual.CbteTipo != id.VoucherType || actual.CbteNro != id.VoucherNumber ||
             actual.Cae != operation.AuthorizationCode)
             throw new InvalidOperationException("WSFEX exact consultation did not confirm the stored authorized export voucher.");
         VerifyExactProjection(expected, actual);
+    }
+
+    internal static void EnsureNoQueryErrors(FexGetCmpResponse? response)
+    {
+        if (response?.FexErr is { ErrCode: not 0 })
+            throw new InvalidOperationException("WSFEX exact consultation returned a service error; the result is inconclusive.");
     }
 
     internal static ClsFexRequest CreateRequest(int pointOfSale, int voucherType, long number, long requestId,

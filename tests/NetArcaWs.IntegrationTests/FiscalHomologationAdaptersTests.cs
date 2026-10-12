@@ -4,8 +4,10 @@ using NetArcaWs.Contracts.WsfexV1;
 using NetArcaWs.Invoicing;
 using NetArcaWs.Multitenancy;
 using NetArcaWs.Cryptography;
+using NetArcaWs.Services;
 using System.Xml.Linq;
 using System.Xml.Serialization;
+using System.Reflection;
 using Xunit;
 
 namespace NetArcaWs.IntegrationTests;
@@ -42,10 +44,19 @@ public sealed class FiscalHomologationAdaptersTests
         var fixture = ReceiverFor(invoiceType);
         var invoice = FiscalHomologationWsmtxcaChannel.CreateRequest(9001, invoiceType, 123, fixture, null, new DateOnly(2026, 10, 12));
         Assert.Equal(invoiceType, invoice.CodigoTipoComprobante);
+        Assert.Equal(invoiceType is 1 ? (short?)80 : null, invoice.CodigoTipoDocumento);
+        Assert.Equal(invoiceType is 1 ? 20_000_000_001L : null, invoice.NumeroDocumento);
+        Assert.Equal(invoiceType is 1 ? (short)1 : (short)5, invoice.CondicionIvaReceptor);
+        AssertDocumentElements(invoice, invoiceType is 1);
+        Assert.Null(invoice.ImporteOtrosTributos);
         Assert.Single(invoice.ArrayItems);
         Assert.Equal(2m, invoice.ArrayItems[0].Cantidad);
         Assert.Equal(invoiceType is 1 ? 50m : 60.5m, invoice.ArrayItems[0].PrecioUnitario);
-        Assert.Equal(21m, invoice.ArrayItems[0].ImporteIva);
+        Assert.Equal(1, invoice.ArrayItems[0].UnidadesMtx);
+        Assert.Equal((short)7, invoice.ArrayItems[0].CodigoUnidadMedida);
+        Assert.Equal("0123456789913", invoice.ArrayItems[0].CodigoMtx);
+        Assert.Equal("Synthetic taxable product item", invoice.ArrayItems[0].Descripcion);
+        Assert.Equal(invoiceType is 1 ? 21m : null, invoice.ArrayItems[0].ImporteIva);
         Assert.Equal(invoice.ImporteTotal, invoice.ArrayItems[0].ImporteItem);
 
         var identity = new InvoiceIdentity(NetArcaWs.HealthChecks.ArcaEnvironment.Homologation, 20000000001, 9001, invoiceType, 122);
@@ -54,8 +65,108 @@ public sealed class FiscalHomologationAdaptersTests
             var note = FiscalHomologationWsmtxcaChannel.CreateRequest(9001, noteType, 123, fixture, identity, new DateOnly(2026, 10, 12));
             Assert.Equal(invoiceType, note.ArrayComprobantesAsociados.Single().CodigoTipoComprobante);
             Assert.Equal(122, note.ArrayComprobantesAsociados.Single().NumeroComprobante);
+            Assert.Equal(invoiceType is 1 ? (short?)80 : null, note.CodigoTipoDocumento);
+            Assert.Equal(invoiceType is 1 ? 20_000_000_001L : null, note.NumeroDocumento);
+            Assert.Equal(invoiceType is 1 ? (short)1 : (short)5, note.CondicionIvaReceptor);
+            AssertDocumentElements(note, invoiceType is 1);
+            Assert.Null(note.ImporteOtrosTributos);
             Assert.Single(note.ArrayItems);
+            Assert.Equal(1, note.ArrayItems[0].UnidadesMtx);
+            Assert.Equal((short)7, note.ArrayItems[0].CodigoUnidadMedida);
+            Assert.Equal("0123456789913", note.ArrayItems[0].CodigoMtx);
+            Assert.Equal(invoiceType is 1 ? 21m : null, note.ArrayItems[0].ImporteIva);
         }
+    }
+
+    private static void AssertDocumentElements(ComprobanteType request, bool expectedPresent)
+    {
+        using var writer = new StringWriter(System.Globalization.CultureInfo.InvariantCulture);
+        new XmlSerializer(typeof(ComprobanteType)).Serialize(writer, request);
+        XElement xml = XElement.Parse(writer.ToString());
+        Assert.Equal(expectedPresent, xml.Element("codigoTipoDocumento") is not null);
+        Assert.Equal(expectedPresent, xml.Element("numeroDocumento") is not null);
+    }
+
+    [Theory]
+    [InlineData(CodigoTipoAutorizacionSimpleType.E, true)]
+    [InlineData(CodigoTipoAutorizacionSimpleType.A, false)]
+    public async Task Wsmtxca_exact_verification_accepts_only_CAE_authorization_type(
+        CodigoTipoAutorizacionSimpleType authorizationType, bool expected)
+    {
+        var tenant = new ArcaTenantContext("synthetic", 20000000001, NetArcaWs.HealthChecks.ArcaEnvironment.Homologation,
+            WsaaCertificateContent.FromPem("synthetic certificate", "synthetic key"));
+        var request = FiscalHomologationWsmtxcaChannel.CreateRequest(9001, 1, 123, ReceiverFor(1), null,
+            new DateOnly(2026, 10, 12));
+        InvoiceSubmission submission = SafeInvoiceService.CreateWsmtxcaSubmission(tenant, "mtx-exact-auth-type", request);
+        ComprobanteType response = FiscalHomologationWsmtxcaChannel.CreateQueryProjection(request, 71234567890123);
+        response.CodigoTipoAutorizacion = authorizationType;
+        IWsmtxcav1Service service = DispatchProxy.Create<IWsmtxcav1Service, WsmtxcaQueryProxy>();
+        ((WsmtxcaQueryProxy)(object)service).Comprobante = response;
+        var channel = new FiscalHomologationWsmtxcaChannel(service, null!, ReceiverFor(1), ReceiverFor(6));
+        var operation = new InvoiceOperation(submission, InvoiceState.Authorized, 2, 1, "71234567890123");
+
+        if (expected)
+            await channel.VerifyExactAsync(tenant, operation, CancellationToken.None);
+        else
+            await Assert.ThrowsAsync<InvalidOperationException>(() => channel.VerifyExactAsync(tenant, operation, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    public async Task Wsmtxca_exact_verification_rejects_matching_comprobante_when_errors_are_present(
+        bool includeError, bool includeObservation, bool expectedToPass)
+    {
+        var tenant = new ArcaTenantContext("synthetic", 20000000001, NetArcaWs.HealthChecks.ArcaEnvironment.Homologation,
+            WsaaCertificateContent.FromPem("synthetic certificate", "synthetic key"));
+        var request = FiscalHomologationWsmtxcaChannel.CreateRequest(9001, 1, 123, ReceiverFor(1), null,
+            new DateOnly(2026, 10, 12));
+        InvoiceSubmission submission = SafeInvoiceService.CreateWsmtxcaSubmission(tenant, "mtx-exact-errors", request);
+        ComprobanteType response = FiscalHomologationWsmtxcaChannel.CreateQueryProjection(request, 71234567890123);
+        IWsmtxcav1Service service = DispatchProxy.Create<IWsmtxcav1Service, WsmtxcaQueryProxy>();
+        var proxy = (WsmtxcaQueryProxy)(object)service;
+        proxy.Comprobante = response;
+        proxy.IncludeError = includeError;
+        proxy.IncludeObservation = includeObservation;
+        var channel = new FiscalHomologationWsmtxcaChannel(service, null!, ReceiverFor(1), ReceiverFor(6));
+        var operation = new InvoiceOperation(submission, InvoiceState.Authorized, 2, 1, "71234567890123");
+
+        if (expectedToPass)
+            await channel.VerifyExactAsync(tenant, operation, CancellationToken.None);
+        else
+            await Assert.ThrowsAsync<InvalidOperationException>(() => channel.VerifyExactAsync(tenant, operation, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task Wsfex_exact_verification_rejects_matching_result_when_error_is_present(
+        bool includeError, bool expectedToPass)
+    {
+        var tenant = new ArcaTenantContext("synthetic", 20000000001, NetArcaWs.HealthChecks.ArcaEnvironment.Homologation,
+            WsaaCertificateContent.FromPem("synthetic certificate", "synthetic key"));
+        ClsFexRequest request = FiscalHomologationWsfexChannel.CreateRequest(9002, 19, 123, 701,
+            ExportFixture(), null, new DateOnly(2026, 10, 12), 20000000001);
+        InvoiceSubmission submission = SafeInvoiceService.CreateWsfexSubmission(tenant, "fex-exact-errors", request);
+        var result = FiscalHomologationWsfexChannel.CreateQueryProjection(request, "A", "71234567890123");
+        IWsfexv1Service service = DispatchProxy.Create<IWsfexv1Service, WsfexQueryProxy>();
+        ((WsfexQueryProxy)(object)service).Response = new FexGetCmpResponse2
+        {
+            FexGetCmpResult = new FexGetCmpResponse
+            {
+                FexResultGet = result,
+                FexErr = includeError ? new ClsFexErr { ErrCode = 1550, ErrMsg = "redacted" } : null,
+                FexEvents = new ClsFexEvents { EventCode = 1, EventMsg = "redacted" }
+            }
+        };
+        var channel = new FiscalHomologationWsfexChannel(service, null!, ExportFixture());
+        var operation = new InvoiceOperation(submission, InvoiceState.Authorized, 2, 1, "71234567890123");
+
+        if (expectedToPass)
+            await channel.VerifyExactAsync(tenant, operation, CancellationToken.None);
+        else
+            await Assert.ThrowsAsync<InvalidOperationException>(() => channel.VerifyExactAsync(tenant, operation, CancellationToken.None));
     }
 
     [Theory]
@@ -183,13 +294,13 @@ public sealed class FiscalHomologationAdaptersTests
             CodigoTipoComprobante = 1, NumeroPuntoVenta = 9001, NumeroComprobante = 123,
             FechaEmision = new DateTime(2026, 10, 12), CodigoTipoDocumento = 80, NumeroDocumento = 20000000001,
             CondicionIvaReceptor = 1, ImporteGravado = 100m, ImporteNoGravado = 0m, ImporteExento = 0m,
-            ImporteSubtotal = 100m, ImporteOtrosTributos = 0m, ImporteTotal = 121m, CodigoMoneda = "PES",
-            CotizacionMoneda = 1m, CodigoConcepto = 1, CodigoAutorizacion = 123456, CodigoTipoAutorizacion = CodigoTipoAutorizacionSimpleType.A,
+            ImporteSubtotal = 100m, ImporteOtrosTributos = null, ImporteTotal = 121m, CodigoMoneda = "PES",
+            CotizacionMoneda = 1m, CodigoConcepto = 1, CodigoAutorizacion = 123456, CodigoTipoAutorizacion = CodigoTipoAutorizacionSimpleType.E,
             FechaVencimiento = new DateTime(2026, 10, 22)
         };
         independentResponse.ArrayItems.Add(new ItemType
         {
-            Codigo = "SYNTHETIC-ITEM", Descripcion = "Synthetic taxable service item", Cantidad = 2m,
+            Codigo = "SYNTHETIC-ITEM", UnidadesMtx = 1, CodigoMtx = "0123456789913", Descripcion = "Synthetic taxable product item", Cantidad = 2m,
             CodigoUnidadMedida = 7, PrecioUnitario = 50m, ImporteBonificacion = 0m,
             CodigoCondicionIva = 5, ImporteIva = 21m, ImporteItem = 121m
         });
@@ -200,6 +311,93 @@ public sealed class FiscalHomologationAdaptersTests
         Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsmtxcaChannel.VerifyExactProjection(request, projection));
         projection = FiscalHomologationWsmtxcaChannel.CreateQueryProjection(request, 99999999999999);
         projection.ImporteTotal++;
+        Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsmtxcaChannel.VerifyExactProjection(request, projection));
+    }
+
+    [Fact]
+    public void Wsmtxca_exact_query_rejects_error_entries_but_allows_observations()
+    {
+        var request = FiscalHomologationWsmtxcaChannel.CreateRequest(9001, 1, 123, ReceiverFor(1), null,
+            new DateOnly(2026, 10, 12));
+        var response = new ConsultarComprobanteResponseType
+        {
+            Comprobante = FiscalHomologationWsmtxcaChannel.CreateQueryProjection(request, 12345678901234)
+        };
+        response.ArrayObservaciones.Add(new CodigoDescripcionType { Codigo = 130, Descripcion = "Allowed observation" });
+
+        FiscalHomologationWsmtxcaChannel.EnsureNoQueryErrors(response);
+
+        response.ArrayErrores.Add(new CodigoDescripcionType { Codigo = 504, Descripcion = "Synthetic query error" });
+        Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsmtxcaChannel.EnsureNoQueryErrors(response));
+    }
+
+    [Fact]
+    public void Wsfex_exact_query_rejects_nonzero_query_error()
+    {
+        var request = FiscalHomologationWsfexChannel.CreateRequest(9002, 19, 123, 701, ExportFixture(), null,
+            new DateOnly(2026, 10, 12), 20000000001);
+        var response = new FexGetCmpResponse
+        {
+            FexResultGet = FiscalHomologationWsfexChannel.CreateQueryProjection(request),
+            FexErr = new ClsFexErr { ErrCode = 1020, ErrMsg = "Synthetic query error" }
+        };
+
+        Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsfexChannel.EnsureNoQueryErrors(response));
+    }
+
+    [Fact]
+    public void Wsmtxca_exact_projection_compares_decimal_values_without_tolerance()
+    {
+        var request = FiscalHomologationWsmtxcaChannel.CreateRequest(9001, 1, 123, ReceiverFor(1), null,
+            new DateOnly(2026, 10, 12));
+        request.ImporteOtrosTributos = 1m;
+        request.ArrayOtrosTributos.Add(new OtroTributoType
+        {
+            Codigo = 99, Descripcion = "Synthetic tax", BaseImponible = 10m, Importe = 1m
+        });
+        request.ArrayCompradores.Add(new CompradorType
+        {
+            CodigoTipoDocumento = 80, NumeroDocumento = 20000000001, Porcentaje = 100m
+        });
+        ComprobanteType projection = FiscalHomologationWsmtxcaChannel.CreateQueryProjection(request, 12345678901234);
+        projection.ImporteGravado = 100.00m;
+        projection.ImporteNoGravado = 0.00m;
+        projection.ImporteExento = 0.000m;
+        projection.ImporteSubtotal = 100.000m;
+        projection.ImporteTotal = 121.000m;
+        projection.CotizacionMoneda = 1.000m;
+        projection.ArrayItems[0].Cantidad = 2.000m;
+        projection.ArrayItems[0].PrecioUnitario = 50.00m;
+        projection.ArrayItems[0].ImporteBonificacion = 0.00m;
+        projection.ArrayItems[0].ImporteIva = 21.000m;
+        projection.ArrayItems[0].ImporteItem = 121.00m;
+        projection.ArraySubtotalesIva[0].Importe = 21.000m;
+        projection.ArrayOtrosTributos[0].BaseImponible = 10.000m;
+        projection.ArrayOtrosTributos[0].Importe = 1.00m;
+        projection.ArrayCompradores[0].Porcentaje = 100.00m;
+
+        FiscalHomologationWsmtxcaChannel.VerifyExactProjection(request, projection);
+
+        projection.ImporteTotal = 121.01m;
+        Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsmtxcaChannel.VerifyExactProjection(request, projection));
+    }
+
+    [Theory]
+    [InlineData("gtin-leading-zero")]
+    [InlineData("description-whitespace")]
+    public void Wsmtxca_exact_projection_keeps_gtin_and_text_exact(string changedField)
+    {
+        var request = FiscalHomologationWsmtxcaChannel.CreateRequest(9001, 1, 123, ReceiverFor(1), null,
+            new DateOnly(2026, 10, 12));
+        ComprobanteType projection = FiscalHomologationWsmtxcaChannel.CreateQueryProjection(request, 12345678901234);
+        if (changedField == "gtin-leading-zero")
+            projection.ArrayItems[0].CodigoMtx = "123456789913";
+        else
+        {
+            request.ArrayItems[0].Descripcion = string.Empty;
+            projection.ArrayItems[0].Descripcion = " ";
+        }
+
         Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsmtxcaChannel.VerifyExactProjection(request, projection));
     }
 
@@ -520,6 +718,37 @@ public sealed class FiscalHomologationAdaptersTests
 
     private static FiscalExportFixture ExportFixture() => new(840, 840, "Synthetic Client", "Synthetic Address", "FOREIGN-TAX-01", "USD", 1m,
         "Advance payment", new DateOnly(2026, 10, 15), 1, [new FiscalExportItem("SKU-1", "Synthetic item", 2, 50m, 0m)]);
+
+    public class WsmtxcaQueryProxy : DispatchProxy
+    {
+        public ComprobanteType? Comprobante { get; set; }
+        public bool IncludeError { get; set; }
+        public bool IncludeObservation { get; set; }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            Assert.NotNull(targetMethod);
+            if (targetMethod!.Name != nameof(IWsmtxcav1Service.consultarComprobanteAsync))
+                throw new NotSupportedException($"Unexpected offline WSMTXCA call: {targetMethod.Name}.");
+            var response = new ConsultarComprobanteResponseType { Comprobante = Comprobante };
+            if (IncludeError) response.ArrayErrores.Add(new CodigoDescripcionType { Codigo = 9001, Descripcion = "redacted" });
+            if (IncludeObservation) response.ArrayObservaciones.Add(new CodigoDescripcionType { Codigo = 504, Descripcion = "redacted" });
+            return Task.FromResult(response);
+        }
+    }
+
+    public class WsfexQueryProxy : DispatchProxy
+    {
+        public FexGetCmpResponse2? Response { get; set; }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            Assert.NotNull(targetMethod);
+            if (targetMethod!.Name != nameof(IWsfexv1Service.FEXGetCMPAsync))
+                throw new NotSupportedException($"Unexpected offline WSFEX call: {targetMethod.Name}.");
+            return Task.FromResult(Response ?? throw new InvalidOperationException("Synthetic WSFEX query response is missing."));
+        }
+    }
 
     private static T XmlRoundTrip<T>(T value)
     {

@@ -430,6 +430,110 @@ public sealed class SqliteInvoiceJournalTests
         await updateAudit.Should().ThrowAsync<SqliteException>().WithMessage("*immutable*");
     }
 
+    [Theory]
+    [InlineData(20)]
+    [InlineData(21)]
+    public async Task AdjudicateWsfexValidationRejectionAsync_journal_accepts_only_the_exact_1673_export_note_evidence(int voucherType)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        var clock = new AdjustableTimeProvider(DateTimeOffset.UtcNow);
+        var journal = new SqliteInvoiceJournal(InvoiceTestData.NewDatabasePath(database, "adjudication-1673"), clock);
+        InvoiceSubmission original = CreateWsfexPaymentDateSubmission(76601 + voucherType, voucherType, "20261012");
+        string rejectionXml = Create1673Response();
+        InvoiceOperation prior = await SaveInStateAsync(journal, original, InvoiceState.Unknown, rejectionXml, cancellationToken);
+        var evidence = new InvoiceRejectionEvidence(original, rejectionXml, "operator-1673", "manual-review", "exact approved 1673 evidence");
+        var capability = (IInvoiceRejectionAdjudicationJournal)journal;
+
+        InvoiceOperation rejected = await capability.AdjudicateWsfexValidationRejectionAsync(
+            original.TenantId, original.IdempotencyKey, prior.Version, evidence, cancellationToken);
+
+        rejected.State.Should().Be(InvoiceState.Rejected);
+        rejected.Submission.Should().Be(original);
+        rejected.ResponseXml.Should().Be(rejectionXml);
+        rejected.AuthorizationCode.Should().BeNull();
+        (await journal.ListRevisionsAsync(original.TenantId, original.IdempotencyKey, cancellationToken)).Should().ContainSingle();
+        (await capability.ListRejectionAdjudicationsAsync(original.TenantId, original.IdempotencyKey, cancellationToken: cancellationToken))
+            .Should().ContainSingle().Which.OriginalResponseXml.Should().Be(rejectionXml);
+    }
+
+    [Theory]
+    [InlineData("code-1550", 20, 2, "20261012")]
+    [InlineData("other-code", 20, 2, "20261012")]
+    [InlineData("wrong-message", 20, 2, "20261012")]
+    [InlineData("message-case-change", 20, 2, "20261012")]
+    [InlineData("message-trailing-space", 20, 2, "20261012")]
+    [InlineData("authorization-result", 20, 2, "20261012")]
+    [InlineData("voucher-19", 19, 2, "20261012")]
+    [InlineData("voucher-19-no-payment-date", 19, 2, null)]
+    [InlineData("export-type-4", 20, 4, "20261012")]
+    [InlineData("missing-payment-date", 20, 2, null)]
+    [InlineData("empty-payment-date", 20, 2, "")]
+    [InlineData("whitespace-payment-date", 20, 2, " ")]
+    [InlineData("invalid-payment-date", 20, 2, "20261340")]
+    [InlineData("zero-request-id", 20, 2, "20261012")]
+    [InlineData("zero-point-of-sale", 20, 2, "20261012")]
+    [InlineData("zero-voucher-number", 20, 2, "20261012")]
+    [InlineData("foreign-request-id", 20, 2, "20261012")]
+    [InlineData("foreign-payment-date", 20, 2, "20261012")]
+    [InlineData("duplicate-request-id", 20, 2, "20261012")]
+    [InlineData("duplicate-voucher-type", 20, 2, "20261012")]
+    [InlineData("duplicate-payment-date", 20, 2, "20261012")]
+    [InlineData("snapshot-mismatch", 20, 2, "20261012")]
+    public async Task AdjudicateWsfexValidationRejectionAsync_journal_rejects_forged_or_out_of_scope_1673_evidence(
+        string variant, int voucherType, int exportType, string? paymentDate)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        var journal = new SqliteInvoiceJournal(InvoiceTestData.NewDatabasePath(database, "adjudication-1673-invalid"));
+        InvoiceSubmission original = CreateWsfexPaymentDateSubmission(76701, voucherType, paymentDate, exportType);
+        if (variant.StartsWith("zero-", StringComparison.Ordinal) || variant.StartsWith("foreign-", StringComparison.Ordinal) ||
+            variant.StartsWith("duplicate-", StringComparison.Ordinal))
+            original = original with { Payload = Mutate1673RequestPayload(original.Payload, variant) };
+        InvoiceOperation prior = await SaveInStateAsync(journal, original, InvoiceState.Unknown,
+            CreateNoResultQueryResponse(), cancellationToken);
+        string rejectionXml = Create1673Response(variant);
+        InvoiceSubmission evidenceSubmission = variant == "snapshot-mismatch" ? original with { Payload = original.Payload + " " } : original;
+        var evidence = new InvoiceRejectionEvidence(evidenceSubmission, rejectionXml, "operator-1673", "manual-review", "must fail closed");
+        var capability = (IInvoiceRejectionAdjudicationJournal)journal;
+
+        Func<Task> adjudicate = () => capability.AdjudicateWsfexValidationRejectionAsync(
+            original.TenantId, original.IdempotencyKey, prior.Version, evidence, cancellationToken);
+
+        await adjudicate.Should().ThrowAsync<InvoiceConflictException>();
+        (await journal.FindAsync(original.TenantId, original.IdempotencyKey, cancellationToken)).Should().BeEquivalentTo(prior);
+        (await journal.ListRevisionsAsync(original.TenantId, original.IdempotencyKey, cancellationToken)).Should().BeEmpty();
+        (await capability.ListRejectionAdjudicationsAsync(original.TenantId, original.IdempotencyKey, cancellationToken: cancellationToken))
+            .Should().BeEmpty();
+    }
+
+    private static string Mutate1673RequestPayload(string payload, string variant)
+    {
+        const string ns = "http://ar.gov.afip.dif.fexv1/";
+        XNamespace contract = ns;
+        XDocument document = XDocument.Parse(payload);
+        XElement root = document.Root!;
+        switch (variant)
+        {
+            case "zero-request-id": root.Element(contract + "Id")!.Value = "0"; break;
+            case "zero-point-of-sale": root.Element(contract + "Punto_vta")!.Value = "0"; break;
+            case "zero-voucher-number": root.Element(contract + "Cbte_nro")!.Value = "0"; break;
+            case "foreign-request-id":
+                XElement id = root.Element(contract + "Id")!;
+                id.ReplaceWith(new XElement(XName.Get("Id", "urn:foreign"), id.Value));
+                break;
+            case "foreign-payment-date":
+                XElement date = root.Element(contract + "Fecha_pago")!;
+                date.ReplaceWith(new XElement(XName.Get("Fecha_pago", "urn:foreign"), date.Value));
+                break;
+            case "duplicate-request-id": root.Add(new XElement(contract + "Id", root.Element(contract + "Id")!.Value)); break;
+            case "duplicate-voucher-type": root.Add(new XElement(contract + "Cbte_Tipo", root.Element(contract + "Cbte_Tipo")!.Value)); break;
+            case "duplicate-payment-date": root.Add(new XElement(contract + "Fecha_pago", root.Element(contract + "Fecha_pago")!.Value)); break;
+            default: throw new ArgumentOutOfRangeException(nameof(variant));
+        }
+        return document.ToString(SaveOptions.DisableFormatting);
+    }
+
     [Fact]
     public async Task AdjudicateWsfexValidationRejectionAsync_rejects_stale_duplicate_calls_without_duplicate_audit()
     {
@@ -732,7 +836,52 @@ public sealed class SqliteInvoiceJournalTests
         return new InvoiceSubmission("tenant-a", $"wsfex-{requestId}", "wsfex", identity, writer.ToString(), RemoteRequestId: requestId);
     }
 
+    private static InvoiceSubmission CreateWsfexPaymentDateSubmission(long requestId, int voucherType,
+        string? paymentDate, int exportType = 2)
+    {
+        var request = new ClsFexRequest
+        {
+            Id = requestId,
+            FechaCbte = "20261012",
+            CbteTipo = checked((short)voucherType),
+            PuntoVta = 1,
+            CbteNro = 1,
+            TipoExpo = checked((short)exportType),
+            FechaPago = paymentDate!
+        };
+        using var writer = new StringWriter(CultureInfo.InvariantCulture);
+        new XmlSerializer(typeof(ClsFexRequest)).Serialize(writer, request);
+        var identity = new InvoiceIdentity(ArcaEnvironment.Homologation, 30123456789, 1, voucherType, 1);
+        return new InvoiceSubmission("tenant-a", $"wsfex-1673-{requestId}", "wsfex", identity, writer.ToString(),
+            RemoteRequestId: requestId);
+    }
+
     private static string Create1550Response() => CreateResponse(1550);
+
+    private static string Create1673Response(string variant = "valid")
+    {
+        int errorCode = variant == "code-1550" ? 1550 : variant == "other-code" ? 1551 : 1673;
+        string message = variant switch
+        {
+            "wrong-message" => "Otro campo inválido",
+            "message-case-change" => "PARA FACTURAS DE EXPORTACION DE PRODUCTOS Y PARA LAS NOTAS DE DEBITO Y CREDITO NO INFORMAR FECHA DE PAGO",
+            "message-trailing-space" => "Para facturas de exportacion de productos y para las notas de debito y credito no informar fecha de pago ",
+            _ => "Para facturas de exportacion de productos y para las notas de debito y credito no informar fecha de pago"
+        };
+        var response = new FexAuthorizeResponse
+        {
+            FexAuthorizeResult = new FexResponseAuthorize
+            {
+                FexErr = new ClsFexErr { ErrCode = errorCode, ErrMsg = message },
+                FexEvents = CreateEvents()
+            }
+        };
+        if (variant == "authorization-result")
+            response.FexAuthorizeResult!.FexResultAuth = new ClsFexOutAuthorize { Cae = "12345678901234" };
+        using var writer = new StringWriter(CultureInfo.InvariantCulture);
+        new XmlSerializer(typeof(FexAuthorizeResponse)).Serialize(writer, response);
+        return writer.ToString();
+    }
 
     private static string CreatePartialResponse()
     {

@@ -113,9 +113,11 @@ el diario local; ARCA no ofrece aquí una reserva remota. Ticket WSAA y diario
 SQLite se restauran y persisten mediante el secreto privado del environment. El TA
 se renueva al vencer; las operaciones inciertas se reconcilian sin reenviar, y solo
 un snapshot `Prepared` puede reanudarse bajo validación explícita de numeración.
-La implementación quedó verificada offline: restore locked y build Release de la
-solución pasaron sin advertencias; la suite completa aprobó 665 pruebas, omitió 42
-opt-in y no tuvo fallos (707 total). `HOMOLOGATION_STATE` se inicializa
+El último checkpoint local reportó restore locked y build Release con 0 advertencias
+y 0 errores, 907 pruebas (865 aprobadas, 42 opt-in omitidas y 0 fallos), y packs
+finales de la biblioteca y la herramienta aprobados. El consumer limpio con la
+capability opcional y el esquema SQLite también pasó. La suite no valida por sí
+sola la homologación integral. `HOMOLOGATION_STATE` se inicializa
 automáticamente y debe conservarse sin edición manual.
 
 La evidencia protegida reciente en el [`main` de `a0b07d6`](https://github.com/ARSASWebDesign/NetArcaWs/commit/a0b07d689796de14aa2d43f3173c98bf03de1250),
@@ -151,20 +153,17 @@ archivos PEM o abrir estado protegido, sin recibir certificado, CUIT emisor ni P
 el test normal repite la validación.
 
 Los cambios locales tienen pruebas sintéticas de script, perfil, asociaciones,
-proyecciones fiscales, reinicio de operaciones y estado durable. La ejecución
-autenticada local autorizada del 12 de octubre de 2026 intentó los nueve selectores
-de consulta: cinco selectores de servicios pasaron y cuatro selectores de padrón
-fallaron con un resultado genérico del harness o de validación, sin causa exacta
-confirmada. El listado WSFE fue parcial según el validador. El diagnóstico tipado posterior
-consultó los catálogos directamente: WSFE devolvió cero POS con error ARCA 602;
-WSFEX y WSMTXCA devolvieron cero POS sin código numérico de error. Todos los
-contadores de filtros fueron cero, por lo que no se atribuye el resultado a filtros
-locales. El proceso de diagnóstico terminó correctamente, lo que confirma que las
-consultas se completaron, no que los prerrequisitos fiscales estén satisfechos. Para
-homologación, el harness prioriza POS activos del catálogo y solo habilita el fixture
-QA POS 1 de WSFE/WSFEX o POS 2 de WSMTXCA cuando la respuesta tipada del catálogo
-está vacía y el entorno confirma homologación; este fallback no acredita una
-habilitación fiscal ni crea una reserva remota.
+proyecciones fiscales, reinicio de operaciones y estado durable. La última
+ejecución local autorizada del modo `completa` terminó con código 0: pasaron los
+nueve selectores y consultas autenticadas (WSFE, WSFEX, WSMTXCA, WSCDC, WSFECred
+y Padrón A4, A5, A10 y A13), los tres diagnósticos de catálogo POS y los 18
+escenarios fiscales con autorización y consulta exacta. El diario terminó con
+cero operaciones pendientes.
+Una ejecución anterior había tenido fallos de padrón y catálogos vacíos; no describe
+el resultado actual. Los probes públicos separados (21 casos: 9 aprobados y 12
+fallidos) no forman parte de estos selectores. WSCPE y el Dummy público tampoco se
+incluyen en esta matriz. Este resultado acredita solo los flujos y escenarios
+ejecutados, no homologación de toda la biblioteca.
 
 En la primera corrida, el preflight de los 18 escenarios pasó y los nueve casos
 WSFE se confirmaron. Un envío WSFEX E quedó inicialmente `Unknown` con 1550; la
@@ -183,24 +182,44 @@ nulo/vacío e `Incoterms_Ds` exactamente `0` (U+0030). No acepta otros textos,
 espacios ni valores explícitos distintos. El core conserva la comparación estricta
 de `Incoterms_Ds`. `ClsFexRequest` ya expone `Incoterms` e `IncotermsDs`.
 
-La operación WSFEX E de nota de débito (tipo 20, `TipoExpo` 2) devolvió el código
-1673. El request incluía `Fecha_pago`; la respuesta original se preservó, contiene
-un `FEXErr` y no contiene `FEXResultAuth`. El manual WSFEX vigente indica que
-`Fecha_pago` no debe informarse para comprobantes distintos del tipo 19. La
-operación permanece `Unknown`: la política aprobada de clasificación/adjudicación
-sigue limitada al caso 1550 y no autoriza reintentos. No se cambió ni se limpió el
-payload o la evidencia.
+La recuperación auditada de la nota de débito WSFEX tipo 20/Expo 2 con error 1673
+se completó: el rechazo original y su evidencia quedaron preservados, se preparó
+una revisión explícita que quitó únicamente `Fecha_pago`, y ARCA autorizó y
+confirmó la revisión por consulta exacta. La nota de crédito WSFEX también quedó
+autorizada y verificada. Los tres escenarios WSMTXCA A1/A2/A3 también quedaron
+autorizados y confirmados por consulta exacta. La corrida final verificó los 18
+escenarios: nueve WSFE, tres WSFEX y seis WSMTXCA (A1/A2/A3 y B6/B7/B8).
 
-Estado observado de la matriz: diez casos confirmados (nueve WSFE y la factura
-WSFEX E), una nota de débito WSFEX pendiente en `Unknown` y siete escenarios no
-ejecutados (nota de crédito WSFEX y seis WSMTXCA). Esto no es una homologación
-integral. La fábrica WSFEX ahora solo informa `Fecha_pago` para comprobantes tipo
-19 y la omite para tipos 20/21; se agregó cobertura para ambos caminos y para
-rechazar una respuesta de consulta que incluya inesperadamente esa fecha. El
-build Release finalizó con 0 warnings y 0 errors; la suite registró 831 pruebas,
-789 aprobadas, 42 opt-in omitidas y 0 fallos. Los packs y el consumer smoke SQLite
-habían pasado en el checkpoint de 828 pruebas; desde entonces los cambios fueron
-solo de fábrica, sin cambios al core. Es validación local, sin CI ni publicación.
+Las autorizaciones WSMTXCA A incluyeron `Resultado=O` y observaciones 130 y 504;
+B6/B7/B8 incluyeron `Resultado=O` y observación 504. No hubo errores en esas
+respuestas y las consultas exactas confirmaron identidad y contenido. La factura
+B6 había sido rechazada inicialmente con error 132. El request usaba
+`codigoTipoDocumento=99` y `numeroDocumento=0`, valores de la fixture de consumidor
+final usada en WSFE que no son válidos para MTXCA. Se preparó una revisión explícita
+de la misma identidad, omitiendo solo esos campos conforme a la regla 128 del manual.
+El snapshot original y su hash se preservaron; la corrección no usó la adjudicación
+del core para WSFEX 1550/1673. La revisión y los otros dos escenarios B quedaron
+autorizados y verificados por consulta exacta.
+
+La consulta exacta de WSMTXCA mostró 12 diferencias de escala léxica en campos
+decimales XSD, con valores numéricos equivalentes; no encontró diferencias de
+GTIN, unidad ni valores por defecto. El comparador del core y del harness ahora
+compara por valor numérico solo en paths XSD `decimal` permitidos. No cambia el
+payload fiscal congelado ni su hash. La corrida final completó las consultas
+exactas de los tres escenarios A y los tres B. El checkpoint local más reciente
+reportó restore locked y build Release con 0 advertencias/errores y 907 pruebas:
+865 aprobadas, 42 opt-in omitidas y 0 fallos. Los packs finales de biblioteca y
+herramienta pasaron; el consumer limpio con la capability opcional y el esquema
+SQLite también pasó. No hubo CI de GitHub ni publicación para
+estas validaciones; tampoco se probó toda la biblioteca ni se incluyeron WSCPE o
+los probes públicos separados.
+
+Contrato y fixture WSMTXCA: `codigoTipoAutorizacion=E` identifica CAE en la
+consulta de comprobante y `A` identifica CAEA en los ejemplos del [manual
+oficial](https://arca.gob.ar/fe/ayuda/documentos/wsmtxca-RG-2904.pdf). Para
+unidad de medida 7 el detalle debe incluir `unidadesMtx`; el fixture informa 1.
+Cuando no hay otros tributos, omite `ImporteOtrosTributos` y el array vacío,
+respetando la opcionalidad del contrato y la regla de suma del manual.
 
 Validaciones complementarias del 12 de octubre de 2026: la inspección local del
 certificado encontró fecha de vencimiento 2028-10-05 y correspondencia con su clave
@@ -211,17 +230,6 @@ locales aprobaron 134/134 casos: MySQL 8.4.11 34/34, MariaDB 11.4.13 34/34,
 PostgreSQL 17.6 33/33 y SQL Server 16.0.4295.3 33/33; 0 omitidos y 0 fallos.
 Los contenedores x86_64 corrieron emulados en macOS ARM, por lo que no sustituyen
 la ejecución nativa de CI.
-
-Investigación posterior del 12 de octubre: la respuesta original íntegra WSFEX
-se conservaba en un respaldo privado y confirmó que el 1550 exige enviar el tag
-`Permiso_existente`. Su snapshot coincide exactamente con el diario actual.
-Se aprobó una excepción específica y recuperación auditada, documentada en ADR
-0001: capacidad opcional SQLite, evidencia inmutable, versión esperada y revisión
-posterior explícita con la misma identidad e Id. No se amplía automáticamente a
-EF Core ni a otros errores. Un checkpoint anterior aprobó 735/777 pruebas; otro
-posterior, antes del cambio de fábrica más reciente, aprobó 786/828. El resultado
-actual de 831 pruebas se detalla arriba. Estos artefactos son locales; no hubo
-publicación ni CI de GitHub para estas validaciones.
 
 En la repetición pública más reciente se aprobaron 9 de 21 probes y fallaron 12,
 sin omisiones. WSDL respondió HTTP 200 tanto con .NET como con curl, pero ambos

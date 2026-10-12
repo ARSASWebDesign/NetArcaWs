@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Xml;
 using System.Xml.Linq;
 using System.Xml.Serialization;
 using NetArcaWs.Contracts.Wsmtxca;
@@ -130,14 +131,21 @@ internal sealed class FiscalHomologationWsmtxcaChannel(
         var response = await service.consultarComprobanteAsync(tenant, new ConsultarComprobanteRequestType
         { ConsultaComprobanteRequest = new ConsultaComprobanteRequestType
             { CodigoTipoComprobante = checked((short)id.VoucherType), NumeroPuntoVenta = id.PointOfSale, NumeroComprobante = id.VoucherNumber } }, cancellationToken).ConfigureAwait(false);
+        EnsureNoQueryErrors(response);
         ComprobanteType? actual = response.Comprobante;
-        if (actual is null || actual.CodigoTipoAutorizacion?.ToString() != "A" || actual.CodigoAutorizacion is null or <= 0 ||
+        if (actual is null || actual.CodigoTipoAutorizacion?.ToString() != "E" || actual.CodigoAutorizacion is null or <= 0 ||
             actual.NumeroPuntoVenta != id.PointOfSale || actual.CodigoTipoComprobante != id.VoucherType ||
             actual.NumeroComprobante != id.VoucherNumber || actual.FechaEmision != expected.FechaEmision)
             throw new InvalidOperationException("WSMTXCA exact consultation did not confirm the selected authorized voucher.");
         VerifyExactProjection(expected, actual);
         if (operation.AuthorizationCode != actual.CodigoAutorizacion.Value.ToString(CultureInfo.InvariantCulture))
             throw new InvalidOperationException("WSMTXCA exact consultation authorization differs from the stored journal result.");
+    }
+
+    internal static void EnsureNoQueryErrors(ConsultarComprobanteResponseType? response)
+    {
+        if (response is { ArrayErrores.Count: > 0 })
+            throw new InvalidOperationException("WSMTXCA exact consultation returned service errors; the result is inconclusive.");
     }
 
     internal static ComprobanteType CreateRequest(int pointOfSale, int voucherType, long number, FiscalHomologationReceiver receiver,
@@ -157,17 +165,19 @@ internal sealed class FiscalHomologationWsmtxcaChannel(
         var result = new ComprobanteType
         {
             CodigoTipoComprobante = checked((short)voucherType), NumeroPuntoVenta = pointOfSale, NumeroComprobante = number,
-            FechaEmision = issueDate.ToDateTime(TimeOnly.MinValue), CodigoTipoDocumento = checked((short)receiver.DocumentType),
-            NumeroDocumento = receiver.DocumentNumber, CondicionIvaReceptor = checked((short)receiver.VatConditionId!.Value),
+            FechaEmision = issueDate.ToDateTime(TimeOnly.MinValue),
+            CodigoTipoDocumento = isA ? checked((short)receiver.DocumentType) : null,
+            NumeroDocumento = isA ? receiver.DocumentNumber : null,
+            CondicionIvaReceptor = checked((short)receiver.VatConditionId!.Value),
             ImporteGravado = net, ImporteNoGravado = 0, ImporteExento = 0, ImporteSubtotal = net,
-            ImporteOtrosTributos = 0, ImporteTotal = net + vat, CodigoMoneda = "PES", CotizacionMoneda = 1m,
+            ImporteOtrosTributos = null, ImporteTotal = net + vat, CodigoMoneda = "PES", CotizacionMoneda = 1m,
             CodigoConcepto = 1
         };
         result.ArrayItems.Add(new ItemType
         {
-            Codigo = "SYNTHETIC-ITEM", Descripcion = "Synthetic taxable service item", Cantidad = quantity,
+            Codigo = "SYNTHETIC-ITEM", UnidadesMtx = 1, CodigoMtx = "0123456789913", Descripcion = "Synthetic taxable product item", Cantidad = quantity,
             CodigoUnidadMedida = 7, PrecioUnitario = unitPrice, ImporteBonificacion = 0,
-            CodigoCondicionIva = 5, ImporteIva = vat, ImporteItem = net + vat
+            CodigoCondicionIva = 5, ImporteIva = isA ? vat : null, ImporteItem = net + vat
         });
         result.ArraySubtotalesIva.Add(new SubtotalIvaType { Codigo = 5, Importe = vat });
         if (associatedInvoice is { } original)
@@ -180,7 +190,7 @@ internal sealed class FiscalHomologationWsmtxcaChannel(
     {
         ComprobanteType projected = Clone(request);
         projected.CodigoAutorizacion = authorizationCode;
-        projected.CodigoTipoAutorizacion = CodigoTipoAutorizacionSimpleType.A;
+        projected.CodigoTipoAutorizacion = CodigoTipoAutorizacionSimpleType.E;
         projected.FechaVencimiento = request.FechaEmision?.AddDays(10);
         return projected;
     }
@@ -216,12 +226,50 @@ internal sealed class FiscalHomologationWsmtxcaChannel(
     {
         using var writer = new StringWriter(CultureInfo.InvariantCulture);
         var serializer = new XmlSerializer(typeof(ComprobanteType)); serializer.Serialize(writer, value);
-        using var reader = new StringReader(writer.ToString());
+        using var input = new StringReader(writer.ToString());
+        using var reader = XmlReader.Create(input, new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+            IgnoreWhitespace = false,
+            MaxCharactersInDocument = 4 * 1024 * 1024
+        });
         return (ComprobanteType)(serializer.Deserialize(reader) ?? throw new InvalidOperationException("Unable to clone WSMTXCA contract DTO."));
     }
     private static bool XmlEqual(ComprobanteType left, ComprobanteType right)
     {
         string Write(ComprobanteType value) { using var writer = new StringWriter(CultureInfo.InvariantCulture); new XmlSerializer(typeof(ComprobanteType)).Serialize(writer, value); return writer.ToString(); }
-        return XNode.DeepEquals(XElement.Parse(Write(left)), XElement.Parse(Write(right)));
+        XElement leftXml = XElement.Parse(Write(left), LoadOptions.PreserveWhitespace);
+        XElement rightXml = XElement.Parse(Write(right), LoadOptions.PreserveWhitespace);
+        NormalizeXsdDecimalValues(leftXml);
+        NormalizeXsdDecimalValues(rightXml);
+        return XNode.DeepEquals(leftXml, rightXml);
+    }
+
+    private static void NormalizeXsdDecimalValues(XElement root)
+    {
+        const NumberStyles styles = NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint;
+        foreach (XElement element in root.Descendants())
+        {
+            if (element.Name.NamespaceName.Length != 0 || !IsWsmtxcaDecimalPath(element)) continue;
+            if (element.Nodes().Count() != 1 || element.FirstNode is not XText text ||
+                !decimal.TryParse(text.Value, styles, CultureInfo.InvariantCulture, out decimal value))
+                continue;
+            element.Value = value == 0m ? "0" : value.ToString("0.############################", CultureInfo.InvariantCulture);
+        }
+    }
+
+    private static bool IsWsmtxcaDecimalPath(XElement element)
+    {
+        XElement[] ancestors = element.Ancestors().Reverse().ToArray();
+        if (ancestors.Any(ancestor => ancestor.Name.NamespaceName.Length != 0)) return false;
+        string path = string.Join("/", ancestors.Skip(1).Append(element).Select(node => node.Name.LocalName));
+        return path is "importeGravado" or "importeNoGravado" or "importeExento" or "importeSubtotal" or
+            "importeOtrosTributos" or "importeTotal" or "cotizacionMoneda" or
+            "arrayOtrosTributos/otroTributo/baseImponible" or "arrayOtrosTributos/otroTributo/importe" or
+            "arrayItems/item/cantidad" or "arrayItems/item/precioUnitario" or
+            "arrayItems/item/importeBonificacion" or "arrayItems/item/importeIVA" or
+            "arrayItems/item/importeItem" or "arraySubtotalesIVA/subtotalIVA/importe" or
+            "arrayCompradores/comprador/porcentaje";
     }
 }

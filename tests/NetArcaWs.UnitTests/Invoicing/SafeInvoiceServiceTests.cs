@@ -296,6 +296,197 @@ public sealed class SafeInvoiceServiceTests
         transport.CallCount.Should().Be(0, "adjudication is journal-only and never submits or reconciles");
     }
 
+    [Theory]
+    [InlineData(20)]
+    [InlineData(21)]
+    public async Task AdjudicateWsfexValidationRejectionAsync_audits_only_the_confirmed_1673_payment_date_rejection(int voucherType)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        ArcaTenantContext tenant = CreateTenant();
+        ClsFexRequest request = Wsfex1673Request(76401 + voucherType, voucherType, "20261012");
+        var transport = new RecordingSoapTransport(_ => new FexAuthorizeResponse());
+        var service = CreateService(database, transport, new RecordingArcaTicketProvider(TicketTestData.Create()));
+        var journal = new SqliteInvoiceJournal(InvoiceTestData.NewDatabasePath(database, "safe-service"));
+        string idempotencyKey = "fex-1673-audit-" + voucherType;
+        InvoiceSubmission submission = CreateWsfexSubmissionForCurrentQuery(tenant, idempotencyKey, request);
+        string rejectionXml = SerializeXml(KnownForbiddenFechaPago1673Response());
+        InvoiceOperation pending = await SaveUnknownWsfexOperationAsync(journal, submission, rejectionXml, cancellationToken);
+        var evidence = new InvoiceRejectionEvidence(submission, rejectionXml, "qa-maintainer", "protected-runner",
+            "Confirmed WSFEX rejection for the forbidden payment date field");
+
+        InvoiceOperation rejected = await service.AdjudicateWsfexValidationRejectionAsync(
+            tenant, submission.IdempotencyKey, pending.Version, evidence, cancellationToken);
+
+        rejected.State.Should().Be(InvoiceState.Rejected);
+        rejected.Submission.Should().Be(submission);
+        rejected.ResponseXml.Should().Be(rejectionXml);
+        rejected.AuthorizationCode.Should().BeNull();
+        (await journal.ListRevisionsAsync(tenant.TenantId, submission.IdempotencyKey, cancellationToken)).Should().ContainSingle();
+        (await service.ListWsfexRejectionAdjudicationsAsync(tenant, submission.IdempotencyKey,
+            cancellationToken: cancellationToken)).Should().ContainSingle()
+            .Which.OriginalResponseXml.Should().Be(rejectionXml);
+        Func<Task> duplicate = () => service.AdjudicateWsfexValidationRejectionAsync(
+            tenant, submission.IdempotencyKey, rejected.Version,
+            new InvoiceRejectionEvidence(submission, rejectionXml, "qa-maintainer", "protected-runner", "duplicate"), cancellationToken);
+        await duplicate.Should().ThrowAsync<InvoiceConflictException>();
+        (await journal.ListRevisionsAsync(tenant.TenantId, submission.IdempotencyKey, cancellationToken)).Should().ContainSingle();
+        (await service.ListWsfexRejectionAdjudicationsAsync(tenant, submission.IdempotencyKey,
+            cancellationToken: cancellationToken)).Should().ContainSingle();
+        transport.CallCount.Should().Be(0, "adjudication must not resubmit the uncertain operation");
+    }
+
+    [Theory]
+    [InlineData(20)]
+    [InlineData(21)]
+    public async Task AuthorizeWsfexAsync_classifies_the_exact_1673_payment_date_rejection(int voucherType)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        ClsFexRequest request = Wsfex1673Request(76420 + voucherType, voucherType, "20261012");
+        string rejectionXml = SerializeXml(KnownForbiddenFechaPago1673Response());
+        var transport = new RecordingSoapTransport(_ => KnownForbiddenFechaPago1673Response());
+        var service = CreateService(database, transport, new RecordingArcaTicketProvider(TicketTestData.Create()));
+
+        InvoiceOperation result = await service.AuthorizeWsfexAsync(CreateTenant(), "fex-direct-1673-" + voucherType, request, cancellationToken);
+
+        result.State.Should().Be(InvoiceState.Rejected);
+        result.ResponseXml.Should().Be(rejectionXml);
+        result.AuthorizationCode.Should().BeNull();
+        transport.CallCount.Should().Be(1);
+        transport.Calls.Select(call => call.Action).Should().ContainSingle(action => action.EndsWith("/FEXAuthorize", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("code-1550")]
+    [InlineData("other-code")]
+    [InlineData("wrong-message")]
+    [InlineData("message-case-change")]
+    [InlineData("message-trailing-space")]
+    [InlineData("voucher-19")]
+    [InlineData("export-type-4")]
+    [InlineData("no-payment-date")]
+    [InlineData("empty-payment-date")]
+    [InlineData("whitespace-payment-date")]
+    [InlineData("invalid-payment-date")]
+    [InlineData("authorization-result")]
+    public async Task AuthorizeWsfexAsync_keeps_out_of_scope_1673_responses_unknown(string variant)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        int voucherType = variant == "voucher-19" ? 19 : 20;
+        string? paymentDate = variant switch
+        {
+            "no-payment-date" => null,
+            "empty-payment-date" => string.Empty,
+            "whitespace-payment-date" => " ",
+            "invalid-payment-date" => "20261340",
+            _ => "20261012"
+        };
+        ClsFexRequest request = Wsfex1673Request(76430, voucherType, paymentDate);
+        if (variant == "export-type-4") request.TipoExpo = 4;
+        FexAuthorizeResponse response = KnownForbiddenFechaPago1673Response();
+        if (variant == "code-1550") response.FexAuthorizeResult!.FexErr!.ErrCode = 1550;
+        if (variant == "other-code") response.FexAuthorizeResult!.FexErr!.ErrCode = 1551;
+        if (variant == "wrong-message") response.FexAuthorizeResult!.FexErr!.ErrMsg = "Otro campo inválido";
+        if (variant == "message-case-change") response.FexAuthorizeResult!.FexErr!.ErrMsg = response.FexAuthorizeResult.FexErr!.ErrMsg!.ToUpperInvariant();
+        if (variant == "message-trailing-space") response.FexAuthorizeResult!.FexErr!.ErrMsg += " ";
+        if (variant == "authorization-result") response.FexAuthorizeResult!.FexResultAuth = new ClsFexOutAuthorize { Cae = "71234567890123" };
+        var transport = new RecordingSoapTransport(_ => response);
+        var service = CreateService(database, transport, new RecordingArcaTicketProvider(TicketTestData.Create()));
+
+        InvoiceOperation result = await service.AuthorizeWsfexAsync(CreateTenant(), "fex-out-of-scope-1673-" + variant, request, cancellationToken);
+
+        result.State.Should().Be(InvoiceState.Unknown);
+        result.AuthorizationCode.Should().BeNull();
+        transport.CallCount.Should().Be(1);
+        transport.Calls.Select(call => call.Action).Should().ContainSingle(action => action.EndsWith("/FEXAuthorize", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("code-1550")]
+    [InlineData("other-code")]
+    [InlineData("wrong-message")]
+    [InlineData("message-case-change")]
+    [InlineData("message-trailing-space")]
+    [InlineData("voucher-19")]
+    [InlineData("voucher-19-no-payment-date")]
+    [InlineData("export-type-4")]
+    [InlineData("no-payment-date")]
+    [InlineData("empty-payment-date")]
+    [InlineData("whitespace-payment-date")]
+    [InlineData("invalid-payment-date")]
+    [InlineData("authorization-result")]
+    [InlineData("snapshot-mismatch")]
+    public async Task AdjudicateWsfexValidationRejectionAsync_rejects_1673_evidence_outside_the_exact_allowlist(string variant)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        ArcaTenantContext tenant = CreateTenant();
+        int voucherType = variant.StartsWith("voucher-19", StringComparison.Ordinal) ? 19 : 20;
+        string? paymentDate = variant is "no-payment-date" or "voucher-19-no-payment-date" ? null : variant switch
+        {
+            "empty-payment-date" => string.Empty,
+            "whitespace-payment-date" => " ",
+            "invalid-payment-date" => "20261340",
+            _ => "20261012"
+        };
+        ClsFexRequest request = Wsfex1673Request(76450, voucherType, paymentDate);
+        if (variant == "export-type-4") request.TipoExpo = 4;
+        FexAuthorizeResponse response = KnownForbiddenFechaPago1673Response();
+        if (variant == "code-1550") response.FexAuthorizeResult!.FexErr!.ErrCode = 1550;
+        if (variant == "other-code") response.FexAuthorizeResult!.FexErr!.ErrCode = 1551;
+        if (variant == "wrong-message") response.FexAuthorizeResult!.FexErr!.ErrMsg = "Otro campo inválido";
+        if (variant == "message-case-change") response.FexAuthorizeResult!.FexErr!.ErrMsg = response.FexAuthorizeResult.FexErr!.ErrMsg!.ToUpperInvariant();
+        if (variant == "message-trailing-space") response.FexAuthorizeResult!.FexErr!.ErrMsg += " ";
+        if (variant == "authorization-result") response.FexAuthorizeResult!.FexResultAuth = new ClsFexOutAuthorize { Cae = "71234567890123" };
+        string rejectionXml = SerializeXml(response);
+        var transport = new RecordingSoapTransport(_ => new FexAuthorizeResponse());
+        var service = CreateService(database, transport, new RecordingArcaTicketProvider(TicketTestData.Create()));
+        var journal = new SqliteInvoiceJournal(InvoiceTestData.NewDatabasePath(database, "safe-service"));
+        InvoiceSubmission submission = CreateWsfexSubmissionForCurrentQuery(tenant, "fex-1673-reject-" + variant, request);
+        InvoiceOperation pending = await SaveUnknownWsfexOperationAsync(journal, submission, NoResultCurrentQueryResponse(), cancellationToken);
+        InvoiceSubmission evidenceSubmission = variant == "snapshot-mismatch" ? submission with { Payload = submission.Payload + " " } : submission;
+        var evidence = new InvoiceRejectionEvidence(evidenceSubmission, rejectionXml, "qa-maintainer", "protected-runner", "Boundary test");
+
+        Func<Task> adjudicate = () => service.AdjudicateWsfexValidationRejectionAsync(
+            tenant, submission.IdempotencyKey, pending.Version, evidence, cancellationToken);
+
+        await adjudicate.Should().ThrowAsync<InvoiceConflictException>();
+        (await journal.FindAsync(tenant.TenantId, submission.IdempotencyKey, cancellationToken))!.Should().BeEquivalentTo(pending);
+        (await journal.ListRevisionsAsync(tenant.TenantId, submission.IdempotencyKey, cancellationToken)).Should().BeEmpty();
+        (await service.ListWsfexRejectionAdjudicationsAsync(tenant, submission.IdempotencyKey,
+            cancellationToken: cancellationToken)).Should().BeEmpty();
+        transport.CallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task AdjudicateWsfexValidationRejectionAsync_1673_does_not_override_a_later_positive_query_record()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        ArcaTenantContext tenant = CreateTenant();
+        ClsFexRequest request = Wsfex1673Request(76452, 20, "20261012");
+        var transport = new RecordingSoapTransport(_ => new FexAuthorizeResponse());
+        var service = CreateService(database, transport, new RecordingArcaTicketProvider(TicketTestData.Create()));
+        var journal = new SqliteInvoiceJournal(InvoiceTestData.NewDatabasePath(database, "safe-service"));
+        InvoiceSubmission submission = CreateWsfexSubmissionForCurrentQuery(tenant, "fex-1673-positive-current", request);
+        InvoiceOperation pending = await SaveUnknownWsfexOperationAsync(journal, submission,
+            CurrentPositiveQueryResponse(request), cancellationToken);
+        var evidence = new InvoiceRejectionEvidence(submission, SerializeXml(KnownForbiddenFechaPago1673Response()),
+            "qa-maintainer", "protected-runner", "Old 1673 must not override positive current evidence");
+
+        Func<Task> adjudicate = () => service.AdjudicateWsfexValidationRejectionAsync(
+            tenant, submission.IdempotencyKey, pending.Version, evidence, cancellationToken);
+
+        await adjudicate.Should().ThrowAsync<InvoiceConflictException>();
+        (await journal.FindAsync(tenant.TenantId, submission.IdempotencyKey, cancellationToken))!.Should().BeEquivalentTo(pending);
+        (await journal.ListRevisionsAsync(tenant.TenantId, submission.IdempotencyKey, cancellationToken)).Should().BeEmpty();
+        (await service.ListWsfexRejectionAdjudicationsAsync(tenant, submission.IdempotencyKey,
+            cancellationToken: cancellationToken)).Should().BeEmpty();
+        transport.CallCount.Should().Be(0);
+    }
+
     [Fact]
     public async Task AdjudicateWsfexValidationRejectionAsync_rejects_mismatched_evidence_without_mutation()
     {
@@ -706,6 +897,32 @@ public sealed class SafeInvoiceServiceTests
     }
 
     [Fact]
+    public async Task ReconcileAsync_keeps_wsfe_unknown_when_query_has_errors_and_matching_positive_result()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        var transport = new RecordingSoapTransport(call =>
+        {
+            if (call.ResponseType == typeof(FecaeSolicitarResponse)) return new FecaeSolicitarResponse();
+            FeCompConsultarResponse response = WsfeQueryResponse("71234567890123");
+            response.FeCompConsultarResult!.Errors.Add(new Err { Code = 602, Msg = "Synthetic contradictory query error" });
+            return response;
+        });
+        var service = CreateService(database, transport, new RecordingArcaTicketProvider(TicketTestData.Create()));
+        ArcaTenantContext tenant = CreateTenant();
+
+        InvoiceOperation pending = await service.AuthorizeWsfeAsync(tenant, "wsfe-query-error-positive", WsfeRequest(), cancellationToken);
+        InvoiceOperation reconciled = await service.ReconcileAsync(tenant, pending.Submission.IdempotencyKey, cancellationToken);
+
+        pending.State.Should().Be(InvoiceState.Unknown);
+        reconciled.State.Should().Be(InvoiceState.Unknown);
+        reconciled.AuthorizationCode.Should().BeNull();
+        reconciled.ResponseXml.Should().Contain("602");
+        transport.CallCount.Should().Be(2);
+        transport.Calls.Last().Action.Should().EndWith("/FECompConsultar");
+    }
+
+    [Fact]
     public async Task ResumeAsync_recovers_authorization_after_journal_completion_failure_and_preserves_remote_evidence()
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -818,6 +1035,35 @@ public sealed class SafeInvoiceServiceTests
         reconciled.State.Should().Be(expected);
         if (expected == InvoiceState.Authorized)
             reconciled.AuthorizationCode.Should().Be("71234567890123");
+        transport.CallCount.Should().Be(2);
+        transport.Calls.Last().Action.Should().EndWith("/FEXGetCMP");
+    }
+
+    [Theory]
+    [InlineData(1020)]
+    [InlineData(1550)]
+    public async Task ReconcileAsync_keeps_wsfex_unknown_when_query_has_nonzero_error_and_matching_positive_result(int errorCode)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        ClsFexRequest original = FexRequest(45219);
+        var transport = new RecordingSoapTransport(call =>
+        {
+            if (call.ResponseType == typeof(FexAuthorizeResponse)) return new FexAuthorizeResponse();
+            FexGetCmpResponse2 response = FexQueryResponse(original, alterItem: false);
+            response.FexGetCmpResult!.FexErr = new ClsFexErr { ErrCode = errorCode, ErrMsg = "Synthetic contradictory query error" };
+            return response;
+        });
+        var service = CreateService(database, transport, new RecordingArcaTicketProvider(TicketTestData.Create()));
+        ArcaTenantContext tenant = CreateTenant();
+
+        InvoiceOperation pending = await service.AuthorizeWsfexAsync(tenant, "fex-query-error-positive-" + errorCode, original, cancellationToken);
+        InvoiceOperation reconciled = await service.ReconcileAsync(tenant, pending.Submission.IdempotencyKey, cancellationToken);
+
+        pending.State.Should().Be(InvoiceState.Unknown);
+        reconciled.State.Should().Be(InvoiceState.Unknown);
+        reconciled.AuthorizationCode.Should().BeNull();
+        reconciled.ResponseXml.Should().Contain(errorCode.ToString(System.Globalization.CultureInfo.InvariantCulture));
         transport.CallCount.Should().Be(2);
         transport.Calls.Last().Action.Should().EndWith("/FEXGetCMP");
     }
@@ -1016,7 +1262,7 @@ public sealed class SafeInvoiceServiceTests
     [InlineData("error-1020-empty", InvoiceState.Unknown)]
     [InlineData("empty-without-error", InvoiceState.Unknown)]
     [InlineData("partial-identity", InvoiceState.Unknown)]
-    [InlineData("complete-mismatch-with-error-1020", InvoiceState.Conflict)]
+    [InlineData("complete-mismatch-with-error-1020", InvoiceState.Unknown)]
     public async Task ResumeAsync_keeps_inconclusive_wsfex_query_results_unknown(string responseKind, InvoiceState expected)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -1039,9 +1285,11 @@ public sealed class SafeInvoiceServiceTests
     }
 
     [Theory]
-    [InlineData(false, InvoiceState.Authorized)]
-    [InlineData(true, InvoiceState.Conflict)]
-    public async Task ResumeAsync_reconciles_wsmtxca_by_comparing_the_immutable_comprobante(bool alterFiscalField, InvoiceState expected)
+    [InlineData(false, CodigoTipoAutorizacionSimpleType.E, InvoiceState.Authorized)]
+    [InlineData(true, CodigoTipoAutorizacionSimpleType.E, InvoiceState.Conflict)]
+    [InlineData(false, CodigoTipoAutorizacionSimpleType.A, InvoiceState.Unknown)]
+    public async Task ResumeAsync_reconciles_wsmtxca_by_comparing_the_immutable_comprobante(bool alterFiscalField,
+        CodigoTipoAutorizacionSimpleType authorizationType, InvoiceState expected)
     {
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         using var database = new TemporaryDatabase();
@@ -1049,7 +1297,7 @@ public sealed class SafeInvoiceServiceTests
         ComprobanteType original = MtxRequest(issueDate);
         var transport = new RecordingSoapTransport(call => call.ResponseType == typeof(AutorizarComprobanteResponseType)
             ? new AutorizarComprobanteResponseType()
-            : MtxQueryResponse(original, alterFiscalField));
+            : MtxQueryResponse(original, alterFiscalField, authorizationType));
         var service = CreateService(database, transport, new RecordingArcaTicketProvider(TicketTestData.Create()));
         ArcaTenantContext tenant = CreateTenant();
 
@@ -1062,6 +1310,102 @@ public sealed class SafeInvoiceServiceTests
             reconciled.AuthorizationCode.Should().Be("71234567890123");
         transport.CallCount.Should().Be(2);
         transport.Calls.Last().Action.Should().EndWith("/consultarComprobante");
+    }
+
+    [Theory]
+    [InlineData(true, InvoiceState.Unknown)]
+    [InlineData(false, InvoiceState.Authorized)]
+    public async Task ReconcileAsync_uses_wsmtxca_errors_but_not_observations_to_block_positive_result(bool includeError,
+        InvoiceState expected)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        DateTime issueDate = CivilIssueDate();
+        ComprobanteType original = MtxRequest(issueDate);
+        var transport = new RecordingSoapTransport(call =>
+        {
+            if (call.ResponseType == typeof(AutorizarComprobanteResponseType)) return new AutorizarComprobanteResponseType();
+            ConsultarComprobanteResponseType response = MtxQueryResponse(original, alterFiscalField: false,
+                CodigoTipoAutorizacionSimpleType.E);
+            response.ArrayObservaciones.Add(new CodigoDescripcionType { Codigo = 10, Descripcion = "Synthetic observation" });
+            if (includeError)
+                response.ArrayErrores.Add(new CodigoDescripcionType { Codigo = 100, Descripcion = "Synthetic contradictory query error" });
+            return response;
+        });
+        var service = CreateService(database, transport, new RecordingArcaTicketProvider(TicketTestData.Create()));
+        ArcaTenantContext tenant = CreateTenant();
+
+        InvoiceOperation pending = await service.AuthorizeWsmtxcaAsync(tenant, "mtx-query-message-" + includeError,
+            original, cancellationToken);
+        InvoiceOperation reconciled = await service.ReconcileAsync(tenant, pending.Submission.IdempotencyKey, cancellationToken);
+
+        pending.State.Should().Be(InvoiceState.Unknown);
+        reconciled.State.Should().Be(expected);
+        reconciled.ResponseXml.Should().Contain("Synthetic observation");
+        if (includeError)
+        {
+            reconciled.AuthorizationCode.Should().BeNull();
+            reconciled.ResponseXml.Should().Contain("Synthetic contradictory query error");
+        }
+        else
+            reconciled.AuthorizationCode.Should().Be("71234567890123");
+        transport.CallCount.Should().Be(2);
+        transport.Calls.Last().Action.Should().EndWith("/consultarComprobante");
+    }
+
+    [Theory]
+    [InlineData("121.00", InvoiceState.Authorized)]
+    [InlineData("121.01", InvoiceState.Conflict)]
+    public async Task ResumeAsync_compares_wsmtxca_decimal_values_without_rounding(string queriedTotalText, InvoiceState expected)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        DateTime issueDate = CivilIssueDate();
+        ComprobanteType original = MtxRequest(issueDate);
+        decimal queriedTotal = decimal.Parse(queriedTotalText, System.Globalization.NumberStyles.AllowDecimalPoint,
+            System.Globalization.CultureInfo.InvariantCulture);
+        var transport = new RecordingSoapTransport(call =>
+        {
+            if (call.ResponseType == typeof(AutorizarComprobanteResponseType)) return new AutorizarComprobanteResponseType();
+            ConsultarComprobanteResponseType response = MtxQueryResponse(original, alterFiscalField: false,
+                CodigoTipoAutorizacionSimpleType.E);
+            response.Comprobante!.ImporteTotal = queriedTotal;
+            return response;
+        });
+        var service = CreateService(database, transport, new RecordingArcaTicketProvider(TicketTestData.Create()));
+        ArcaTenantContext tenant = CreateTenant();
+
+        _ = await service.AuthorizeWsmtxcaAsync(tenant, "mtx-decimal-value", original, cancellationToken);
+        InvoiceOperation reconciled = await service.ResumeAsync(tenant, "mtx-decimal-value", cancellationToken);
+
+        reconciled.State.Should().Be(expected);
+        transport.CallCount.Should().Be(2);
+        transport.Calls.Last().Action.Should().EndWith("/consultarComprobante");
+    }
+
+    [Fact]
+    public async Task ResumeAsync_keeps_wsmtxca_whitespace_only_text_differences_conflicting()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        DateTime issueDate = CivilIssueDate();
+        ComprobanteType original = MtxRequest(issueDate);
+        original.Observaciones = string.Empty;
+        var transport = new RecordingSoapTransport(call =>
+        {
+            if (call.ResponseType == typeof(AutorizarComprobanteResponseType)) return new AutorizarComprobanteResponseType();
+            ConsultarComprobanteResponseType response = MtxQueryResponse(original, alterFiscalField: false,
+                CodigoTipoAutorizacionSimpleType.E);
+            response.Comprobante!.Observaciones = " ";
+            return response;
+        });
+        var service = CreateService(database, transport, new RecordingArcaTicketProvider(TicketTestData.Create()));
+
+        _ = await service.AuthorizeWsmtxcaAsync(CreateTenant(), "mtx-whitespace-only", original, cancellationToken);
+        InvoiceOperation reconciled = await service.ResumeAsync(CreateTenant(), "mtx-whitespace-only", cancellationToken);
+
+        reconciled.State.Should().Be(InvoiceState.Conflict);
+        transport.CallCount.Should().Be(2);
     }
 
     [Fact]
@@ -1261,6 +1605,15 @@ public sealed class SafeInvoiceServiceTests
         Opcionales = { new FexOpcional { Id = "OBSERVACION", Valor = "Entrega pactada" } }
     };
 
+    private static ClsFexRequest Wsfex1673Request(long id, int voucherType, string? paymentDate)
+    {
+        ClsFexRequest request = FexRequest(id);
+        request.CbteTipo = checked((short)voucherType);
+        request.TipoExpo = 2;
+        request.FechaPago = paymentDate!;
+        return request;
+    }
+
     private static FexAuthorizeResponse KnownMissingPermiso1550Response() => new()
     {
         FexAuthorizeResult = new FexResponseAuthorize
@@ -1273,6 +1626,37 @@ public sealed class SafeInvoiceServiceTests
                 FexEvents = new ClsFexEvents { EventCode = 1, EventMsg = "Evento informativo" }
         }
     };
+
+    private static FexAuthorizeResponse KnownForbiddenFechaPago1673Response() => new()
+    {
+        FexAuthorizeResult = new FexResponseAuthorize
+        {
+            FexErr = new ClsFexErr
+            {
+                ErrCode = 1673,
+                ErrMsg = "Para facturas de exportacion de productos y para las notas de debito y credito no informar fecha de pago"
+            },
+            FexEvents = new ClsFexEvents { EventCode = 1, EventMsg = "Evento informativo" }
+        }
+    };
+
+    private static string CurrentPositiveQueryResponse(ClsFexRequest request) => SerializeXml(new FexGetCmpResponse2
+    {
+        FexGetCmpResult = new FexGetCmpResponse
+        {
+            FexResultGet = new ClsFexGetCmpr
+            {
+                Id = request.Id,
+                CbteTipo = request.CbteTipo,
+                PuntoVta = request.PuntoVta,
+                CbteNro = request.CbteNro,
+                TipoExpo = request.TipoExpo,
+                Cae = "71234567890123",
+                Resultado = "A"
+            },
+            FexEvents = new ClsFexEvents { EventCode = 1, EventMsg = "Evento informativo" }
+        }
+    });
 
     private static string Malformed1550ResponseXml(string variant)
     {
@@ -1568,12 +1952,13 @@ public sealed class SafeInvoiceServiceTests
         return complete;
     }
 
-    private static ConsultarComprobanteResponseType MtxQueryResponse(ComprobanteType original, bool alterFiscalField)
+    private static ConsultarComprobanteResponseType MtxQueryResponse(ComprobanteType original, bool alterFiscalField,
+        CodigoTipoAutorizacionSimpleType authorizationType)
     {
         var remote = new ComprobanteType();
         CopyMatchingScalarProperties(original, remote);
         remote.CodigoAutorizacion = 71234567890123;
-        remote.CodigoTipoAutorizacion = CodigoTipoAutorizacionSimpleType.A;
+        remote.CodigoTipoAutorizacion = authorizationType;
         remote.FechaVencimiento = original.FechaEmision!.Value.AddDays(10);
         if (alterFiscalField) remote.NumeroComprobante++;
         return new ConsultarComprobanteResponseType { Comprobante = remote };

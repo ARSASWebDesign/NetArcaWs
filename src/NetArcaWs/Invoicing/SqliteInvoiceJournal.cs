@@ -221,8 +221,8 @@ public sealed class SqliteInvoiceJournal : IInvoiceJournal, IInvoiceRejectionAdj
             throw new InvoiceConflictException("The current invoice response contains contradictory or unclassifiable evidence.");
         if (evidence.OriginalSubmission != current.Submission)
             throw new InvoiceConflictException("The rejection evidence does not match the frozen invoice submission.");
-        if (!WsfexValidationRejectionClassifier.IsKnownMissingPermisoTag(current.Submission, evidence.OriginalResponseXml))
-            throw new InvoiceConflictException("The response is not the allowlisted WSFEX 1550 missing-tag rejection.");
+        if (!WsfexValidationRejectionClassifier.IsKnownTerminalValidationRejection(current.Submission, evidence.OriginalResponseXml))
+            throw new InvoiceConflictException("The response is not an allowlisted WSFEX validation rejection.");
 
         using (var revision = connection.CreateCommand())
         {

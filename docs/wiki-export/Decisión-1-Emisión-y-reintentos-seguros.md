@@ -2,7 +2,7 @@
 
 # ADR 0001: Emisión durable y reconciliación conservadora
 
-- Estado: implementación y suite local verificadas; homologación autenticada parcial y matriz completa pendiente
+- Estado: implementación y suite local verificadas; matriz autenticada local de 18 escenarios completada; la evidencia no acredita homologación de toda la biblioteca
 - Fecha de investigación: 2026-10-06
 - Alcance: operaciones unitarias de autorización CAE en WSFEv1, WSFEXv1 y WSMTXCA
 - Fuera de alcance: emisión batch durable, asignación automática de numeración,
@@ -86,7 +86,7 @@ un `ArrayErrores` no vacío y ausencia de `ComprobanteResponse` se clasifica com
 `Rejected` de acuerdo con el manual. Para `A`/`O`, el adaptador exige respuesta de
 comprobante correlacionada y CAE válido antes de guardar `Authorized`.
 
-### Excepción explícita: validación WSFEX 1550 por tag omitido
+### Excepciones explícitas: validaciones terminales WSFEX 1550 y 1673
 
 El 12 de octubre de 2026 se aprobó una excepción acotada para el rechazo de
 `Permiso_existente` omitido. El manual WSFEX describe la cancelación de la
@@ -116,9 +116,11 @@ tipada, no una captura byte por byte del intercambio HTTP/SOAP. Se preserva ese
 snapshot íntegro; no se reconstruyen nodos desconocidos descartados al deserializar.
 La adjudicación falla ante indicios positivos de identidad, incluso parciales,
 CAE, estructuras duplicadas o nombres críticos en namespaces inesperados.
-La última respuesta conservada también debe ser el 1550 permitido o una consulta
-1020 con resultado vacío y estructura reconocida. El 1020 solo evita contradecir
-la evidencia original; por sí mismo nunca permite adjudicar ni reenviar.
+La última respuesta conservada también debe ser una validación terminal allowlisted
+compatible con el snapshot (1550 o 1673 bajo sus predicados respectivos) o una
+consulta 1020 con resultado vacío y estructura reconocida. El 1020 solo evita
+contradecir la evidencia original; por sí mismo nunca permite adjudicar ni
+reenviar.
 
 La capacidad opcional `IInvoiceRejectionAdjudicationJournal` se implementa primero
 en `SqliteInvoiceJournal` y en el wrapper protegido de homologación. Los providers
@@ -127,27 +129,57 @@ adjudicación explícitamente. No se modifica su esquema ni se presume soporte.
 SQLite incorpora su ledger de auditoría de forma aditiva al abrir la base y
 conserva los datos existentes.
 
-Después del rechazo adjudicado, `ReviseRejectedAsync` sigue siendo una acción
+Después del rechazo 1550 adjudicado, `ReviseRejectedAsync` sigue siendo una acción
 explícita y versionada: prepara el tag vacío con la misma identidad e Id remoto,
 preserva el historial y no envía. Solo una llamada posterior explícita puede
 reanudar ese `Prepared`. No se reclasifican operaciones antiguas automáticamente
 al consultar o reanudar, ni se cambia el número para evitar una operación pendiente.
 
-### Caso pendiente observado: WSFEX 1673
+#### 1673: `Fecha_pago` informado en una nota de exportación
 
-El 12 de octubre de 2026, una autorización WSFEX de tipo 20 y `TipoExpo` 2,
-cuyo request incluía `Fecha_pago`, devolvió 1673. La respuesta original
-preservada contiene un `FEXErr` y no contiene `FEXResultAuth`. El manual WSFEX
-vigente establece que `Fecha_pago` no debe informarse para comprobantes cuyo tipo
-sea distinto de 19. Esta evidencia describe el error del request observado, pero
-no amplía la política de rechazo adjudicable.
+El manual WSFEX vigente establece que `Fecha_pago` no debe informarse para tipos
+distintos de 19. Se aprobó una segunda allowlist, separada de 1550 y más
+restringida que el código de error por sí solo. Solo acepta una autorización
+directa `FEXAuthorize` con código 1673 y este `ErrMsg` literal, comparado por
+ordinal exacto, sin trim ni normalización:
 
-La operación conserva estado `Unknown` y la respuesta original. La regla
-implementada de clasificación/adjudicación sigue limitada a 1550 y su evidencia
-específica; 1673 no se convierte automáticamente en `Rejected`, no habilita una
-revisión y no permite reintentar. Cualquier excepción requeriría una decisión
-explícita separada y una regla con pruebas propias. Fuente: [manual WSFEX V3.1.1,
-validación de `Fecha_pago`](https://arca.gob.ar/ws/documentacion/manuales/WSFEX-Manualparaeldesarrollador_V3.1.1_ARCA.pdf).
+> Para facturas de exportacion de productos y para las notas de debito y credito no informar fecha de pago
+
+El request congelado debe pertenecer a WSFEX tipo 20 o 21, `TipoExpo == 2`, y
+contener un único `Fecha_pago` no vacío con formato válido `yyyyMMdd`; Id remoto,
+identidad y snapshot deben coincidir exactamente. Se exige la estructura XML y
+QName del contrato, un único error y ausencia de `FEXResultAuth`. Fecha ausente,
+vacía, inválida, 1671/1672/1674, mensaje diferente, respuesta ambigua o cualquier
+resultado de autorización fallan cerrados. No se extiende la regla a `TipoExpo`
+4 ni a otros tipos de comprobante.
+
+Un rechazo 1673 inicial solo se clasifica `Rejected` cuando satisface esa regla
+completa. Para operaciones inciertas ya guardadas, la capability de adjudicación
+requiere la respuesta original íntegra, el snapshot exacto, tenant/contexto,
+versión esperada, ausencia de lease activa y auditoría SQLite append-only con
+operador, origen y motivo. La respuesta actual debe ser la misma validación 1673
+admitida o una consulta exacta 1020 estructuralmente válida sin indicios positivos;
+1020 solo evita contradecir la evidencia y nunca prueba ausencia ni rechazo. La
+transición no modifica el payload, identidad, número o Id, ni llama a ARCA.
+
+Después de adjudicar el pendiente observado, la única corrección aprobada para
+este caso es una revisión explícita y versionada que omita `Fecha_pago`, preserve
+exactamente los demás campos y mantenga la misma identidad e Id remoto. La
+adjudicación no prepara ni envía esa revisión. Una operación histórica `Unknown`
+no se reclasifica al consultar o reanudar: requiere invocar explícitamente la
+adjudicación auditada. No hay reintento, cambio de número ni reemisión automática.
+La capacidad sigue disponible solo en SQLite y el wrapper protegido; EF Core y
+providers personalizados sin ella fallan cerrados.
+
+La evidencia autenticada del caso observado es más estrecha que la política: la
+nota de débito tipo 20/Expo 2 devolvió 1673 con `Fecha_pago` y sin
+`FEXResultAuth`. La adjudicación explícita preservó el rechazo, la respuesta
+original y el registro append-only. La continuación preparó una revisión que
+quitó únicamente `Fecha_pago`, con la misma identidad e Id; ARCA la autorizó y
+la consulta exacta posterior verificó la coincidencia. La nota de crédito WSFEX
+también quedó autorizada y confirmada. Estos casos son evidencia por escenario,
+no homologación completa. Fuente: [manual WSFEX V3.1.1, validación de
+`Fecha_pago`](https://arca.gob.ar/ws/documentacion/manuales/WSFEX-Manualparaeldesarrollador_V3.1.1_ARCA.pdf).
 
 ### Reconciliación
 
@@ -159,6 +191,11 @@ respuesta con datos incompatibles queda `Conflict`. Solo una coincidencia positi
 con autorización válida puede resolver a `Authorized`. Los rechazos se determinan
 al procesar el resultado detallado de la llamada de autorización; una consulta
 vacía no basta para marcarlos.
+
+Una consulta exacta con errores de servicio no puede confirmar autorización aunque
+incluya una proyección positiva: queda inconclusa (`Unknown`). Las observaciones
+WSMTXCA no son errores; una discrepancia fiscal sin error de servicio sigue siendo
+`Conflict`.
 
 Para los strings opcionales `Obs_comerciales`, `Obs` e `Incoterms`, ausencia y
 cadena vacía se consideran representaciones equivalentes; no se recortan ni
@@ -173,6 +210,25 @@ tipos de exportación. El core conserva comparación estricta de `Incoterms_Ds`,
 identidad, CAE, autorización y contenido para la factura E autorizada.
 `ClsFexRequest` ya expone `Incoterms` e `IncotermsDs`; no se necesita ampliar la
 API pública para informar esos datos.
+
+Una consulta exacta WSMTXCA identificó diferencias solo de escala léxica en doce
+campos XSD `decimal`; los valores numéricos eran equivalentes, sin diferencias de
+GTIN, unidad ni valores por defecto. La comparación de proyección del core y del
+harness acepta igualdad numérica solo en una allowlist de paths tipados `decimal`.
+Esta regla no redondea ni tolera diferencias de valor y no muta el request
+congelado, la serialización canónica ni su hash. La corrida local final verificó
+por consulta exacta los seis escenarios WSMTXCA A/B con esta comparación.
+
+Los tres escenarios WSMTXCA A1/A2/A3 y los tres B6/B7/B8 quedaron autorizados y
+confirmados por consulta exacta. Las respuestas A incluyeron `Resultado=O` y
+observaciones 130 y 504; B incluyó `Resultado=O` y observación 504, sin errores.
+B6 había quedado inicialmente `Rejected` con error 132. El request usaba
+`codigoTipoDocumento=99` y `numeroDocumento=0`, valores de la fixture de
+consumidor final usada en WSFE que no son válidos para MTXCA. Se preparó una
+revisión explícita de la misma identidad omitiendo solo esos campos, conforme a
+la regla 128 del manual. Se preservaron el snapshot original y su hash; esta
+corrección no usó la adjudicación del core para WSFEX 1550/1673. La revisión y
+los otros escenarios B fueron autorizados y confirmados por consulta exacta.
 
 ## Persistencia y recuperación
 

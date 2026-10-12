@@ -59,6 +59,9 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
             if (authorization?.FexErr?.ErrCode == 1550)
                 return new InvoiceDecision(WsfexValidationRejectionClassifier.IsKnownMissingPermisoTag(submission, xml)
                     ? InvoiceState.Rejected : InvoiceState.Unknown, ResponseXml: xml);
+            if (authorization?.FexErr?.ErrCode == 1673)
+                return new InvoiceDecision(WsfexValidationRejectionClassifier.IsKnownForbiddenPaymentDate(submission, xml)
+                    ? InvoiceState.Rejected : InvoiceState.Unknown, ResponseXml: xml);
 
             var result = authorization?.FexResultAuth;
             if (result is null || result.Cuit != tenant.Cuit || result.Id != frozen.Id || result.PuntoVta != frozen.PuntoVta ||
@@ -188,7 +191,7 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
     }
 
     /// <summary>
-    /// Explicitly adjudicates a retained WSFEX 1550 response using the exact frozen request that produced it.
+    /// Explicitly adjudicates a retained allowlisted WSFEX validation rejection using the exact frozen request that produced it.
     /// This updates only the journal and never sends or reconciles a SOAP request.
     /// </summary>
     public async Task<InvoiceOperation> AdjudicateWsfexValidationRejectionAsync(ArcaTenantContext tenant, string key,
@@ -208,8 +211,8 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
             throw new InvoiceConflictException("The evidence must identify the exact immutable WSFEX submission being adjudicated.");
         if (!WsfexValidationRejectionClassifier.IsSafeCurrentResponseForAdjudication(current))
             throw new InvoiceConflictException("The latest stored WSFEX response is malformed, unknown, or contains potentially positive authorization evidence.");
-        if (!WsfexValidationRejectionClassifier.IsKnownMissingPermisoTag(current.Submission, evidence.OriginalResponseXml))
-            throw new InvoiceConflictException("The supplied response and frozen request do not match the approved WSFEX 1550 validation rejection.");
+        if (!WsfexValidationRejectionClassifier.IsKnownTerminalValidationRejection(current.Submission, evidence.OriginalResponseXml))
+            throw new InvoiceConflictException("The supplied response and frozen request do not match an approved WSFEX validation rejection.");
 
         return await coordinator.AdjudicateWsfexValidationRejectionAsync(tenant.TenantId, key, expectedVersion,
             evidence, cancellationToken).ConfigureAwait(false);
@@ -248,6 +251,8 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
                     { FeCompConsReq = new FeCompConsultaReq { PtoVta = id.PointOfSale, CbteTipo = id.VoucherType, CbteNro = id.VoucherNumber } }, ct).ConfigureAwait(false);
                     var remote = response.FeCompConsultarResult?.ResultGet;
                     var xml = Serialize(response);
+                    if (response.FeCompConsultarResult?.Errors.Count > 0)
+                        return new InvoiceDecision(InvoiceState.Unknown, ResponseXml: xml);
                     if (remote is null) return new InvoiceDecision(InvoiceState.Unknown, ResponseXml: xml);
                     if (remote.PtoVta != id.PointOfSale || remote.CbteTipo != id.VoucherType ||
                         !Equal(original.FeDetReq[0], Project<FecaeDetRequest>(remote)))
@@ -262,6 +267,8 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
                     { Cmp = new ClsFexGetCmp { PuntoVta = id.PointOfSale, CbteTipo = checked((short)id.VoucherType), CbteNro = id.VoucherNumber } }, ct).ConfigureAwait(false);
                     var remote = response.FexGetCmpResult?.FexResultGet;
                     var xml = Serialize(response);
+                    if (response.FexGetCmpResult?.FexErr is { ErrCode: not 0 })
+                        return new InvoiceDecision(InvoiceState.Unknown, ResponseXml: xml);
                     if (remote is null) return new InvoiceDecision(InvoiceState.Unknown, ResponseXml: xml);
                     if (remote.Id <= 0 || remote.CbteTipo <= 0 || remote.PuntoVta <= 0 || remote.CbteNro <= 0)
                         return new InvoiceDecision(InvoiceState.Unknown, ResponseXml: xml);
@@ -276,11 +283,13 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
                         CodigoTipoComprobante = checked((short)id.VoucherType), NumeroComprobante = id.VoucherNumber } }, ct).ConfigureAwait(false);
                     var remote = response.Comprobante;
                     var xml = Serialize(response);
+                    if (response.ArrayErrores.Count != 0)
+                        return new InvoiceDecision(InvoiceState.Unknown, ResponseXml: xml);
                     if (remote is null) return new InvoiceDecision(InvoiceState.Unknown, ResponseXml: xml);
                     var projection = Deserialize<ComprobanteType>(Serialize(remote));
                     projection.CodigoAutorizacion = null; projection.CodigoTipoAutorizacion = null; projection.FechaVencimiento = null;
-                    if (!Equal(original, projection)) return new InvoiceDecision(InvoiceState.Conflict, ResponseXml: xml);
-                    return remote.CodigoTipoAutorizacion?.ToString() == "A" && remote.CodigoAutorizacion is > 0
+                    if (!EqualWsmtxcaProjection(original, projection)) return new InvoiceDecision(InvoiceState.Conflict, ResponseXml: xml);
+                    return remote.CodigoTipoAutorizacion?.ToString() == "E" && remote.CodigoAutorizacion is > 0
                         ? Decision("A", remote.CodigoAutorizacion.Value.ToString(CultureInfo.InvariantCulture), xml)
                         : new InvoiceDecision(InvoiceState.Unknown, ResponseXml: xml);
                 }
@@ -321,6 +330,42 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
             : new(InvoiceState.Unknown, ResponseXml: xml);
 
     private static bool Equal<T>(T left, T right) => XNode.DeepEquals(XElement.Parse(Serialize(left)), XElement.Parse(Serialize(right)));
+
+    private static bool EqualWsmtxcaProjection(ComprobanteType left, ComprobanteType right)
+    {
+        XElement leftXml = XElement.Parse(Serialize(left), LoadOptions.PreserveWhitespace);
+        XElement rightXml = XElement.Parse(Serialize(right), LoadOptions.PreserveWhitespace);
+        NormalizeWsmtxcaDecimalValues(leftXml);
+        NormalizeWsmtxcaDecimalValues(rightXml);
+        return XNode.DeepEquals(leftXml, rightXml);
+    }
+
+    private static void NormalizeWsmtxcaDecimalValues(XElement root)
+    {
+        const NumberStyles styles = NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint;
+        foreach (XElement element in root.Descendants())
+        {
+            if (element.Name.NamespaceName.Length != 0 || !IsWsmtxcaDecimalPath(element)) continue;
+            if (element.Nodes().Count() != 1 || element.FirstNode is not XText text ||
+                !decimal.TryParse(text.Value, styles, CultureInfo.InvariantCulture, out decimal value))
+                continue;
+            element.Value = value == 0m ? "0" : value.ToString("0.############################", CultureInfo.InvariantCulture);
+        }
+    }
+
+    private static bool IsWsmtxcaDecimalPath(XElement element)
+    {
+        XElement[] ancestors = element.Ancestors().Reverse().ToArray();
+        if (ancestors.Any(ancestor => ancestor.Name.NamespaceName.Length != 0)) return false;
+        string path = string.Join("/", ancestors.Skip(1).Append(element).Select(node => node.Name.LocalName));
+        return path is "importeGravado" or "importeNoGravado" or "importeExento" or "importeSubtotal" or
+            "importeOtrosTributos" or "importeTotal" or "cotizacionMoneda" or
+            "arrayOtrosTributos/otroTributo/baseImponible" or "arrayOtrosTributos/otroTributo/importe" or
+            "arrayItems/item/cantidad" or "arrayItems/item/precioUnitario" or
+            "arrayItems/item/importeBonificacion" or "arrayItems/item/importeIVA" or
+            "arrayItems/item/importeItem" or "arraySubtotalesIVA/subtotalIVA/importe" or
+            "arrayCompradores/comprador/porcentaje";
+    }
 
     private static bool EqualWsfexProjection(ClsFexRequest expected, ClsFexRequest actual)
     {
