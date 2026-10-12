@@ -90,6 +90,30 @@ public sealed class FiscalHomologationAdaptersTests
         else Assert.Empty(request.CmpsAsoc);
     }
 
+    [Theory]
+    [InlineData(19, "20261015", true)]
+    [InlineData(20, null, false)]
+    [InlineData(21, null, false)]
+    public void Wsfex_factory_includes_payment_date_only_for_export_invoices(int voucherType,
+        string? expectedPaymentDate, bool expectedXmlElement)
+    {
+        var fixture = new FiscalExportFixture(840, 840, "Synthetic Client", "Synthetic Address", "FOREIGN-TAX-01", "USD", 1m,
+            "Advance payment", new DateOnly(2026, 10, 15), 1, [new FiscalExportItem("SKU-1", "Synthetic item", 2, 50m, 0m)]);
+        var association = voucherType == 19 ? null : new InvoiceIdentity(NetArcaWs.HealthChecks.ArcaEnvironment.Homologation,
+            20000000001, 9002, 19, 122);
+
+        ClsFexRequest request = FiscalHomologationWsfexChannel.CreateRequest(9002, voucherType, 123, 701,
+            fixture, association, new DateOnly(2026, 10, 12), 20000000001);
+        using var writer = new StringWriter(System.Globalization.CultureInfo.InvariantCulture);
+        new XmlSerializer(typeof(ClsFexRequest)).Serialize(writer, request);
+        XElement xml = XElement.Parse(writer.ToString());
+        XElement? paymentDate = xml.Descendants().SingleOrDefault(element => element.Name.LocalName == "Fecha_pago");
+
+        Assert.Equal(expectedPaymentDate, request.FechaPago);
+        Assert.Equal(expectedXmlElement, paymentDate is not null);
+        if (expectedPaymentDate is not null) Assert.Equal(expectedPaymentDate, paymentDate!.Value);
+    }
+
     [Fact]
     public void Wsfe_exact_projection_rejects_changed_iva_and_receiver()
     {
@@ -191,7 +215,7 @@ public sealed class FiscalHomologationAdaptersTests
             Id = 701, FechaCbte = "20261012", CbteTipo = 20, PuntoVta = 9002, CbteNro = 123,
             TipoExpo = 2, PermisoExistente = string.Empty, DstCmp = 840, Cliente = "Synthetic Client", CuitPaisCliente = 840,
             DomicilioCliente = "Synthetic Address", IdImpositivo = "FOREIGN-TAX-01", MonedaId = "USD", MonedaCtz = 1m,
-            ImpTotal = 100m, FormaPago = "Advance payment", FechaPago = "20261015", IdiomaCbte = 1
+            ImpTotal = 100m, FormaPago = "Advance payment", IdiomaCbte = 1
         };
         independentResponse.Items.Add(new Item
         {
@@ -214,6 +238,178 @@ public sealed class FiscalHomologationAdaptersTests
         Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsfexChannel.VerifyExactProjection(request, projection));
         projection = FiscalHomologationWsfexChannel.CreateQueryProjection(request);
         projection.Cliente = "Different synthetic buyer";
+        Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsfexChannel.VerifyExactProjection(request, projection));
+        projection = FiscalHomologationWsfexChannel.CreateQueryProjection(request);
+        projection.MonedaCtz++;
+        Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsfexChannel.VerifyExactProjection(request, projection));
+        projection = FiscalHomologationWsfexChannel.CreateQueryProjection(request);
+        projection.FechaPago = "20261015";
+        Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsfexChannel.VerifyExactProjection(request, projection));
+    }
+
+    [Theory]
+    [InlineData("Obs_comerciales")]
+    [InlineData("Obs")]
+    [InlineData("Incoterms")]
+    public void Wsfex_exact_projection_allows_absent_empty_optional_fields_without_mutating_snapshots(string field)
+    {
+        var fixture = ExportFixture();
+        var request = FiscalHomologationWsfexChannel.CreateRequest(9002, 19, 123, 701, fixture, null,
+            new DateOnly(2026, 10, 12), 20000000001);
+        foreach ((string? expectedValue, string? actualValue) in new (string?, string?)[]
+        {
+            (null, string.Empty), (string.Empty, null)
+        })
+        {
+            SetWsfexOptionalProjectionField(request, field, expectedValue);
+            ClsFexGetCmpr projection = FiscalHomologationWsfexChannel.CreateQueryProjection(request);
+            SetWsfexOptionalProjectionField(projection, field, actualValue);
+
+            FiscalHomologationWsfexChannel.VerifyExactProjection(request, projection);
+            Assert.Equal(expectedValue, GetWsfexOptionalProjectionField(request, field));
+            Assert.Equal(actualValue, GetWsfexOptionalProjectionField(projection, field));
+        }
+    }
+
+    [Fact]
+    public void Wsfex_exact_projection_allows_incoterms_null_empty_only_outside_type19_export_type1()
+    {
+        var fixture = ExportFixture();
+        var request = FiscalHomologationWsfexChannel.CreateRequest(9002, 19, 123, 701, fixture, null,
+            new DateOnly(2026, 10, 12), 20000000001);
+        request.TipoExpo = 1;
+        ClsFexGetCmpr projection = FiscalHomologationWsfexChannel.CreateQueryProjection(request);
+        projection.Incoterms = string.Empty;
+
+        Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsfexChannel.VerifyExactProjection(request, projection));
+    }
+
+    [Theory]
+    [InlineData("IncotermsDs", null, "FOB")]
+    [InlineData("IncotermsDs", null, " ")]
+    [InlineData("IncotermsDs", "0", "")]
+    [InlineData("Incoterms", "FOB", "CIF")]
+    [InlineData("Obs", null, " ")]
+    public void Wsfex_exact_projection_keeps_description_nonempty_and_whitespace_strict(string field,
+        string? expectedValue, string actualValue)
+    {
+        var fixture = ExportFixture();
+        var request = FiscalHomologationWsfexChannel.CreateRequest(9002, 19, 123, 701, fixture, null,
+            new DateOnly(2026, 10, 12), 20000000001);
+        SetWsfexOptionalProjectionField(request, field, expectedValue);
+        ClsFexGetCmpr projection = FiscalHomologationWsfexChannel.CreateQueryProjection(request);
+        SetWsfexOptionalProjectionField(projection, field, actualValue);
+
+        Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsfexChannel.VerifyExactProjection(request, projection));
+    }
+
+    private static void SetWsfexOptionalProjectionField(object target, string field, string? value)
+    {
+        switch (field)
+        {
+            case "Obs_comerciales":
+                if (target is ClsFexRequest) ((ClsFexRequest)target).ObsComerciales = value;
+                else ((ClsFexGetCmpr)target).ObsComerciales = value;
+                break;
+            case "Obs":
+                if (target is ClsFexRequest) ((ClsFexRequest)target).Obs = value;
+                else ((ClsFexGetCmpr)target).Obs = value;
+                break;
+            case "Incoterms":
+                if (target is ClsFexRequest) ((ClsFexRequest)target).Incoterms = value;
+                else ((ClsFexGetCmpr)target).Incoterms = value;
+                break;
+            case "IncotermsDs":
+                if (target is ClsFexRequest) ((ClsFexRequest)target).IncotermsDs = value;
+                else ((ClsFexGetCmpr)target).IncotermsDs = value;
+                break;
+            default: throw new ArgumentOutOfRangeException(nameof(field));
+        }
+    }
+
+    private static string? GetWsfexOptionalProjectionField(object target, string field) => (target, field) switch
+    {
+        (ClsFexRequest, "Obs_comerciales") => ((ClsFexRequest)target).ObsComerciales,
+        (ClsFexGetCmpr, "Obs_comerciales") => ((ClsFexGetCmpr)target).ObsComerciales,
+        (ClsFexRequest, "Obs") => ((ClsFexRequest)target).Obs,
+        (ClsFexGetCmpr, "Obs") => ((ClsFexGetCmpr)target).Obs,
+        (ClsFexRequest, "Incoterms") => ((ClsFexRequest)target).Incoterms,
+        (ClsFexGetCmpr, "Incoterms") => ((ClsFexGetCmpr)target).Incoterms,
+        (ClsFexRequest, "IncotermsDs") => ((ClsFexRequest)target).IncotermsDs,
+        (ClsFexGetCmpr, "IncotermsDs") => ((ClsFexGetCmpr)target).IncotermsDs,
+        _ => throw new ArgumentOutOfRangeException(nameof(field))
+    };
+
+    [Fact]
+    public void Wsfex_exact_projection_rejects_whitespace_in_optional_incoterms()
+    {
+        var fixture = ExportFixture();
+        var request = FiscalHomologationWsfexChannel.CreateRequest(9002, 19, 123, 701, fixture, null,
+            new DateOnly(2026, 10, 12), 20000000001);
+        request.Incoterms = null;
+        ClsFexGetCmpr projection = FiscalHomologationWsfexChannel.CreateQueryProjection(request);
+        projection.Incoterms = " ";
+
+        Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsfexChannel.VerifyExactProjection(request, projection));
+    }
+
+    [Theory]
+    [InlineData(19, 2, false)]
+    [InlineData(19, 2, true)]
+    [InlineData(19, 4, false)]
+    [InlineData(19, 4, true)]
+    [InlineData(20, 2, false)]
+    [InlineData(20, 2, true)]
+    [InlineData(20, 4, false)]
+    [InlineData(20, 4, true)]
+    [InlineData(21, 2, false)]
+    [InlineData(21, 2, true)]
+    [InlineData(21, 4, false)]
+    [InlineData(21, 4, true)]
+    public void Wsfex_exact_projection_accepts_query_description_zero_only_for_unset_export_incoterms(
+        int voucherType, int exportType, bool expectedEmpty)
+    {
+        var fixture = ExportFixture();
+        InvoiceIdentity? association = voucherType == 19 ? null :
+            new InvoiceIdentity(NetArcaWs.HealthChecks.ArcaEnvironment.Homologation, 20000000001, 9002, 19, 122);
+        var request = FiscalHomologationWsfexChannel.CreateRequest(9002, voucherType, 123, 701, fixture, association,
+            new DateOnly(2026, 10, 12), 20000000001);
+        request.TipoExpo = checked((short)exportType);
+        request.Incoterms = expectedEmpty ? string.Empty : null;
+        request.IncotermsDs = expectedEmpty ? string.Empty : null;
+        ClsFexGetCmpr projection = FiscalHomologationWsfexChannel.CreateQueryProjection(request);
+        projection.Incoterms = expectedEmpty ? null : string.Empty;
+        projection.IncotermsDs = "0";
+
+        FiscalHomologationWsfexChannel.VerifyExactProjection(request, projection);
+
+        Assert.Equal(expectedEmpty ? string.Empty : null, request.Incoterms);
+        Assert.Equal(expectedEmpty ? string.Empty : null, request.IncotermsDs);
+        Assert.Equal(expectedEmpty ? null : string.Empty, projection.Incoterms);
+        Assert.Equal("0", projection.IncotermsDs);
+    }
+
+    [Theory]
+    [InlineData(1, null, null, null, "0")]
+    [InlineData(3, null, null, null, "0")]
+    [InlineData(2, "FOB", null, null, "0")]
+    [InlineData(2, null, "Known description", null, "0")]
+    [InlineData(2, "FOB", null, "CIF", "0")]
+    [InlineData(2, null, "0", null, null)]
+    [InlineData(2, null, null, null, "0 ")]
+    public void Wsfex_exact_projection_rejects_description_zero_outside_exact_unset_export_guard(int exportType,
+        string? expectedCode, string? expectedDescription, string? actualCode, string? actualDescription)
+    {
+        var fixture = ExportFixture();
+        var request = FiscalHomologationWsfexChannel.CreateRequest(9002, 19, 123, 701, fixture, null,
+            new DateOnly(2026, 10, 12), 20000000001);
+        request.TipoExpo = checked((short)exportType);
+        request.Incoterms = expectedCode;
+        request.IncotermsDs = expectedDescription;
+        ClsFexGetCmpr projection = FiscalHomologationWsfexChannel.CreateQueryProjection(request);
+        projection.Incoterms = actualCode;
+        projection.IncotermsDs = actualDescription;
+
         Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsfexChannel.VerifyExactProjection(request, projection));
     }
 

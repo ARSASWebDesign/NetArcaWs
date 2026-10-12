@@ -10,7 +10,7 @@ namespace NetArcaWs.Invoicing;
 /// Durable journal for processes sharing one local SQLite database. Do not use on network filesystems.
 /// For replicas on different hosts implement IInvoiceJournal with a transactional shared database.
 /// </summary>
-public sealed class SqliteInvoiceJournal : IInvoiceJournal
+public sealed class SqliteInvoiceJournal : IInvoiceJournal, IInvoiceRejectionAdjudicationJournal
 {
     private readonly string connectionString;
     private readonly TimeProvider clock;
@@ -45,10 +45,22 @@ public sealed class SqliteInvoiceJournal : IInvoiceJournal
                 remote_request_id INTEGER,
                 PRIMARY KEY (tenant, idem, revision_no)
             );
+            CREATE TABLE IF NOT EXISTS invoice_rejection_adjudications (
+                tenant TEXT NOT NULL, idem TEXT NOT NULL, prior_version INTEGER NOT NULL,
+                rejected_version INTEGER NOT NULL, snapshot_hash TEXT NOT NULL,
+                response_sha256 TEXT NOT NULL, response_xml TEXT NOT NULL,
+                operator TEXT NOT NULL, source TEXT NOT NULL, reason TEXT NOT NULL,
+                recorded_at_utc INTEGER NOT NULL,
+                PRIMARY KEY (tenant, idem, rejected_version)
+            );
             CREATE TRIGGER IF NOT EXISTS invoice_revisions_no_update
                 BEFORE UPDATE ON invoice_revisions BEGIN SELECT RAISE(ABORT, 'invoice revisions are immutable'); END;
             CREATE TRIGGER IF NOT EXISTS invoice_revisions_no_delete
                 BEFORE DELETE ON invoice_revisions BEGIN SELECT RAISE(ABORT, 'invoice revisions are immutable'); END;
+            CREATE TRIGGER IF NOT EXISTS invoice_rejection_adjudications_no_update
+                BEFORE UPDATE ON invoice_rejection_adjudications BEGIN SELECT RAISE(ABORT, 'invoice rejection adjudications are immutable'); END;
+            CREATE TRIGGER IF NOT EXISTS invoice_rejection_adjudications_no_delete
+                BEFORE DELETE ON invoice_rejection_adjudications BEGIN SELECT RAISE(ABORT, 'invoice rejection adjudications are immutable'); END;
             """;
         command.ExecuteNonQuery();
         EnsureColumn(connection, "invoices", "remote_request_id", "INTEGER");
@@ -182,6 +194,100 @@ public sealed class SqliteInvoiceJournal : IInvoiceJournal
         return Task.FromResult<IReadOnlyList<InvoiceOperation>>(revisions);
     }
 
+    public Task<InvoiceOperation> AdjudicateWsfexValidationRejectionAsync(string tenantId, string idempotencyKey,
+        long expectedVersion, InvoiceRejectionEvidence evidence, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
+        ArgumentNullException.ThrowIfNull(evidence);
+        if (expectedVersion < 0) throw new ArgumentOutOfRangeException(nameof(expectedVersion));
+        if (!IsValidAuditValue(evidence.Operator, 128) || !IsValidAuditValue(evidence.Source, 256) ||
+            !IsValidAuditValue(evidence.Reason, 1024))
+            throw new ArgumentException("Adjudication metadata must be nonempty, bounded, and contain no control characters.", nameof(evidence));
+        if (string.IsNullOrWhiteSpace(evidence.OriginalResponseXml) || evidence.OriginalResponseXml.Length > 1024 * 1024)
+            throw new ArgumentException("The original response must be nonempty and at most 1 MiB.", nameof(evidence));
+
+        using var connection = Open();
+        using var transaction = connection.BeginTransaction(deferred: false);
+        var stored = Read(connection, transaction, tenantId, idempotencyKey)
+            ?? throw new KeyNotFoundException("The invoice operation does not exist.");
+        InvoiceOperation current = stored.Operation;
+        if (current.Version != expectedVersion || current.State is not (InvoiceState.Unknown or InvoiceState.Conflict or InvoiceState.ManualReview))
+            throw new InvoiceConflictException("Only the expected unresolved invoice version can be adjudicated.");
+        if (stored.LeaseUntil is long leaseUntil && leaseUntil > clock.GetUtcNow().ToUnixTimeMilliseconds())
+            throw new InvoiceConflictException("An active invoice lease prevents rejection adjudication.");
+        if (current.AuthorizationCode is not null || !WsfexValidationRejectionClassifier.IsSafeCurrentResponseForAdjudication(current))
+            throw new InvoiceConflictException("The current invoice response contains contradictory or unclassifiable evidence.");
+        if (evidence.OriginalSubmission != current.Submission)
+            throw new InvoiceConflictException("The rejection evidence does not match the frozen invoice submission.");
+        if (!WsfexValidationRejectionClassifier.IsKnownMissingPermisoTag(current.Submission, evidence.OriginalResponseXml))
+            throw new InvoiceConflictException("The response is not the allowlisted WSFEX 1550 missing-tag rejection.");
+
+        using (var revision = connection.CreateCommand())
+        {
+            revision.Transaction = transaction;
+            revision.CommandText = """
+                INSERT INTO invoice_revisions (tenant,idem,revision_no,service,environment,cuit,pos,type,number,payload,hash,state,version,attempt,lease_until,authorization,response,canonical_version,remote_request_id)
+                SELECT tenant,idem,(SELECT COALESCE(MAX(revision_no),0)+1 FROM invoice_revisions WHERE tenant=$tenant AND idem=$idem),
+                    service,environment,cuit,pos,type,number,payload,hash,state,version,attempt,lease_until,authorization,response,canonical_version,remote_request_id
+                FROM invoices WHERE tenant=$tenant AND idem=$idem AND version=$version;
+                """;
+            Add(revision, "$tenant", tenantId); Add(revision, "$idem", idempotencyKey); Add(revision, "$version", expectedVersion);
+            if (revision.ExecuteNonQuery() != 1) throw new InvoiceConflictException("The invoice changed while its revision was being archived.");
+        }
+
+        DateTimeOffset recordedAt = clock.GetUtcNow();
+        long rejectedVersion = checked(expectedVersion + 1);
+        string snapshotHash = ComputeSubmissionHash(current.Submission);
+        string responseHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(evidence.OriginalResponseXml)));
+        using (var update = connection.CreateCommand())
+        {
+            update.Transaction = transaction;
+            update.CommandText = "UPDATE invoices SET state=$rejected,version=$new_version,lease_until=NULL,authorization=NULL,response=$response WHERE tenant=$tenant AND idem=$idem AND version=$version AND state IN ($unknown,$conflict,$manual_review)";
+            Add(update, "$rejected", (int)InvoiceState.Rejected); Add(update, "$new_version", rejectedVersion);
+            Add(update, "$response", evidence.OriginalResponseXml); Add(update, "$tenant", tenantId); Add(update, "$idem", idempotencyKey);
+            Add(update, "$version", expectedVersion); Add(update, "$unknown", (int)InvoiceState.Unknown);
+            Add(update, "$conflict", (int)InvoiceState.Conflict); Add(update, "$manual_review", (int)InvoiceState.ManualReview);
+            if (update.ExecuteNonQuery() != 1) throw new InvoiceConflictException("The invoice changed while rejection adjudication was being saved.");
+        }
+
+        using (var audit = connection.CreateCommand())
+        {
+            audit.Transaction = transaction;
+            audit.CommandText = "INSERT INTO invoice_rejection_adjudications (tenant,idem,prior_version,rejected_version,snapshot_hash,response_sha256,response_xml,operator,source,reason,recorded_at_utc) VALUES ($tenant,$idem,$prior,$rejected,$snapshot,$response_hash,$response,$operator,$source,$reason,$recorded)";
+            Add(audit, "$tenant", tenantId); Add(audit, "$idem", idempotencyKey); Add(audit, "$prior", expectedVersion);
+            Add(audit, "$rejected", rejectedVersion); Add(audit, "$snapshot", snapshotHash); Add(audit, "$response_hash", responseHash);
+            Add(audit, "$response", evidence.OriginalResponseXml); Add(audit, "$operator", evidence.Operator);
+            Add(audit, "$source", evidence.Source); Add(audit, "$reason", evidence.Reason);
+            Add(audit, "$recorded", recordedAt.ToUnixTimeMilliseconds());
+            audit.ExecuteNonQuery();
+        }
+
+        InvoiceOperation result = Read(connection, transaction, tenantId, idempotencyKey)!.Value.Operation;
+        transaction.Commit();
+        return Task.FromResult(result);
+    }
+
+    public Task<IReadOnlyList<InvoiceRejectionAdjudication>> ListRejectionAdjudicationsAsync(string tenantId,
+        string idempotencyKey, int limit = 100, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId); ArgumentException.ThrowIfNullOrWhiteSpace(idempotencyKey);
+        if (limit is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(limit));
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT prior_version,rejected_version,snapshot_hash,response_sha256,response_xml,operator,source,reason,recorded_at_utc FROM invoice_rejection_adjudications WHERE tenant=$tenant AND idem=$idem ORDER BY rejected_version LIMIT $limit";
+        Add(command, "$tenant", tenantId); Add(command, "$idem", idempotencyKey); Add(command, "$limit", limit);
+        var records = new List<InvoiceRejectionAdjudication>();
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+            records.Add(new InvoiceRejectionAdjudication(tenantId, idempotencyKey, reader.GetInt64(0), reader.GetInt64(1),
+                reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5), reader.GetString(6),
+                reader.GetString(7), DateTimeOffset.FromUnixTimeMilliseconds(reader.GetInt64(8))));
+        return Task.FromResult<IReadOnlyList<InvoiceRejectionAdjudication>>(records);
+    }
+
     public Task<InvoiceOperation?> FindAsync(string tenantId, string idempotencyKey, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -304,6 +410,31 @@ public sealed class SqliteInvoiceJournal : IInvoiceJournal
     }
 
     private static void Add(SqliteCommand command, string name, object? value) => command.Parameters.AddWithValue(name, value ?? DBNull.Value);
+
+    private static bool IsValidAuditValue(string? value, int maximumLength) =>
+        !string.IsNullOrWhiteSpace(value) && value.Length <= maximumLength && !value.Any(char.IsControl);
+
+    private static string ComputeSubmissionHash(InvoiceSubmission submission)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        void AddString(string value)
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(value);
+            Span<byte> length = stackalloc byte[4];
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(length, bytes.Length);
+            hash.AppendData(length); hash.AppendData(bytes);
+        }
+        AddString(submission.TenantId); AddString(submission.IdempotencyKey); AddString(submission.Service);
+        AddString(((int)submission.Identity.Environment).ToString(CultureInfo.InvariantCulture));
+        AddString(submission.Identity.Cuit.ToString(CultureInfo.InvariantCulture));
+        AddString(submission.Identity.PointOfSale.ToString(CultureInfo.InvariantCulture));
+        AddString(submission.Identity.VoucherType.ToString(CultureInfo.InvariantCulture));
+        AddString(submission.Identity.VoucherNumber.ToString(CultureInfo.InvariantCulture));
+        AddString(submission.CanonicalVersion.ToString(CultureInfo.InvariantCulture));
+        AddString(submission.RemoteRequestId?.ToString(CultureInfo.InvariantCulture) ?? "");
+        AddString(submission.Payload);
+        return Convert.ToHexString(hash.GetHashAndReset());
+    }
 
     private static void Validate(InvoiceSubmission submission)
     {

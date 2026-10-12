@@ -54,8 +54,13 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
         return coordinator.SubmitAsync(submission, async ct =>
         {
             var response = await wsfex.FEXAuthorizeAsync(tenant, new FexAuthorize { Cmp = frozen }, ct).ConfigureAwait(false);
-            var result = response.FexAuthorizeResult?.FexResultAuth;
             var xml = Serialize(response);
+            FexResponseAuthorize? authorization = response.FexAuthorizeResult;
+            if (authorization?.FexErr?.ErrCode == 1550)
+                return new InvoiceDecision(WsfexValidationRejectionClassifier.IsKnownMissingPermisoTag(submission, xml)
+                    ? InvoiceState.Rejected : InvoiceState.Unknown, ResponseXml: xml);
+
+            var result = authorization?.FexResultAuth;
             if (result is null || result.Cuit != tenant.Cuit || result.Id != frozen.Id || result.PuntoVta != frozen.PuntoVta ||
                 result.CbteTipo != frozen.CbteTipo || result.CbteNro != frozen.CbteNro || result.FchCbte != frozen.FechaCbte)
                 return new(InvoiceState.Unknown, ResponseXml: xml);
@@ -182,6 +187,47 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
             frozen.CodigoTipoComprobante, frozen.NumeroComprobante, payload), expectedVersion, cancellationToken);
     }
 
+    /// <summary>
+    /// Explicitly adjudicates a retained WSFEX 1550 response using the exact frozen request that produced it.
+    /// This updates only the journal and never sends or reconciles a SOAP request.
+    /// </summary>
+    public async Task<InvoiceOperation> AdjudicateWsfexValidationRejectionAsync(ArcaTenantContext tenant, string key,
+        long expectedVersion, InvoiceRejectionEvidence evidence, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(tenant);
+        ArgumentNullException.ThrowIfNull(evidence);
+        ValidateRejectionEvidenceMetadata(evidence);
+
+        InvoiceOperation current = await coordinator.FindAsync(tenant.TenantId, key, cancellationToken).ConfigureAwait(false)
+            ?? throw new KeyNotFoundException("The invoice operation does not exist.");
+        ValidateContext(tenant, current.Submission);
+        if (current.Version != expectedVersion || current.State is not (InvoiceState.Unknown or InvoiceState.Conflict or InvoiceState.ManualReview) ||
+            current.AuthorizationCode is not null)
+            throw new InvoiceConflictException("Only the current unresolved operation without an authorization can be adjudicated.");
+        if (current.Submission.Service != "wsfex" || evidence.OriginalSubmission != current.Submission)
+            throw new InvoiceConflictException("The evidence must identify the exact immutable WSFEX submission being adjudicated.");
+        if (!WsfexValidationRejectionClassifier.IsSafeCurrentResponseForAdjudication(current))
+            throw new InvoiceConflictException("The latest stored WSFEX response is malformed, unknown, or contains potentially positive authorization evidence.");
+        if (!WsfexValidationRejectionClassifier.IsKnownMissingPermisoTag(current.Submission, evidence.OriginalResponseXml))
+            throw new InvoiceConflictException("The supplied response and frozen request do not match the approved WSFEX 1550 validation rejection.");
+
+        return await coordinator.AdjudicateWsfexValidationRejectionAsync(tenant.TenantId, key, expectedVersion,
+            evidence, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Reads the append-only audit evidence for explicit WSFEX rejection adjudications.</summary>
+    public async Task<IReadOnlyList<InvoiceRejectionAdjudication>> ListWsfexRejectionAdjudicationsAsync(
+        ArcaTenantContext tenant, string key, int limit = 100, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(tenant);
+        InvoiceOperation current = await coordinator.FindAsync(tenant.TenantId, key, cancellationToken).ConfigureAwait(false)
+            ?? throw new KeyNotFoundException("The invoice operation does not exist.");
+        ValidateContext(tenant, current.Submission);
+        if (current.Submission.Service != "wsfex")
+            throw new InvoiceConflictException("WSFEX adjudication history is available only for WSFEX operations.");
+        return await coordinator.ListRejectionAdjudicationsAsync(tenant.TenantId, key, limit, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<InvoiceOperation> ReconcileAsync(ArcaTenantContext tenant, string key, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(tenant);
@@ -217,7 +263,9 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
                     var remote = response.FexGetCmpResult?.FexResultGet;
                     var xml = Serialize(response);
                     if (remote is null) return new InvoiceDecision(InvoiceState.Unknown, ResponseXml: xml);
-                    if (!Equal(original, Project<ClsFexRequest>(remote))) return new InvoiceDecision(InvoiceState.Conflict, ResponseXml: xml);
+                    if (remote.Id <= 0 || remote.CbteTipo <= 0 || remote.PuntoVta <= 0 || remote.CbteNro <= 0)
+                        return new InvoiceDecision(InvoiceState.Unknown, ResponseXml: xml);
+                    if (!EqualWsfexProjection(original, Project<ClsFexRequest>(remote))) return new InvoiceDecision(InvoiceState.Conflict, ResponseXml: xml);
                     return remote.Resultado == "A" ? Decision("A", remote.Cae, xml) : new InvoiceDecision(InvoiceState.Unknown, ResponseXml: xml);
                 }
                 case "wsmtxca":
@@ -247,6 +295,22 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
             throw new InvoiceConflictException("The tenant context or canonical schema differs from the immutable operation.");
     }
 
+    private static void ValidateRejectionEvidenceMetadata(InvoiceRejectionEvidence evidence)
+    {
+        if (evidence.OriginalSubmission is null || string.IsNullOrWhiteSpace(evidence.OriginalResponseXml) ||
+            evidence.OriginalResponseXml.Length > 1024 * 1024)
+            throw new ArgumentException("The original submission and a bounded original response are required.", nameof(evidence));
+        ValidateAuditValue(evidence.Operator, 128, nameof(evidence.Operator));
+        ValidateAuditValue(evidence.Source, 256, nameof(evidence.Source));
+        ValidateAuditValue(evidence.Reason, 1024, nameof(evidence.Reason));
+    }
+
+    private static void ValidateAuditValue(string value, int maximumLength, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > maximumLength || value.Any(char.IsControl))
+            throw new ArgumentException("Audit metadata must be non-empty, bounded, and contain no control characters.", parameterName);
+    }
+
     private static InvoiceSubmission Submission(ArcaTenantContext tenant, string key, string service, int pos, int type, long number, string payload)
         => new(tenant.TenantId, key, service, new(tenant.Environment, tenant.Cuit, pos, type, number), payload);
 
@@ -258,9 +322,40 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
 
     private static bool Equal<T>(T left, T right) => XNode.DeepEquals(XElement.Parse(Serialize(left)), XElement.Parse(Serialize(right)));
 
+    private static bool EqualWsfexProjection(ClsFexRequest expected, ClsFexRequest actual)
+    {
+        XElement expectedXml = ParseWsfexProjection(Serialize(expected));
+        XElement actualXml = ParseWsfexProjection(Serialize(actual));
+        bool allowIncoterms = expected.CbteTipo != 19 || expected.TipoExpo != 1;
+        RemoveExactEmptyWsfexOptionals(expectedXml, allowIncoterms);
+        RemoveExactEmptyWsfexOptionals(actualXml, allowIncoterms);
+        return XNode.DeepEquals(expectedXml, actualXml);
+    }
+
+    private static void RemoveExactEmptyWsfexOptionals(XElement root, bool allowIncoterms)
+    {
+        XNamespace expectedNamespace = "http://ar.gov.afip.dif.fexv1/";
+        string[] allowedNames = allowIncoterms ? ["Obs_comerciales", "Obs", "Incoterms"] : ["Obs_comerciales", "Obs"];
+        root.Elements().Where(element => element.Name.Namespace == expectedNamespace &&
+            allowedNames.Contains(element.Name.LocalName, StringComparer.Ordinal) && !element.HasElements &&
+            element.Value.Length == 0 && !element.Attributes().Any(attribute => !attribute.IsNamespaceDeclaration))
+            .Remove();
+    }
+
+    private static XElement ParseWsfexProjection(string xml)
+    {
+        XElement root = XElement.Parse(xml, LoadOptions.PreserveWhitespace);
+        foreach (XElement parent in root.DescendantsAndSelf().Where(element => element.HasElements).ToArray())
+            parent.Nodes().OfType<XText>().Where(text => string.IsNullOrWhiteSpace(text.Value)).Remove();
+        return root;
+    }
+
     private static T Project<T>(object source) where T : new()
     {
-        var element = XElement.Parse(Serialize(source));
+        var serialized = Serialize(source);
+        var element = source is ClsFexGetCmpr && typeof(T) == typeof(ClsFexRequest)
+            ? ParseWsfexProjection(serialized)
+            : XElement.Parse(serialized);
         element.Name = XElement.Parse(Serialize(new T())).Name;
         // WSFEX uses different case for this field in request and consultation schemas.
         if (source is ClsFexGetCmpr && typeof(T) == typeof(ClsFexRequest))

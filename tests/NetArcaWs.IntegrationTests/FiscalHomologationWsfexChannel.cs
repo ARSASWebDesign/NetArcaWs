@@ -182,7 +182,8 @@ internal sealed class FiscalHomologationWsfexChannel(
             PermisoExistente = string.Empty,
             Cliente = fixture.CustomerName, CuitPaisCliente = fixture.CustomerCountryTaxCode, DomicilioCliente = fixture.CustomerAddress,
             IdImpositivo = fixture.ForeignTaxId, MonedaId = fixture.CurrencyId, MonedaCtz = fixture.CurrencyRate,
-            FormaPago = fixture.PaymentTerms, FechaPago = fixture.PaymentDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
+            FormaPago = fixture.PaymentTerms,
+            FechaPago = voucherType == 19 ? fixture.PaymentDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture) : null,
             IdiomaCbte = fixture.InvoiceLanguage, ImpTotal = fixture.Items.Sum(x => x.Quantity * x.UnitPrice - x.Discount)
         };
         foreach (FiscalExportItem item in fixture.Items)
@@ -207,8 +208,43 @@ internal sealed class FiscalHomologationWsfexChannel(
     {
         var projected = new ClsFexRequest();
         CopyQueryFields(actual, projected);
-        if (!XNode.DeepEquals(XElement.Parse(Serialize(expected)), XElement.Parse(Serialize(projected))))
+        XElement expectedXml = ParseWsfexProjection(Serialize(expected));
+        XElement actualXml = ParseWsfexProjection(Serialize(projected));
+        bool allowIncoterms = expected.CbteTipo != 19 || expected.TipoExpo != 1;
+        bool allowIncotermsDescriptionZero = expected.CbteTipo is 19 or 20 or 21 && actual.CbteTipo == expected.CbteTipo &&
+            expected.TipoExpo is 2 or 4 && IsEmptyOrNull(expected.Incoterms) && IsEmptyOrNull(expected.IncotermsDs) &&
+            IsEmptyOrNull(actual.Incoterms) && string.Equals(actual.IncotermsDs, "0", StringComparison.Ordinal);
+        RemoveExactEmptyProjectionOptionals(expectedXml, allowIncoterms, allowIncotermsDescriptionZero);
+        RemoveExactEmptyProjectionOptionals(actualXml, allowIncoterms, allowIncotermsDescriptionZero, removeZeroDescription: allowIncotermsDescriptionZero);
+        if (!XNode.DeepEquals(expectedXml, actualXml))
             throw new InvalidOperationException("WSFEX authorized query differs from the frozen export request.");
+    }
+
+    private static bool IsEmptyOrNull(string? value) => value is null or "";
+
+    private static void RemoveExactEmptyProjectionOptionals(XElement root, bool allowIncoterms,
+        bool allowIncotermsDescriptionZero, bool removeZeroDescription = false)
+    {
+        XNamespace expectedNamespace = "http://ar.gov.afip.dif.fexv1/";
+        string[] names = allowIncoterms
+            ? allowIncotermsDescriptionZero ? ["Obs_comerciales", "Obs", "Incoterms", "Incoterms_Ds"] : ["Obs_comerciales", "Obs", "Incoterms"]
+            : ["Obs_comerciales", "Obs"];
+        root.Elements().Where(element => element.Name.Namespace == expectedNamespace &&
+            names.Contains(element.Name.LocalName, StringComparer.Ordinal) && !element.HasElements &&
+            element.Value.Length == 0 && !element.Attributes().Any(attribute => !attribute.IsNamespaceDeclaration))
+            .Remove();
+        if (!removeZeroDescription) return;
+        root.Elements().Where(element => element.Name == expectedNamespace + "Incoterms_Ds" && !element.HasElements &&
+            element.Value == "0" && !element.Attributes().Any(attribute => !attribute.IsNamespaceDeclaration))
+            .Remove();
+    }
+
+    private static XElement ParseWsfexProjection(string xml)
+    {
+        XElement root = XElement.Parse(xml, LoadOptions.PreserveWhitespace);
+        foreach (XElement parent in root.DescendantsAndSelf().Where(element => element.HasElements).ToArray())
+            parent.Nodes().OfType<XText>().Where(text => string.IsNullOrWhiteSpace(text.Value)).Remove();
+        return root;
     }
 
     private static void VerifyRequestEquivalent(ClsFexRequest expected, ClsFexRequest actual)

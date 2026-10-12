@@ -40,13 +40,34 @@ Para WSFEX se usa una pareja de códigos de país/CUIT-país tomada de un ejempl
 
 ## POS, numeración y reintentos
 
-Para cada servicio se consulta su catálogo de POS CAE activos, no bloqueados y sin baja. Cuando hay más de uno, se elige determinísticamente el menor POS válido. WSFE, WSFEX y WSMTXCA mantienen elecciones independientes aunque coincidan numéricamente. Si el mismo run ya tiene una operación fiscal congelada, el POS de ese snapshot se restaura y se revalida; no se cambia a otra serie. Si el servicio no publica un POS apto, el caso falla en vez de asumir un valor de ejemplo.
+Para cada servicio se consulta su catálogo de POS CAE activos, no bloqueados y sin baja. Cuando hay más de uno, se elige determinísticamente el menor POS válido. WSMTXCA excluye el POS elegido por WSFE para evitar compartir la misma identidad fiscal. Solo ante una respuesta vacía reconocida de homologación se permiten los fixtures QA fijos: POS 1 para WSFE/WSFEX y POS 2 para WSMTXCA. No se aplica ese fallback en producción, ante otros errores ni para ignorar POS bloqueados. Si el mismo run ya tiene una operación fiscal congelada, el POS de ese snapshot se restaura y se revalida; no se cambia a otra serie.
 
 Cada número se obtiene como último autorizado más uno para el servicio/POS/tipo y se persiste con el request fiscal antes del envío. Para WSFEX también se conserva el próximo ID de request. Esa identidad candidata queda congelada en el diario local; ARCA no ofrece una reserva remota. Se vuelve a consultar la serie inmediatamente antes de autorizar. Si el número o ID dejó de ser el siguiente, se detiene; no se cambia automáticamente el número.
 
 `GITHUB_RUN_ID` forma parte de la clave estable de los 18 escenarios. Reintentar el mismo run conserva identidades, fechas, POS y payload congelado. Una nueva ejecución manual tiene otro ID y crea nuevas claves; igualmente verifica y persiste cada serie antes de emitir. Una operación incierta se reconcilia por la misma identidad. No se repite una autorización automáticamente ni se inicia el siguiente caso mientras haya un resultado no terminal. Las notas esperan a que su factura asociada quede autorizada y verificada.
 
 Todas las modalidades comparten un grupo de concurrencia. El estado y el diario quedan protegidos por el environment, y solo los procesos del repositorio oficial desde `main` pueden acceder a esos secretos. El workflow no se ejecuta para PRs ni forks.
+
+## Recuperación explícita del rechazo WSFEX 1550
+
+La respuesta original de homologación confirmó que `Permiso_existente` debe
+enviarse como elemento XML, incluso vacío. El fixture lo serializa de esa forma.
+La excepción aprobada permite reconocer únicamente ese rechazo de validación
+documentado; no interpreta cualquier error WSFEX como rechazo terminal.
+
+Si una operación anterior quedó incierta, `AdjudicateWsfexValidationRejectionAsync`
+requiere la respuesta original íntegra, su snapshot exacto, versión esperada y
+metadatos de operador, origen y motivo. Conserva evidencia inmutable y la
+operación previa y no llama a ARCA. La aplicación debe autorizar al operador y
+verificar el origen de la evidencia. Luego una revisión explícita puede preparar
+el tag vacío conservando número e Id; preparar no envía.
+
+Esta capacidad opcional está implementada en el diario SQLite core y su wrapper
+protegido. EF Core y los providers personalizados sin la capacidad la rechazan
+explícitamente. El ledger SQLite es aditivo y se incluye en el estado protegido.
+Ver el [ADR de emisión durable](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/adr/0001-safe-invoice-retries.md)
+para las condiciones exactas. El error 1020 de una consulta no permite resolver
+el rechazo, liberar la reserva ni cambiar el número.
 
 ## Lectura de resultados
 
@@ -58,10 +79,18 @@ El resumen es evidencia por escenario, no homologación universal de la bibliote
 
 En la ejecución local autorizada del 12 de octubre de 2026 se intentaron los nueve selectores autenticados de consulta. Cinco selectores de servicios pasaron; cuatro selectores de padrón fallaron con un resultado genérico del harness o de validación, sin causa exacta confirmada. El selector WSFE permitió un listado parcial según su validador. El diagnóstico tipado consultó directamente los catálogos: WSFE devolvió cero POS con error ARCA 602; WSFEX y WSMTXCA devolvieron cero POS sin código numérico de error. Todos los contadores de filtros fueron cero, así que el resultado no se atribuye a filtros locales. El diagnóstico terminó correctamente, lo que confirma que las consultas se completaron, no que los prerrequisitos fiscales estén satisfechos. Para homologación, el harness prioriza POS activos del catálogo y solo habilita el fixture QA POS 1 de WSFE/WSFEX o POS 2 de WSMTXCA cuando la respuesta tipada del catálogo está vacía y el entorno confirma homologación; este fallback no acredita una habilitación fiscal ni crea una reserva remota.
 
-En la ejecución del modo `emision`, el preflight de los 18 escenarios pasó, pero la matriz fiscal quedó incompleta. Los nueve casos WSFE se confirmaron; la factura A ya estaba autorizada y se verificó sin reenviar, y los otros ocho casos también se autorizaron y confirmaron. Un envío de factura E WSFEX quedó `Unknown`: la respuesta contenía el código 1550, sin resultado de autorización ni campos de identidad para correlacionar. La consulta exacta de la misma identidad devolvió 1020 y el diario quedó en `Conflict` con marcador pendiente. No se reintentó la escritura. El fixture futuro serializa `Permiso_existente` como elemento vacío; este ajuste solo se validó con el contrato y pruebas sintéticas, no contra ARCA. El diario del intento original permanece inmutable y no se considera resuelto. Las dos notas WSFEX y los seis casos WSMTXCA no se iniciaron porque el estado no terminal bloqueó la serie. Resultado observado: 9 de 18 confirmados, 1 `Unknown`/`Conflict`, 8 no ejecutados. Se detuvo la corrida sin más emisiones; esto no equivale a homologación integral ni a validación protegida del modo `completa`.
+En la ejecución del modo `emision`, el preflight de los 18 escenarios pasó. Los nueve casos WSFE se confirmaron; la factura A ya estaba autorizada y se verificó sin reenviar. Un envío WSFEX E quedó inicialmente `Unknown` por el código 1550 y la consulta exacta posterior devolvió 1020. La respuesta original confirmó que faltaba el tag `Permiso_existente`; se adjudicó el rechazo con la capacidad auditada SQLite y se preparó una revisión explícita con el mismo número e Id, agregando el tag vacío. ARCA autorizó esa revisión. La consulta exacta posterior coincidió en identidad, CAE, autorización y contenido tras aplicar las reglas de comparación acotadas que siguen.
+
+Para `Obs_comerciales`, `Obs` e `Incoterms`, ausencia y cadena vacía se tratan como representaciones equivalentes. No se recortan ni normalizan otros valores y el payload congelado no se modifica. Solo en el harness, para `TipoExpo` 2 o 4 y si el request no informó valores para `Incoterms` e `Incoterms_Ds`, se acepta una respuesta con `Incoterms` nulo/vacío e `Incoterms_Ds` exactamente `0` (U+0030). No se aceptan espacios, otros textos ni valores explícitos distintos; el core mantiene comparación estricta de `Incoterms_Ds`. `ClsFexRequest` ya expone ambos campos.
+
+Una nota de débito WSFEX E (tipo 20, `TipoExpo` 2) devolvió el código 1673. El request incluía `Fecha_pago`; la respuesta original preservada contiene un `FEXErr` y no contiene `FEXResultAuth`. El [manual WSFEX vigente](https://arca.gob.ar/ws/documentacion/manuales/WSFEX-Manualparaeldesarrollador_V3.1.1_ARCA.pdf) indica que `Fecha_pago` no debe informarse para comprobantes distintos del tipo 19. La operación sigue `Unknown`: la política de clasificación y adjudicación aprobada se limita a 1550. No se autorizó un reintento ni se modificó o limpió el payload o la evidencia.
+
+Estado de la matriz: diez casos confirmados (nueve WSFE y la factura WSFEX E), una nota de débito WSFEX pendiente en `Unknown` y siete escenarios no ejecutados (nota de crédito WSFEX y seis WSMTXCA). No equivale a homologación integral ni a validación protegida del modo `completa`.
 
 La inspección local del certificado encontró vencimiento el 5 de octubre de 2028 y correspondencia con su clave privada. El código ARCA 602 de WSFE significa «No existen datos en nuestros registros» según el [manual oficial vigente de WSFE (p. 20)](https://www.afip.gob.ar/ws/documentacion/manuales/manual-desarrollador-ARCA-COMPG.pdf); no indica vencimiento del certificado.
 
-Los probes públicos opt-in de ARCA ejecutaron 21 casos: 13 aprobados, 8 fallidos y 0 omitidos. WSAA público respondió; fallaron los cuatro health checks de padrón por timeout de 20 segundos y los cuatro probes Dummy de padrón por HTTP 500. Estos probes no requieren certificado. En una verificación autenticada dirigida adicional, cuatro consultas individuales de CUIT física a A4/A5/A10/A13 agotaron el tiempo de espera, aunque los cuatro tickets existentes seguían válidos y no hubo un nuevo login; esto no demuestra un problema del certificado. Los cuatro fallos de la verificación completa por selector siguen siendo un resultado separado. La prueba aislada de WSAA autenticó 1/1 con un login directo nuevo; las consultas posteriores de serie y padrón reutilizaron el ticket protegido previo, que seguía válido.
+La fábrica WSFEX solo informa `Fecha_pago` para comprobantes tipo 19 y la omite para tipos 20/21. La cobertura incluye ambos caminos y falla si una respuesta de consulta trae esa fecha inesperadamente. La validación local finalizó con build Release sin warnings ni errores y 831 pruebas: 789 aprobadas, 42 opt-in omitidas y 0 fallos. Los packs y el consumer smoke SQLite pasaron en el checkpoint de 828 pruebas; los cambios posteriores fueron solo de fábrica y no tocaron el core. Esta evidencia local no es una ejecución de CI ni una publicación.
+
+Los probes públicos opt-in más recientes ejecutaron 21 casos: 9 aprobados, 12 fallidos y 0 omitidos. WSDL respondió HTTP 200 con .NET y curl, pero ambos agotaron el tiempo al enviar el mismo Dummy. Los checks/probes públicos de padrón fallaron por HTTP 500 o timeout. Cuatro consultas autenticadas dirigidas de padrón también fallaron por HTTP 500/timeout pese a reutilizar tickets válidos; esto no demuestra un problema del certificado. No se cambiaron endpoints, umbrales ni validadores para ocultar estos fallos externos.
 
 Los opt-in de persistencia en contenedores locales aprobaron 134/134 casos: MySQL 8.4.11 34/34, MariaDB 11.4.13 34/34, PostgreSQL 17.6 33/33 y SQL Server 16.0.4295.3 33/33, con 0 omitidos y 0 fallos. Los contenedores x86_64 corrieron emulados en macOS ARM, por lo que esta ejecución no sustituye la CI nativa.

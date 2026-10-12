@@ -26,6 +26,21 @@ public sealed record InvoiceDecision(InvoiceState State, string? AuthorizationCo
     public override string ToString() => $"Invoice decision {State} (fiscal data hidden)";
 }
 
+/// <summary>Protected evidence for an explicit WSFEX validation-rejection adjudication.</summary>
+public sealed record InvoiceRejectionEvidence(InvoiceSubmission OriginalSubmission, string OriginalResponseXml,
+    string Operator, string Source, string Reason)
+{
+    public override string ToString() => "Invoice rejection evidence (fiscal data hidden)";
+}
+
+/// <summary>Immutable audit evidence for an adjudicated WSFEX validation rejection.</summary>
+public sealed record InvoiceRejectionAdjudication(string TenantId, string IdempotencyKey, long PriorVersion,
+    long RejectedVersion, string SnapshotHash, string OriginalResponseSha256, string OriginalResponseXml,
+    string Operator, string Source, string Reason, DateTimeOffset RecordedAtUtc)
+{
+    public override string ToString() => "Invoice rejection adjudication (fiscal data hidden)";
+}
+
 public sealed class InvoiceConflictException(string message) : InvalidOperationException(message);
 
 /// <summary>Atomic durable operations; providers must enforce fiscal uniqueness across tenants and services.</summary>
@@ -41,4 +56,17 @@ public interface IInvoiceJournal
     Task<InvoiceLease?> TryAcquireAsync(string tenantId, string idempotencyKey, TimeSpan leaseDuration, bool reconciliation,
         CancellationToken cancellationToken = default);
     Task<InvoiceOperation> CompleteAsync(InvoiceLease lease, InvoiceDecision decision, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Optional durable capability for explicitly adjudicating a narrowly allowlisted WSFEX validation rejection.
+/// Providers that do not implement it fail closed; the base journal contract remains source-compatible.
+/// </summary>
+public interface IInvoiceRejectionAdjudicationJournal
+{
+    Task<InvoiceOperation> AdjudicateWsfexValidationRejectionAsync(string tenantId, string idempotencyKey,
+        long expectedVersion, InvoiceRejectionEvidence evidence, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<InvoiceRejectionAdjudication>> ListRejectionAdjudicationsAsync(string tenantId,
+        string idempotencyKey, int limit = 100, CancellationToken cancellationToken = default);
 }

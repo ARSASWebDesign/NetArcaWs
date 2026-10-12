@@ -4,7 +4,7 @@ using NetArcaWs.Invoicing;
 namespace NetArcaWs.IntegrationTests;
 
 /// <summary>SQLite invoice journal whose every durable mutation is backed up into the protected bundle.</summary>
-public sealed class ProtectedSqliteInvoiceJournal : IInvoiceJournal
+public sealed class ProtectedSqliteInvoiceJournal : IInvoiceJournal, IInvoiceRejectionAdjudicationJournal
 {
     private readonly ProtectedHomologationStateSession state;
     private readonly IInvoiceJournal inner;
@@ -69,6 +69,17 @@ public sealed class ProtectedSqliteInvoiceJournal : IInvoiceJournal
     public Task<IReadOnlyList<InvoiceOperation>> ListRevisionsAsync(
         string tenantId, string idempotencyKey, CancellationToken cancellationToken = default)
         => inner.ListRevisionsAsync(tenantId, idempotencyKey, cancellationToken);
+
+    public Task<InvoiceOperation> AdjudicateWsfexValidationRejectionAsync(
+        string tenantId, string idempotencyKey, long expectedVersion, InvoiceRejectionEvidence evidence,
+        CancellationToken cancellationToken = default)
+        => MutateAsync(() => ((IInvoiceRejectionAdjudicationJournal)inner)
+            .AdjudicateWsfexValidationRejectionAsync(tenantId, idempotencyKey, expectedVersion, evidence, cancellationToken), cancellationToken);
+
+    public Task<IReadOnlyList<InvoiceRejectionAdjudication>> ListRejectionAdjudicationsAsync(
+        string tenantId, string idempotencyKey, int limit = 100, CancellationToken cancellationToken = default)
+        => ((IInvoiceRejectionAdjudicationJournal)inner)
+            .ListRejectionAdjudicationsAsync(tenantId, idempotencyKey, limit, cancellationToken);
 
     public Task<InvoiceOperation?> FindAsync(string tenantId, string idempotencyKey, CancellationToken cancellationToken = default)
         => inner.FindAsync(tenantId, idempotencyKey, cancellationToken);

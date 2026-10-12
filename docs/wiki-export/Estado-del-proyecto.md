@@ -164,17 +164,43 @@ consultas se completaron, no que los prerrequisitos fiscales estén satisfechos.
 homologación, el harness prioriza POS activos del catálogo y solo habilita el fixture
 QA POS 1 de WSFE/WSFEX o POS 2 de WSMTXCA cuando la respuesta tipada del catálogo
 está vacía y el entorno confirma homologación; este fallback no acredita una
-habilitación fiscal ni crea una reserva remota. Tras el cambio, el preflight de los
-18 escenarios pasó, pero la ejecución fiscal quedó incompleta: los nueve casos WSFE
-fueron confirmados. El primero, factura A, ya estaba autorizado y se verificó sin
-reenviar; los otros ocho casos WSFE también se autorizaron y confirmaron. Un envío de
-factura E WSFEX quedó `Unknown`: su respuesta contenía el código 1550, sin resultado
-de autorización ni campos de identidad para correlacionar. La consulta exacta de la
-misma identidad devolvió 1020 y el diario quedó en `Conflict` con marcador pendiente.
-No se reintentó la escritura. El fixture futuro serializa `Permiso_existente` como elemento vacío; este ajuste solo se validó con el contrato y pruebas sintéticas, no contra ARCA. El diario del intento original permanece inmutable y no se considera resuelto. Las dos notas WSFEX y los seis casos WSMTXCA no se
-iniciaron porque el estado no terminal bloqueó la serie. Resultado observado: 9 de
-18 confirmados, 1 `Unknown`/`Conflict`, 8 no ejecutados; no es una homologación
-integral. Se detuvo la corrida sin más emisiones.
+habilitación fiscal ni crea una reserva remota.
+
+En la primera corrida, el preflight de los 18 escenarios pasó y los nueve casos
+WSFE se confirmaron. Un envío WSFEX E quedó inicialmente `Unknown` con 1550; la
+consulta exacta posterior devolvió 1020. La respuesta original confirmó que
+faltaba el tag `Permiso_existente`. Se adjudicó el rechazo con la capacidad
+auditada SQLite y se preparó una revisión explícita con el mismo número e Id,
+agregando el tag vacío. ARCA autorizó esa revisión. La consulta exacta posterior
+coincidió en identidad, CAE, autorización y contenido luego de las reglas de
+comparación documentadas más abajo.
+
+Para la proyección del harness, ausencia y cadena vacía son equivalentes en
+`Obs_comerciales`, `Obs` e `Incoterms`; no se recortan ni normalizan otros valores
+y el payload congelado no cambia. Además, solo para `TipoExpo` 2 o 4, si
+`Incoterms` e `Incoterms_Ds` no informaron valores, el harness acepta `Incoterms`
+nulo/vacío e `Incoterms_Ds` exactamente `0` (U+0030). No acepta otros textos,
+espacios ni valores explícitos distintos. El core conserva la comparación estricta
+de `Incoterms_Ds`. `ClsFexRequest` ya expone `Incoterms` e `IncotermsDs`.
+
+La operación WSFEX E de nota de débito (tipo 20, `TipoExpo` 2) devolvió el código
+1673. El request incluía `Fecha_pago`; la respuesta original se preservó, contiene
+un `FEXErr` y no contiene `FEXResultAuth`. El manual WSFEX vigente indica que
+`Fecha_pago` no debe informarse para comprobantes distintos del tipo 19. La
+operación permanece `Unknown`: la política aprobada de clasificación/adjudicación
+sigue limitada al caso 1550 y no autoriza reintentos. No se cambió ni se limpió el
+payload o la evidencia.
+
+Estado observado de la matriz: diez casos confirmados (nueve WSFE y la factura
+WSFEX E), una nota de débito WSFEX pendiente en `Unknown` y siete escenarios no
+ejecutados (nota de crédito WSFEX y seis WSMTXCA). Esto no es una homologación
+integral. La fábrica WSFEX ahora solo informa `Fecha_pago` para comprobantes tipo
+19 y la omite para tipos 20/21; se agregó cobertura para ambos caminos y para
+rechazar una respuesta de consulta que incluya inesperadamente esa fecha. El
+build Release finalizó con 0 warnings y 0 errors; la suite registró 831 pruebas,
+789 aprobadas, 42 opt-in omitidas y 0 fallos. Los packs y el consumer smoke SQLite
+habían pasado en el checkpoint de 828 pruebas; desde entonces los cambios fueron
+solo de fábrica, sin cambios al core. Es validación local, sin CI ni publicación.
 
 Validaciones complementarias del 12 de octubre de 2026: la inspección local del
 certificado encontró fecha de vencimiento 2028-10-05 y correspondencia con su clave
@@ -186,11 +212,21 @@ PostgreSQL 17.6 33/33 y SQL Server 16.0.4295.3 33/33; 0 omitidos y 0 fallos.
 Los contenedores x86_64 corrieron emulados en macOS ARM, por lo que no sustituyen
 la ejecución nativa de CI.
 
-Los probes públicos opt-in de ARCA ejecutaron 21 casos: 13 aprobados, 8 fallidos,
-0 omitidos. WSAA público respondió; fallaron los cuatro health checks de padrón por
-timeout de 20 segundos y los cuatro probes Dummy de padrón por HTTP 500. Estos
-probes públicos no requieren certificado. En una verificación autenticada dirigida
-adicional, cuatro consultas individuales de CUIT física a A4/A5/A10/A13 agotaron
-el tiempo de espera, aunque los cuatro tickets existentes seguían válidos y no hubo
-un nuevo login; esto no demuestra un problema del certificado. Los cuatro fallos de
-la verificación completa por selector siguen siendo un resultado separado. La prueba aislada de WSAA autenticó 1/1 con un login directo nuevo; las consultas posteriores de serie y padrón reutilizaron el ticket protegido previo, que seguía válido.
+Investigación posterior del 12 de octubre: la respuesta original íntegra WSFEX
+se conservaba en un respaldo privado y confirmó que el 1550 exige enviar el tag
+`Permiso_existente`. Su snapshot coincide exactamente con el diario actual.
+Se aprobó una excepción específica y recuperación auditada, documentada en ADR
+0001: capacidad opcional SQLite, evidencia inmutable, versión esperada y revisión
+posterior explícita con la misma identidad e Id. No se amplía automáticamente a
+EF Core ni a otros errores. Un checkpoint anterior aprobó 735/777 pruebas; otro
+posterior, antes del cambio de fábrica más reciente, aprobó 786/828. El resultado
+actual de 831 pruebas se detalla arriba. Estos artefactos son locales; no hubo
+publicación ni CI de GitHub para estas validaciones.
+
+En la repetición pública más reciente se aprobaron 9 de 21 probes y fallaron 12,
+sin omisiones. WSDL respondió HTTP 200 tanto con .NET como con curl, pero ambos
+agotaron el tiempo al enviar el mismo Dummy. No se demostró una discrepancia de
+contrato ni de proxy. Los cuatro checks/probes públicos de padrón continúan con
+HTTP 500 o timeout; cuatro consultas autenticadas dirigidas de padrón también
+fallaron con HTTP 500/timeout pese a reutilizar tickets válidos. No se cambiaron
+endpoints, umbrales ni validadores para ocultar estos fallos externos.

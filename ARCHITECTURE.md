@@ -227,6 +227,17 @@ publicación futura. Aplican las reglas del
 [ADR 0001](docs/adr/0001-safe-invoice-retries.md); una prueba de diario no prueba
 la garantía del ciclo fiscal completo.
 
+La adjudicación explícita de la validación WSFEX 1550 por tag omitido usa la
+capacidad opcional `IInvoiceRejectionAdjudicationJournal`. El diario SQLite core
+conserva atómicamente la evidencia original en un ledger inmutable, archiva la
+operación previa y cambia únicamente el estado de la versión esperada a
+`Rejected`. No envía SOAP, no cambia la identidad ni corrige el payload. Una
+revisión posterior explícita mantiene número e Id remoto. El wrapper de
+homologación respalda también este ledger en el estado protegido. Los providers
+sin esta capacidad, incluido EF Core en esta etapa, fallan explícitamente; no
+se agregan tablas EF ni migraciones de sus motores por esta API. Las consultas
+negativas o incompletas permanecen inciertas y no habilitan reenvíos.
+
 ### Persistencia opcional con Entity Framework Core
 
 El paquete `NetArcaWs.EntityFrameworkCore` implementa `IInvoiceJournal` sobre

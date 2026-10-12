@@ -2,7 +2,7 @@
 
 # ADR 0001: Emisión durable y reconciliación conservadora
 
-- Estado: implementación y suite local verificadas; homologación autenticada pendiente
+- Estado: implementación y suite local verificadas; homologación autenticada parcial y matriz completa pendiente
 - Fecha de investigación: 2026-10-06
 - Alcance: operaciones unitarias de autorización CAE en WSFEv1, WSFEXv1 y WSMTXCA
 - Fuera de alcance: emisión batch durable, asignación automática de numeración,
@@ -86,6 +86,71 @@ un `ArrayErrores` no vacío y ausencia de `ComprobanteResponse` se clasifica com
 `Rejected` de acuerdo con el manual. Para `A`/`O`, el adaptador exige respuesta de
 comprobante correlacionada y CAE válido antes de guardar `Authorized`.
 
+### Excepción explícita: validación WSFEX 1550 por tag omitido
+
+El 12 de octubre de 2026 se aprobó una excepción acotada para el rechazo de
+`Permiso_existente` omitido. El manual WSFEX describe la cancelación de la
+ejecución ante anomalías y asigna 1550 a este campo. La respuesta original
+observada exige enviar el tag aun cuando su valor sea vacío; el WSDL permite
+omitirlo, por lo que la validación de negocio es más estricta que el XSD.
+
+Solo una respuesta directa de `FEXAuthorize`, con 1550, mensaje confirmatorio de
+tag omitido, ausencia de `FEXResultAuth` y snapshot aplicable que realmente omitió
+el campo, puede clasificarse como `Rejected` por esta excepción. Otros errores,
+mensajes ausentes o diferentes, un tag ya presente o un resultado de autorización
+contradictorio conservan incertidumbre. `FEXGetCMP` 1020 nunca acredita rechazo
+ni ausencia segura y no habilita reenvíos. Un resultado de consulta vacío o con
+identidad incompleta conserva `Unknown`; solo un registro completo permite
+comparar el contenido fiscal y decidir si existe un conflicto.
+
+Para una operación anterior incierta, la adjudicación requiere una llamada
+explícita con la respuesta original íntegra y su snapshot original idéntico al
+actual, contexto autorizado, versión esperada y metadatos de operador, origen y
+motivo. El diario valida la misma excepción, rechaza trabajo activo y conserva
+atómicamente evidencia inmutable, la operación previa y el rechazo adjudicado.
+No modifica payload, identidad, número ni Id remoto y no llama a ARCA. La
+aplicación es responsable de autenticar al operador y comprobar la procedencia
+del archivo de evidencia; el clasificador no verifica firmas de autor de SOAP.
+La evidencia XML retenida por el adaptador es la serialización de la respuesta
+tipada, no una captura byte por byte del intercambio HTTP/SOAP. Se preserva ese
+snapshot íntegro; no se reconstruyen nodos desconocidos descartados al deserializar.
+La adjudicación falla ante indicios positivos de identidad, incluso parciales,
+CAE, estructuras duplicadas o nombres críticos en namespaces inesperados.
+La última respuesta conservada también debe ser el 1550 permitido o una consulta
+1020 con resultado vacío y estructura reconocida. El 1020 solo evita contradecir
+la evidencia original; por sí mismo nunca permite adjudicar ni reenviar.
+
+La capacidad opcional `IInvoiceRejectionAdjudicationJournal` se implementa primero
+en `SqliteInvoiceJournal` y en el wrapper protegido de homologación. Los providers
+sin esta capacidad, incluido el diario EF Core en esta etapa, rechazan la
+adjudicación explícitamente. No se modifica su esquema ni se presume soporte.
+SQLite incorpora su ledger de auditoría de forma aditiva al abrir la base y
+conserva los datos existentes.
+
+Después del rechazo adjudicado, `ReviseRejectedAsync` sigue siendo una acción
+explícita y versionada: prepara el tag vacío con la misma identidad e Id remoto,
+preserva el historial y no envía. Solo una llamada posterior explícita puede
+reanudar ese `Prepared`. No se reclasifican operaciones antiguas automáticamente
+al consultar o reanudar, ni se cambia el número para evitar una operación pendiente.
+
+### Caso pendiente observado: WSFEX 1673
+
+El 12 de octubre de 2026, una autorización WSFEX de tipo 20 y `TipoExpo` 2,
+cuyo request incluía `Fecha_pago`, devolvió 1673. La respuesta original
+preservada contiene un `FEXErr` y no contiene `FEXResultAuth`. El manual WSFEX
+vigente establece que `Fecha_pago` no debe informarse para comprobantes cuyo tipo
+sea distinto de 19. Esta evidencia describe el error del request observado, pero
+no amplía la política de rechazo adjudicable.
+
+La operación conserva estado `Unknown` y la respuesta original. La regla
+implementada de clasificación/adjudicación sigue limitada a 1550 y su evidencia
+específica; 1673 no se convierte automáticamente en `Rejected`, no habilita una
+revisión y no permite reintentar. Cualquier excepción requeriría una decisión
+explícita separada y una regla con pruebas propias. Fuente: [manual WSFEX V3.1.1,
+validación de `Fecha_pago`](https://arca.gob.ar/ws/documentacion/manuales/WSFEX-Manualparaeldesarrollador_V3.1.1_ARCA.pdf).
+
+### Reconciliación
+
 La reconciliación consulta la identidad exacta y compara todos los campos fiscales
 que el adaptador puede proyectar contra el request congelado. Una respuesta
 negativa, vacía, parcial o no concluyente nunca se interpreta como prueba
@@ -94,6 +159,20 @@ respuesta con datos incompatibles queda `Conflict`. Solo una coincidencia positi
 con autorización válida puede resolver a `Authorized`. Los rechazos se determinan
 al procesar el resultado detallado de la llamada de autorización; una consulta
 vacía no basta para marcarlos.
+
+Para los strings opcionales `Obs_comerciales`, `Obs` e `Incoterms`, ausencia y
+cadena vacía se consideran representaciones equivalentes; no se recortan ni
+normalizan otros valores, y el payload congelado no se modifica. La excepción
+`Incoterms_Ds="0"` pertenece exclusivamente a la proyección del harness: para
+WSFEX con `TipoExpo` 2 o 4, si los valores del request para `Incoterms` e
+`Incoterms_Ds` son nulos/vacíos, se considera equivalente una respuesta con
+`Incoterms` nulo/vacío e `Incoterms_Ds` exactamente `0`. No aplica a valores no
+vacíos informados, otros textos o espacios, valores distintos de `0` ni otros
+tipos de exportación. El core conserva comparación estricta de `Incoterms_Ds`, incluido
+`0`. Estas reglas se aplicaron a la consulta exacta posterior, que coincidió en
+identidad, CAE, autorización y contenido para la factura E autorizada.
+`ClsFexRequest` ya expone `Incoterms` e `IncotermsDs`; no se necesita ampliar la
+API pública para informar esos datos.
 
 ## Persistencia y recuperación
 
@@ -204,8 +283,9 @@ La evidencia de contratos desplegados y manuales se registra en
 [`healthchecks-contracts.md`](Contratos-de-health-checks),
 [`docs/reference/contracts`](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/contracts) y
 [ADR 0004](Decisi%C3%B3n-4-Contratos-SOAP-p%C3%BAblicos). Revalidar las versiones al implementar
-cada cambio. No se afirma homologación de emisión sin una ejecución real con
-credenciales autorizadas.
+cada cambio. Las ejecuciones reales de escenarios seleccionados no equivalen a la
+homologación integral de la matriz; documentar por separado autorizaciones,
+consultas exactas y casos pendientes.
 
 - [ARCA, homologación externa y versiones WSFEv1/WSMTXCA](https://www.arca.gob.ar/fe/ayuda/homologacion_externa.asp)
 - [ARCA, manual WSFEv1 V4.7](https://www.arca.gob.ar/ws/documentacion/manuales/manual-desarrollador-ARCA-COMPG.pdf)
