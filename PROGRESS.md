@@ -104,17 +104,17 @@ Decisiones: [contexto multitenant](docs/adr/0002-arca-tenant-context.md) y
 Las fuentes de la wiki se mantienen en `docs/wiki/` y `docs/wiki-export/`; la
 revisión del repositorio publicada se registra en `SOURCE_COMMIT` del repositorio wiki.
 
-El nuevo workflow agrega el modo `completa`: nueve selectores autenticados, más
-comprobantes B/C WSFE con números explícitos. Ticket WSAA y diario SQLite se
-restauran y persisten mediante el secreto privado del environment. El TA se renueva
-al vencer; las operaciones inciertas se reconcilian sin reenviar, y solo un snapshot
-`Prepared` puede reanudarse bajo la validación explícita de numeración. La
-implementación quedó verificada offline: restore locked y build Release de la solución
-pasaron sin advertencias; la suite completa aprobó 644 pruebas, omitió 42 opt-in y
-no tuvo fallos (686 total, 17 s). La ejecución protegida integral desde `main` queda
-pendiente de integrar este cambio y configurar `HOMOLOGATION_STATE_TOKEN` en el
-environment. `HOMOLOGATION_STATE` se inicializa automáticamente y debe conservarse
-sin edición manual.
+El workflow ofrece únicamente los modos `consultas`, `emision` y `completa`. La
+matriz contiene 18 escenarios fiscales tipados; los POS y números se descubren y
+consultan desde catálogos y series vigentes, y la identidad candidata se congela en
+el diario local; ARCA no ofrece aquí una reserva remota. Ticket WSAA y diario
+SQLite se restauran y persisten mediante el secreto privado del environment. El TA
+se renueva al vencer; las operaciones inciertas se reconcilian sin reenviar, y solo
+un snapshot `Prepared` puede reanudarse bajo validación explícita de numeración.
+La implementación quedó verificada offline: restore locked y build Release de la
+solución pasaron sin advertencias; la suite completa aprobó 654 pruebas, omitió 42
+opt-in y no tuvo fallos (696 total, 23 s). `HOMOLOGATION_STATE` se inicializa
+automáticamente y debe conservarse sin edición manual.
 
 La evidencia protegida reciente en el [`main` de `a0b07d6`](https://github.com/ARSASWebDesign/NetArcaWs/commit/a0b07d689796de14aa2d43f3173c98bf03de1250),
 el 7 de octubre de 2026, cubre piezas separadas, no el nuevo modo completo: la
@@ -149,7 +149,17 @@ archivos PEM o abrir estado protegido, sin recibir certificado, CUIT emisor ni P
 el test normal repite la validación.
 
 Los cambios locales tienen pruebas sintéticas de script, perfil, asociaciones,
-proyecciones fiscales, reinicio de operaciones y estado durable. Esto no prueba
-la autenticación, elegibilidad o aceptación real de los fixtures en ARCA. La
-validación autenticada local integral sigue pendiente antes de la entrega a GitHub;
-no se ejecutó una emisión en esta actualización.
+proyecciones fiscales, reinicio de operaciones y estado durable. La ejecución
+autenticada local autorizada del 12 de octubre de 2026 intentó los nueve selectores
+de consulta: cinco selectores de servicios pasaron y cuatro selectores de padrón
+fallaron con un resultado genérico del harness o de validación, sin causa exacta
+confirmada. El listado WSFE fue parcial según el validador. El diagnóstico tipado posterior
+consultó los catálogos directamente: WSFE devolvió cero POS con error ARCA 602;
+WSFEX y WSMTXCA devolvieron cero POS sin código numérico de error. Todos los
+contadores de filtros fueron cero, por lo que no se atribuye el resultado a filtros
+locales. El proceso de diagnóstico terminó correctamente, lo que confirma que las
+consultas se completaron, no que los prerrequisitos fiscales estén satisfechos. La
+selección automática quedó bloqueada antes de la matriz. No se ejecutó ninguno
+de los 18 escenarios de emisión. La evidencia de consultas es selectiva y no prueba
+la autenticación, elegibilidad o aceptación real de todos los fixtures en ARCA; la
+matriz fiscal autenticada sigue pendiente.
