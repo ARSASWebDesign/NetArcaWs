@@ -77,6 +77,36 @@ public sealed class ProtectedSqliteInvoiceJournal : IInvoiceJournal
         string tenantId, int limit = 100, CancellationToken cancellationToken = default)
         => inner.ListPendingAsync(tenantId, limit, cancellationToken);
 
+    /// <summary>Checks every nonterminal row, including operations hidden from ListPending by an active lease.</summary>
+    public async Task<bool> HasUnresolvedOperationsAsync(string tenantId, string? exceptIdempotencyKey = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        await mutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var connectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = databasePath,
+                Mode = SqliteOpenMode.ReadOnly,
+                Pooling = false
+            }.ToString();
+            await using var connection = new SqliteConnection(connectionString);
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            await using var command = connection.CreateCommand();
+            command.CommandText = exceptIdempotencyKey is null
+                ? "SELECT EXISTS(SELECT 1 FROM invoices WHERE tenant=$tenant AND state NOT IN ($authorized,$rejected))"
+                : "SELECT EXISTS(SELECT 1 FROM invoices WHERE tenant=$tenant AND state NOT IN ($authorized,$rejected) AND idem<>$except)";
+            command.Parameters.AddWithValue("$tenant", tenantId);
+            command.Parameters.AddWithValue("$authorized", (int)InvoiceState.Authorized);
+            command.Parameters.AddWithValue("$rejected", (int)InvoiceState.Rejected);
+            if (exceptIdempotencyKey is not null) command.Parameters.AddWithValue("$except", exceptIdempotencyKey);
+            object? result = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            return Convert.ToInt32(result, System.Globalization.CultureInfo.InvariantCulture) != 0;
+        }
+        finally { mutationGate.Release(); }
+    }
+
     public async Task<InvoiceLease?> TryAcquireAsync(
         string tenantId,
         string idempotencyKey,

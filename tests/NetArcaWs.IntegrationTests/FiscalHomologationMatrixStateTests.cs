@@ -68,11 +68,11 @@ public sealed class FiscalHomologationMatrixStateTests
         {
             var store = new MatrixStateStore(Now);
             var state = await ProtectedHomologationStateSession.OpenAsync(store, Ct, new FixedClock(Now));
+            var journal = await CreateJournalAsync(root, state);
 
             await Assert.ThrowsAsync<InvalidOperationException>(() => state.StoreJournalSnapshotAsync(RandomNumberGenerator.GetBytes(40_000), Ct));
-            Assert.Equal(1, store.SaveCount);
+            Assert.Equal(2, store.SaveCount);
 
-            var journal = new SqliteInvoiceJournal(Path.Combine(root, "journal.sqlite"));
             var tenant = CreateTenant();
             var channel = new FakeChannel(journal);
             await Assert.ThrowsAsync<InvalidOperationException>(() => FiscalHomologationMatrix.RunAsync("workflow-56",
@@ -94,8 +94,8 @@ public sealed class FiscalHomologationMatrixStateTests
         Directory.CreateDirectory(root);
         try
         {
-            var journal = new SqliteInvoiceJournal(Path.Combine(root, "journal.sqlite"));
             var state = await ProtectedHomologationStateSession.OpenAsync(new MatrixStateStore(Now), Ct, new FixedClock(Now));
+            var journal = await CreateJournalAsync(root, state);
             var tenant = CreateTenant();
             var misrouted = new FakeChannel(journal, "wsfex");
 
@@ -118,9 +118,9 @@ public sealed class FiscalHomologationMatrixStateTests
         Directory.CreateDirectory(root);
         try
         {
-            var journal = new SqliteInvoiceJournal(Path.Combine(root, "journal.sqlite"));
             var store = new MatrixStateStore(Now);
             var state = await ProtectedHomologationStateSession.OpenAsync(store, Ct, new FixedClock(Now));
+            var journal = await CreateJournalAsync(root, state);
             using RSA rsa = RSA.Create(2048);
             var request = new CertificateRequest("CN=synthetic-fixture", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             using X509Certificate2 certificate = request.CreateSelfSigned(Now.AddDays(-1), Now.AddDays(1));
@@ -155,9 +155,9 @@ public sealed class FiscalHomologationMatrixStateTests
         Directory.CreateDirectory(root);
         try
         {
-            var journal = new SqliteInvoiceJournal(Path.Combine(root, "journal.sqlite"));
             var store = new MatrixStateStore(Now);
             var state = await ProtectedHomologationStateSession.OpenAsync(store, Ct, new FixedClock(Now));
+            var journal = await CreateJournalAsync(root, state);
             var tenant = CreateTenant();
             await journal.PrepareAsync(new(tenant.TenantId, "prior-pending", "other",
                 new(tenant.Environment, tenant.Cuit, 55, 1, 1), "frozen"), Ct);
@@ -165,6 +165,35 @@ public sealed class FiscalHomologationMatrixStateTests
 
             await Assert.ThrowsAsync<InvalidOperationException>(() => FiscalHomologationMatrix.RunAsync("workflow-50",
                 [new("test", 6, "invoice-b")], tenant, journal, state,
+                new Dictionary<string, IFiscalHomologationChannel> { ["test"] = channel },
+                new Dictionary<string, int> { ["test"] = 7 }, new FiscalHomologationReceiver(80, 0, 5, true), Ct));
+
+            Assert.Equal(0, channel.LastQueries);
+            Assert.Equal(0, channel.Submissions);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public async Task New_run_on_different_series_is_blocked_by_an_active_lease()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"matrix-active-lease-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var state = await ProtectedHomologationStateSession.OpenAsync(new MatrixStateStore(Now), Ct, new FixedClock(Now));
+            var journal = await CreateJournalAsync(root, state);
+            var tenant = CreateTenant();
+            await journal.PrepareAsync(new(tenant.TenantId, "leased-prior", "other",
+                new(tenant.Environment, tenant.Cuit, 55, 1, 1), "frozen"), Ct);
+            InvoiceLease? lease = await journal.TryAcquireAsync(tenant.TenantId, "leased-prior", TimeSpan.FromMinutes(10), false, Ct);
+            Assert.NotNull(lease);
+            Assert.Empty(await journal.ListPendingAsync(tenant.TenantId, cancellationToken: Ct));
+            Assert.True(await journal.HasUnresolvedOperationsAsync(tenant.TenantId, cancellationToken: Ct));
+            var channel = new FakeChannel(journal);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => FiscalHomologationMatrix.RunAsync("workflow-active",
+                [new("test", 6, "different-series")], tenant, journal, state,
                 new Dictionary<string, IFiscalHomologationChannel> { ["test"] = channel },
                 new Dictionary<string, int> { ["test"] = 7 }, new FiscalHomologationReceiver(80, 0, 5, true), Ct));
 
@@ -205,18 +234,21 @@ public sealed class FiscalHomologationMatrixStateTests
         Directory.CreateDirectory(root);
         try
         {
-            var journal = new SqliteInvoiceJournal(Path.Combine(root, "journal.sqlite"));
             var state = await ProtectedHomologationStateSession.OpenAsync(new MatrixStateStore(Now), Ct, new FixedClock(Now));
+            var journal = await CreateJournalAsync(root, state);
             var tenant = CreateTenant();
             var channel = new FakeChannel(journal);
+            var reported = new List<FiscalHomologationCaseResult>();
             var results = await FiscalHomologationMatrix.RunAsync("workflow-52",
                 [new("test", 6, "invoice-a"), new("test", 7, "debit-a", "invoice-a")], tenant, journal, state,
                 new Dictionary<string, IFiscalHomologationChannel> { ["test"] = channel },
-                new Dictionary<string, int> { ["test"] = 7 }, new FiscalHomologationReceiver(80, 0, 5, true), Ct);
+                new Dictionary<string, int> { ["test"] = 7 }, new FiscalHomologationReceiver(80, 0, 5, true), Ct,
+                (result, _) => { reported.Add(result); return Task.CompletedTask; });
 
             Assert.Equal(6, channel.AssociatedInvoice?.VoucherType);
             Assert.Equal(results[0].Number, channel.AssociatedInvoice?.VoucherNumber);
             Assert.Equal(2, channel.Submissions);
+            Assert.Equal(results.Select(item => item.ScenarioName), reported.Select(item => item.ScenarioName));
         }
         finally { Directory.Delete(root, recursive: true); }
     }
@@ -228,8 +260,8 @@ public sealed class FiscalHomologationMatrixStateTests
         Directory.CreateDirectory(root);
         try
         {
-            var journal = new SqliteInvoiceJournal(Path.Combine(root, "journal.sqlite"));
             var state = await ProtectedHomologationStateSession.OpenAsync(new MatrixStateStore(Now), Ct, new FixedClock(Now));
+            var journal = await CreateJournalAsync(root, state);
             var tenant = CreateTenant();
             var wsfe = new FakeChannel(journal, "wsfe");
             var wsfex = new FakeChannel(journal, "wsfex");
@@ -251,8 +283,8 @@ public sealed class FiscalHomologationMatrixStateTests
         Directory.CreateDirectory(root);
         try
         {
-            var journal = new SqliteInvoiceJournal(Path.Combine(root, "journal.sqlite"));
             var state = await ProtectedHomologationStateSession.OpenAsync(new MatrixStateStore(Now), Ct, new FixedClock(Now));
+            var journal = await CreateJournalAsync(root, state);
             var tenant = CreateTenant();
             var wsfe = new FakeChannel(journal, "wsfe");
             var wsfex = new FakeChannel(journal, "wsfex");
@@ -277,6 +309,9 @@ public sealed class FiscalHomologationMatrixStateTests
         return new ArcaTenantContext("tenant-fixture", 20123456786, ArcaEnvironment.Homologation,
             WsaaCertificateContent.FromPem(certificate.ExportCertificatePem(), rsa.ExportPkcs8PrivateKeyPem()));
     }
+
+    private static Task<ProtectedSqliteInvoiceJournal> CreateJournalAsync(string root, ProtectedHomologationStateSession state)
+        => ProtectedSqliteInvoiceJournal.CreateAsync(state, Path.Combine(root, "protected-journal"), new FixedClock(Now), Ct);
 
     private sealed class MatrixStateStore(DateTimeOffset now, string? initialValue = null, bool exists = false) : IProtectedHomologationStateStore
     {

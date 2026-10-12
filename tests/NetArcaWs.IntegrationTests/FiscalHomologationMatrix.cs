@@ -49,7 +49,8 @@ internal static class FiscalHomologationMatrix
         IReadOnlyDictionary<string, IFiscalHomologationChannel> channels,
         IReadOnlyDictionary<string, int> channelPointsOfSale,
         FiscalHomologationReceiver receiver,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<FiscalHomologationCaseResult, CancellationToken, Task>? onCaseCompleted = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runId);
         ArgumentNullException.ThrowIfNull(scenarios);
@@ -64,6 +65,8 @@ internal static class FiscalHomologationMatrix
         if (scenarios.Count == 0) throw new ArgumentException("At least one explicit fiscal scenario is required.", nameof(scenarios));
         if (runId.Length > 128 || receiver.DocumentType <= 0 || receiver.DocumentNumber < 0 || !receiver.FixtureReviewed)
             throw new ArgumentException("A typed receiver fixture is required.", nameof(receiver));
+        if (journal is not ProtectedSqliteInvoiceJournal protectedJournal)
+            throw new InvalidOperationException("Fiscal matrix requires the protected SQLite invoice journal.");
         // Fail closed before any channel catalogue/number query if a prior protected-state write failed.
         _ = await state.ListVerifiedSeriesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -131,7 +134,8 @@ internal static class FiscalHomologationMatrix
                         await channel.VerifyExactAsync(tenant, existing, cancellationToken).ConfigureAwait(false);
                         await RecordVerifiedSummaryAsync(state, channel.Service, tenant, pos, scenario.VoucherType,
                             existing.Submission.Identity.VoucherNumber, cancellationToken).ConfigureAwait(false);
-                        results.Add(new(scenario.Name, channel.Service, scenario.VoucherType, pos, existing.Submission.Identity.VoucherNumber, true, existing.State));
+                        await ReportResultAsync(results, onCaseCompleted,
+                            new(scenario.Name, channel.Service, scenario.VoucherType, pos, existing.Submission.Identity.VoucherNumber, true, existing.State), cancellationToken).ConfigureAwait(false);
                         continue;
                     }
                     if (existing.State is not (InvoiceState.Prepared or InvoiceState.Unknown or InvoiceState.Conflict or
@@ -139,16 +143,20 @@ internal static class FiscalHomologationMatrix
                         throw new InvalidOperationException($"Scenario '{scenario.Name}' remains {existing.State}; no automatic revision or resend is allowed.");
                     if (existing.State != InvoiceState.Prepared)
                     {
+                        if (await protectedJournal.HasUnresolvedOperationsAsync(tenant.TenantId, key, cancellationToken).ConfigureAwait(false))
+                            throw new InvalidOperationException("Another fiscal operation is unresolved; reconcile it before continuing the matrix.");
                         InvoiceOperation reconciled = await channel.ReconcileAsync(tenant, key, cancellationToken).ConfigureAwait(false);
                         if (reconciled.State != InvoiceState.Authorized)
                             throw new InvalidOperationException($"Scenario '{scenario.Name}' remains {reconciled.State}; matrix advancement is stopped.");
                         await channel.VerifyExactAsync(tenant, reconciled, cancellationToken).ConfigureAwait(false);
                         await RecordVerifiedSummaryAsync(state, channel.Service, tenant, pos, scenario.VoucherType,
                             reconciled.Submission.Identity.VoucherNumber, cancellationToken).ConfigureAwait(false);
-                        results.Add(new(scenario.Name, channel.Service, scenario.VoucherType, pos,
-                            reconciled.Submission.Identity.VoucherNumber, true, reconciled.State));
+                        await ReportResultAsync(results, onCaseCompleted, new(scenario.Name, channel.Service,
+                            scenario.VoucherType, pos, reconciled.Submission.Identity.VoucherNumber, true, reconciled.State), cancellationToken).ConfigureAwait(false);
                         continue;
                     }
+                    if (await protectedJournal.HasUnresolvedOperationsAsync(tenant.TenantId, key, cancellationToken).ConfigureAwait(false))
+                        throw new InvalidOperationException("Another fiscal operation is unresolved; reconcile it before resuming this prepared scenario.");
                     long remoteLast = await channel.QueryLastAuthorizedAsync(tenant, pos, scenario.VoucherType, cancellationToken).ConfigureAwait(false);
                     if (existing.Submission.Identity.VoucherNumber != remoteLast + 1)
                         throw new InvalidOperationException($"Prepared scenario '{scenario.Name}' is no longer the immediate next number; it remains frozen.");
@@ -158,11 +166,12 @@ internal static class FiscalHomologationMatrix
                     await channel.VerifyExactAsync(tenant, resumed, cancellationToken).ConfigureAwait(false);
                     await RecordVerifiedSummaryAsync(state, channel.Service, tenant, pos, scenario.VoucherType,
                         resumed.Submission.Identity.VoucherNumber, cancellationToken).ConfigureAwait(false);
-                    results.Add(new(scenario.Name, channel.Service, scenario.VoucherType, pos, resumed.Submission.Identity.VoucherNumber, true, resumed.State));
+                    await ReportResultAsync(results, onCaseCompleted, new(scenario.Name, channel.Service, scenario.VoucherType,
+                        pos, resumed.Submission.Identity.VoucherNumber, true, resumed.State), cancellationToken).ConfigureAwait(false);
                     continue;
                 }
 
-                if (await HasUnresolvedMatrixOperationAsync(journal, tenant, cancellationToken).ConfigureAwait(false))
+                if (await protectedJournal.HasUnresolvedOperationsAsync(tenant.TenantId, cancellationToken: cancellationToken).ConfigureAwait(false))
                     throw new InvalidOperationException("A prior matrix fiscal operation is unresolved; no new number was selected.");
                 long last = await channel.QueryLastAuthorizedAsync(tenant, pos, scenario.VoucherType, cancellationToken).ConfigureAwait(false);
                 if (last < 0 || last >= 99999999) throw new InvalidOperationException("Service returned an invalid last authorized number.");
@@ -181,18 +190,20 @@ internal static class FiscalHomologationMatrix
                     throw new InvalidOperationException($"Scenario '{scenario.Name}' ended in {sent.State}; matrix advancement is stopped.");
                 await channel.VerifyExactAsync(tenant, sent, cancellationToken).ConfigureAwait(false);
                 await RecordVerifiedSummaryAsync(state, channel.Service, tenant, pos, scenario.VoucherType, next, cancellationToken).ConfigureAwait(false);
-                results.Add(new(scenario.Name, channel.Service, scenario.VoucherType, pos, next, false, sent.State));
+                await ReportResultAsync(results, onCaseCompleted,
+                    new(scenario.Name, channel.Service, scenario.VoucherType, pos, next, false, sent.State), cancellationToken).ConfigureAwait(false);
             }
             finally { gate.Release(); }
         }
         return results;
     }
 
-    private static async Task<bool> HasUnresolvedMatrixOperationAsync(IInvoiceJournal journal, ArcaTenantContext tenant,
-        CancellationToken cancellationToken)
+    private static async Task ReportResultAsync(List<FiscalHomologationCaseResult> results,
+        Func<FiscalHomologationCaseResult, CancellationToken, Task>? callback,
+        FiscalHomologationCaseResult result, CancellationToken cancellationToken)
     {
-        IReadOnlyList<InvoiceOperation> pending = await journal.ListPendingAsync(tenant.TenantId, 1000, cancellationToken).ConfigureAwait(false);
-        return pending.Count > 0;
+        results.Add(result);
+        if (callback is not null) await callback(result, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task RecordVerifiedSummaryAsync(ProtectedHomologationStateSession state, string service,
