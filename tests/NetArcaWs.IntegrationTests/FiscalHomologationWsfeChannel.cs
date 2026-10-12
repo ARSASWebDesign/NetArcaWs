@@ -12,7 +12,8 @@ internal sealed class FiscalHomologationWsfeChannel(
     SafeInvoiceService invoices,
     FiscalHomologationReceiver registeredTaxpayerReceiver,
     FiscalHomologationReceiver consumerFinalReceiver,
-    TimeProvider? clock = null) : IFiscalHomologationChannel
+    TimeProvider? clock = null,
+    bool allowFixedQaPointOfSaleForEmptyCatalogue = false) : IFiscalHomologationChannel
 {
     private int? configuredPointOfSale;
     public string Service => "wsfe";
@@ -61,12 +62,23 @@ internal sealed class FiscalHomologationWsfeChannel(
         int posNumber = configuredPointOfSale ?? throw new InvalidOperationException("WSFE point of sale was not validated before catalogue lookup.");
         var pointResponse = await service.FEParamGetPtosVentaAsync(tenant, new FeParamGetPtosVenta(), cancellationToken).ConfigureAwait(false);
         var points = pointResponse.FeParamGetPtosVentaResult ?? throw new InvalidOperationException("WSFE returned no point-of-sale catalogue.");
-        if (points.Errors.Count != 0) throw new InvalidOperationException("WSFE returned errors while reading the point-of-sale catalogue.");
+        bool empty602 = IsKnownEmptyQaPointOfSaleCatalogue(points, tenant.Environment);
+        if (points.Errors.Count != 0 && !empty602) throw new InvalidOperationException("WSFE returned errors while reading the point-of-sale catalogue.");
         var selected = points.ResultGet.SingleOrDefault(x => x?.Nro == posNumber);
-        return selected is not null && string.Equals(selected.Bloqueado, "N", StringComparison.OrdinalIgnoreCase) &&
+        bool active = selected is not null && string.Equals(selected.Bloqueado, "N", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(selected.EmisionTipo, "CAE", StringComparison.OrdinalIgnoreCase) &&
             (string.IsNullOrWhiteSpace(selected.FchBaja) || selected.FchBaja == "00000000");
+        return active || IsFixedQaPointOfSaleAllowed(points, tenant.Environment, posNumber,
+            allowFixedQaPointOfSaleForEmptyCatalogue);
     }
+
+    internal static bool IsKnownEmptyQaPointOfSaleCatalogue(FePtoVentaResponse response, ArcaEnvironment environment)
+        => environment == ArcaEnvironment.Homologation && response.ResultGet.Count == 0 && response.Errors.Count == 1 &&
+            response.Errors[0]?.Code == 602;
+
+    internal static bool IsFixedQaPointOfSaleAllowed(FePtoVentaResponse response, ArcaEnvironment environment,
+        int pointOfSale, bool enabled)
+        => enabled && pointOfSale == 1 && IsKnownEmptyQaPointOfSaleCatalogue(response, environment);
 
     public async Task<long> QueryLastAuthorizedAsync(ArcaTenantContext tenant, int pointOfSale, int voucherType, CancellationToken cancellationToken)
     {
@@ -161,12 +173,15 @@ internal sealed class FiscalHomologationWsfeChannel(
 
     internal static void VerifyExactProjection(FecaeDetRequest expected, FeCompConsResponse actual)
     {
+        bool productConcept = expected.Concepto == 1 && actual.Concepto == 1;
         var projected = new FecaeDetRequest
         {
             Concepto = actual.Concepto, DocTipo = actual.DocTipo, DocNro = actual.DocNro, CbteDesde = actual.CbteDesde,
             CbteHasta = actual.CbteHasta, CbteFch = actual.CbteFch, ImpTotal = actual.ImpTotal, ImpTotConc = actual.ImpTotConc,
             ImpNeto = actual.ImpNeto, ImpOpEx = actual.ImpOpEx, ImpTrib = actual.ImpTrib, ImpIva = actual.ImpIva,
-            FchServDesde = actual.FchServDesde, FchServHasta = actual.FchServHasta, FchVtoPago = actual.FchVtoPago,
+            FchServDesde = NormalizeEmptyProductConceptDate(expected.FchServDesde, actual.FchServDesde, productConcept),
+            FchServHasta = NormalizeEmptyProductConceptDate(expected.FchServHasta, actual.FchServHasta, productConcept),
+            FchVtoPago = NormalizeEmptyProductConceptDate(expected.FchVtoPago, actual.FchVtoPago, productConcept),
             MonId = actual.MonId, MonCotiz = actual.MonCotiz, CanMisMonExt = actual.CanMisMonExt,
             CondicionIvaReceptorId = actual.CondicionIvaReceptorId, PeriodoAsoc = actual.PeriodoAsoc
         };
@@ -178,6 +193,9 @@ internal sealed class FiscalHomologationWsfeChannel(
         Copy(actual.Actividades, projected.Actividades, x => new Actividad { Id = x.Id });
         if (!WireEqual(expected, projected)) throw new InvalidOperationException("WSFE authorized query differs from the frozen request fiscal fields.");
     }
+
+    private static string? NormalizeEmptyProductConceptDate(string? expected, string? actual, bool productConcept)
+        => productConcept && expected is null && actual == string.Empty ? null : actual;
 
     private FiscalHomologationReceiver ReceiverFor(int voucherType) => voucherType is 1 or 2 or 3 ? registeredTaxpayerReceiver : consumerFinalReceiver;
     private static void ValidateReceiver(FiscalHomologationReceiver receiver, bool registered)

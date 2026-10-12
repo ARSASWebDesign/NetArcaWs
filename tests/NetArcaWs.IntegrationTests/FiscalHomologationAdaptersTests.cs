@@ -4,6 +4,7 @@ using NetArcaWs.Contracts.WsfexV1;
 using NetArcaWs.Invoicing;
 using NetArcaWs.Multitenancy;
 using NetArcaWs.Cryptography;
+using System.Xml.Linq;
 using System.Xml.Serialization;
 using Xunit;
 
@@ -67,6 +68,15 @@ public sealed class FiscalHomologationAdaptersTests
             20000000001, 9002, 19, 122);
         var request = FiscalHomologationWsfexChannel.CreateRequest(9002, voucherType, 123, 701, fixture, association,
             new DateOnly(2026, 10, 12), 20000000001);
+        Assert.Equal(string.Empty, request.PermisoExistente);
+        using (var writer = new StringWriter(System.Globalization.CultureInfo.InvariantCulture))
+        {
+            new XmlSerializer(typeof(ClsFexRequest)).Serialize(writer, request);
+            XElement permission = XElement.Parse(writer.ToString()).Descendants()
+                .Single(element => element.Name.LocalName == "Permiso_existente");
+            Assert.Equal(string.Empty, permission.Value);
+            Assert.Empty(permission.Elements());
+        }
         Assert.Equal(701, request.Id);
         Assert.Equal(voucherType, request.CbteTipo);
         Assert.Equal(100m, request.ImpTotal);
@@ -101,6 +111,42 @@ public sealed class FiscalHomologationAdaptersTests
         remote = FiscalHomologationWsfeChannel.CreateQueryProjection(request, "A", "99999999999999");
         remote.DocNro++;
         Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsfeChannel.VerifyExactProjection(request.FeDetReq.Single(), remote));
+    }
+
+    [Fact]
+    public void Wsfe_exact_projection_normalizes_only_empty_dates_for_product_concept_one()
+    {
+        var request = FiscalHomologationWsfeChannel.CreateRequest(9001, 1, 123, ReceiverFor(1), null,
+            new DateOnly(2026, 10, 12));
+        FecaeDetRequest expected = request.FeDetReq.Single();
+        FeCompConsResponse remote = FiscalHomologationWsfeChannel.CreateQueryProjection(request, "A", "99999999999999");
+        remote.FchServDesde = string.Empty;
+        remote.FchServHasta = string.Empty;
+        remote.FchVtoPago = string.Empty;
+        FiscalHomologationWsfeChannel.VerifyExactProjection(expected, remote);
+
+        foreach (int concept in new[] { 2, 3 })
+        {
+            FecaeDetRequest serviceExpected = XmlRoundTrip(expected);
+            serviceExpected.Concepto = concept;
+            FeCompConsResponse serviceRemote = XmlRoundTrip(remote);
+            serviceRemote.Concepto = concept;
+            Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsfeChannel.VerifyExactProjection(serviceExpected, serviceRemote));
+        }
+
+        FeCompConsResponse validDate = XmlRoundTrip(remote);
+        validDate.FchServDesde = "20261012";
+        Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsfeChannel.VerifyExactProjection(expected, validDate));
+
+        FeCompConsResponse changedAmount = XmlRoundTrip(remote);
+        changedAmount.ImpTotal++;
+        Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsfeChannel.VerifyExactProjection(expected, changedAmount));
+        FeCompConsResponse changedDocument = XmlRoundTrip(remote);
+        changedDocument.DocNro++;
+        Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsfeChannel.VerifyExactProjection(expected, changedDocument));
+        FeCompConsResponse changedVat = XmlRoundTrip(remote);
+        changedVat.Iva.Single().Importe++;
+        Assert.Throws<InvalidOperationException>(() => FiscalHomologationWsfeChannel.VerifyExactProjection(expected, changedVat));
     }
 
     [Fact]
@@ -143,7 +189,7 @@ public sealed class FiscalHomologationAdaptersTests
         var independentResponse = new ClsFexGetCmpr
         {
             Id = 701, FechaCbte = "20261012", CbteTipo = 20, PuntoVta = 9002, CbteNro = 123,
-            TipoExpo = 2, DstCmp = 840, Cliente = "Synthetic Client", CuitPaisCliente = 840,
+            TipoExpo = 2, PermisoExistente = string.Empty, DstCmp = 840, Cliente = "Synthetic Client", CuitPaisCliente = 840,
             DomicilioCliente = "Synthetic Address", IdImpositivo = "FOREIGN-TAX-01", MonedaId = "USD", MonedaCtz = 1m,
             ImpTotal = 100m, FormaPago = "Advance payment", FechaPago = "20261015", IdiomaCbte = 1
         };
@@ -212,6 +258,24 @@ public sealed class FiscalHomologationAdaptersTests
             9001, registered, invoiceId);
         Assert.Throws<InvoiceConflictException>(() => mtxca.ValidateFrozenSubmission(mtxcaFrozen,
             new("wsmtxca", 2, "wsmtxca-a-nota-debito", "wsmtxca-a-factura"), 9001, registered, changedInvoice));
+    }
+
+    [Fact]
+    public void Wsfex_frozen_submission_with_omitted_permission_is_rejected_against_the_explicit_empty_fixture()
+    {
+        var tenant = new ArcaTenantContext("synthetic", 20000000001, NetArcaWs.HealthChecks.ArcaEnvironment.Homologation,
+            WsaaCertificateContent.FromPem("synthetic certificate", "synthetic key"));
+        var fixture = new FiscalExportFixture(840, 840, "Synthetic Client", "Synthetic Address", "FOREIGN-TAX-01", "USD", 1m,
+            "Advance payment", new DateOnly(2026, 10, 15), 1,
+            [new FiscalExportItem("SKU-1", "Synthetic item", 2, 50m, 0m)]);
+        ClsFexRequest oldRequest = FiscalHomologationWsfexChannel.CreateRequest(9002, 19, 123, 701, fixture, null,
+            new DateOnly(2026, 10, 12), tenant.Cuit);
+        oldRequest.PermisoExistente = null!;
+        InvoiceSubmission frozen = SafeInvoiceService.CreateWsfexSubmission(tenant, "old-omitted-permission", oldRequest);
+        var channel = new FiscalHomologationWsfexChannel(null!, null!, fixture);
+
+        Assert.Throws<InvoiceConflictException>(() => channel.ValidateFrozenSubmission(frozen,
+            new("wsfex", 19, "wsfex-e-factura"), 9002, new(99, 0, 5, FixtureReviewed: true), null));
     }
 
     [Fact]

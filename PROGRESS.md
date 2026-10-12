@@ -112,8 +112,8 @@ SQLite se restauran y persisten mediante el secreto privado del environment. El 
 se renueva al vencer; las operaciones inciertas se reconcilian sin reenviar, y solo
 un snapshot `Prepared` puede reanudarse bajo validación explícita de numeración.
 La implementación quedó verificada offline: restore locked y build Release de la
-solución pasaron sin advertencias; la suite completa aprobó 654 pruebas, omitió 42
-opt-in y no tuvo fallos (696 total, 23 s). `HOMOLOGATION_STATE` se inicializa
+solución pasaron sin advertencias; la suite completa aprobó 665 pruebas, omitió 42
+opt-in y no tuvo fallos (707 total). `HOMOLOGATION_STATE` se inicializa
 automáticamente y debe conservarse sin edición manual.
 
 La evidencia protegida reciente en el [`main` de `a0b07d6`](https://github.com/ARSASWebDesign/NetArcaWs/commit/a0b07d689796de14aa2d43f3173c98bf03de1250),
@@ -158,8 +158,37 @@ consultó los catálogos directamente: WSFE devolvió cero POS con error ARCA 60
 WSFEX y WSMTXCA devolvieron cero POS sin código numérico de error. Todos los
 contadores de filtros fueron cero, por lo que no se atribuye el resultado a filtros
 locales. El proceso de diagnóstico terminó correctamente, lo que confirma que las
-consultas se completaron, no que los prerrequisitos fiscales estén satisfechos. La
-selección automática quedó bloqueada antes de la matriz. No se ejecutó ninguno
-de los 18 escenarios de emisión. La evidencia de consultas es selectiva y no prueba
-la autenticación, elegibilidad o aceptación real de todos los fixtures en ARCA; la
-matriz fiscal autenticada sigue pendiente.
+consultas se completaron, no que los prerrequisitos fiscales estén satisfechos. Para
+homologación, el harness prioriza POS activos del catálogo y solo habilita el fixture
+QA POS 1 de WSFE/WSFEX o POS 2 de WSMTXCA cuando la respuesta tipada del catálogo
+está vacía y el entorno confirma homologación; este fallback no acredita una
+habilitación fiscal ni crea una reserva remota. Tras el cambio, el preflight de los
+18 escenarios pasó, pero la ejecución fiscal quedó incompleta: los nueve casos WSFE
+fueron confirmados. El primero, factura A, ya estaba autorizado y se verificó sin
+reenviar; los otros ocho casos WSFE también se autorizaron y confirmaron. Un envío de
+factura E WSFEX quedó `Unknown`: su respuesta contenía el código 1550, sin resultado
+de autorización ni campos de identidad para correlacionar. La consulta exacta de la
+misma identidad devolvió 1020 y el diario quedó en `Conflict` con marcador pendiente.
+No se reintentó la escritura. El fixture futuro serializa `Permiso_existente` como elemento vacío; este ajuste solo se validó con el contrato y pruebas sintéticas, no contra ARCA. El diario del intento original permanece inmutable y no se considera resuelto. Las dos notas WSFEX y los seis casos WSMTXCA no se
+iniciaron porque el estado no terminal bloqueó la serie. Resultado observado: 9 de
+18 confirmados, 1 `Unknown`/`Conflict`, 8 no ejecutados; no es una homologación
+integral. Se detuvo la corrida sin más emisiones.
+
+Validaciones complementarias del 12 de octubre de 2026: la inspección local del
+certificado encontró fecha de vencimiento 2028-10-05 y correspondencia con su clave
+privada. El código ARCA 602 de WSFE significa «No existen datos en nuestros
+registros» según el [manual oficial vigente de WSFE (p. 20)](https://www.afip.gob.ar/ws/documentacion/manuales/manual-desarrollador-ARCA-COMPG.pdf);
+no indica vencimiento del certificado. Los opt-in de persistencia en contenedores
+locales aprobaron 134/134 casos: MySQL 8.4.11 34/34, MariaDB 11.4.13 34/34,
+PostgreSQL 17.6 33/33 y SQL Server 16.0.4295.3 33/33; 0 omitidos y 0 fallos.
+Los contenedores x86_64 corrieron emulados en macOS ARM, por lo que no sustituyen
+la ejecución nativa de CI.
+
+Los probes públicos opt-in de ARCA ejecutaron 21 casos: 13 aprobados, 8 fallidos,
+0 omitidos. WSAA público respondió; fallaron los cuatro health checks de padrón por
+timeout de 20 segundos y los cuatro probes Dummy de padrón por HTTP 500. Estos
+probes públicos no requieren certificado. En una verificación autenticada dirigida
+adicional, cuatro consultas individuales de CUIT física a A4/A5/A10/A13 agotaron
+el tiempo de espera, aunque los cuatro tickets existentes seguían válidos y no hubo
+un nuevo login; esto no demuestra un problema del certificado. Los cuatro fallos de
+la verificación completa por selector siguen siendo un resultado separado. La prueba aislada de WSAA autenticó 1/1 con un login directo nuevo; las consultas posteriores de serie y padrón reutilizaron el ticket protegido previo, que seguía válido.

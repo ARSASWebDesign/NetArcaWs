@@ -31,7 +31,8 @@ internal sealed class FiscalHomologationWsfexChannel(
     IWsfexv1Service service,
     SafeInvoiceService invoices,
     FiscalExportFixture fixture,
-    TimeProvider? clock = null) : IFiscalHomologationChannel
+    TimeProvider? clock = null,
+    bool allowFixedQaPointOfSaleForEmptyCatalogue = false) : IFiscalHomologationChannel
 {
     private long? lastObservedExportId;
     private int? configuredPointOfSale;
@@ -92,16 +93,23 @@ internal sealed class FiscalHomologationWsfexChannel(
             throw new InvalidOperationException("WSFEX returned an error while validating export fixture catalogues.");
         int pos = configuredPointOfSale ?? throw new InvalidOperationException("WSFEX point of sale was not validated before catalogue lookup.");
         var selectedPoint = pointResult.FexResultGet.SingleOrDefault(x => x?.PveNro == pos);
+        bool fixedQaPoint = IsFixedQaPointOfSaleAllowed(pointResult, tenant.Environment, pos,
+            allowFixedQaPointOfSaleForEmptyCatalogue);
         return result.FexResultGet.Any(x => x?.CbteId == voucherType) &&
             exportResult.FexResultGet.Any(x => x?.TexId == 2) &&
             destinationResult.FexResultGet.Any(x => x?.DstCodigo == fixture.DestinationCountryCode.ToString(CultureInfo.InvariantCulture)) &&
             buyerResult.FexResultGet.Any(x => x?.DstCuit == fixture.CustomerCountryTaxCode) &&
             currencyResult.FexResultGet.Any(x => x?.MonId == fixture.CurrencyId) &&
             languageResult.FexResultGet.Any(x => x?.IdiId == fixture.InvoiceLanguage) &&
-            unitResult.FexResultGet.Any(x => x?.UmedId == 7) && selectedPoint is not null &&
+            unitResult.FexResultGet.Any(x => x?.UmedId == 7) && (fixedQaPoint || selectedPoint is not null &&
             string.Equals(selectedPoint.PveBloqueado, "N", StringComparison.OrdinalIgnoreCase) &&
-            (string.IsNullOrWhiteSpace(selectedPoint.PveFchBaja) || selectedPoint.PveFchBaja == "00000000");
+            (string.IsNullOrWhiteSpace(selectedPoint.PveFchBaja) || selectedPoint.PveFchBaja == "00000000"));
     }
+
+    internal static bool IsFixedQaPointOfSaleAllowed(FexResponsePtoVenta? response, ArcaEnvironment environment,
+        int pointOfSale, bool enabled)
+        => enabled && environment == ArcaEnvironment.Homologation && pointOfSale == 1 &&
+            response is { FexResultGet.Count: 0 } && response.FexErr is null or { ErrCode: 0 };
 
     public async Task<long> QueryLastAuthorizedAsync(ArcaTenantContext tenant, int pointOfSale, int voucherType, CancellationToken cancellationToken)
     {
@@ -171,6 +179,7 @@ internal sealed class FiscalHomologationWsfexChannel(
         {
             Id = requestId, FechaCbte = issueDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture), CbteTipo = checked((short)voucherType),
             PuntoVta = pointOfSale, CbteNro = number, TipoExpo = 2, DstCmp = fixture.DestinationCountryCode,
+            PermisoExistente = string.Empty,
             Cliente = fixture.CustomerName, CuitPaisCliente = fixture.CustomerCountryTaxCode, DomicilioCliente = fixture.CustomerAddress,
             IdImpositivo = fixture.ForeignTaxId, MonedaId = fixture.CurrencyId, MonedaCtz = fixture.CurrencyRate,
             FormaPago = fixture.PaymentTerms, FechaPago = fixture.PaymentDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture),

@@ -14,7 +14,8 @@ internal sealed class FiscalHomologationWsmtxcaChannel(
     SafeInvoiceService invoices,
     FiscalHomologationReceiver registeredTaxpayerReceiver,
     FiscalHomologationReceiver consumerFinalReceiver,
-    TimeProvider? clock = null) : IFiscalHomologationChannel
+    TimeProvider? clock = null,
+    bool allowFixedQaPointOfSaleForEmptyCatalogue = false) : IFiscalHomologationChannel
 {
     private int? configuredPointOfSale;
     public string Service => "wsmtxca";
@@ -52,14 +53,22 @@ internal sealed class FiscalHomologationWsmtxcaChannel(
         if (!response.ArrayTiposComprobante.Any(entry => entry?.Codigo == voucherType)) return false;
         FiscalHomologationReceiver receiver = ReceiverFor(voucherType);
         var conditions = await service.consultarCondicionesIVAReceptorAsync(tenant,
-            new ConsultarCondicionesIvaReceptorRequestType(), cancellationToken).ConfigureAwait(false);
+            new ConsultarCondicionesIvaReceptorRequestType
+            {
+                ConsultaCondicionesIvaReceptorRequest = new ConsultaCondicionesIvaRequestType
+                {
+                    CodigoTipoComprobante = checked((short)voucherType)
+                }
+            }, cancellationToken).ConfigureAwait(false);
         if (!conditions.ArrayCondicionesIvaReceptor.Any(entry => entry?.Codigo == receiver.VatConditionId))
             throw new InvalidOperationException("WSMTXCA receiver VAT condition is absent from the runtime catalogue.");
         int pointOfSale = configuredPointOfSale
             ?? throw new InvalidOperationException("WSMTXCA point of sale must be validated before catalogue lookup.");
         var points = await service.consultarPuntosVentaCAEAsync(tenant,
             new ConsultarPuntosVentaCaeRequestType(), cancellationToken).ConfigureAwait(false);
-        if (!IsActiveCaePointOfSale(points, pointOfSale))
+        bool fixedQaPoint = IsFixedQaPointOfSaleAllowed(points, tenant.Environment, pointOfSale,
+            allowFixedQaPointOfSaleForEmptyCatalogue);
+        if (!IsActiveCaePointOfSale(points, pointOfSale) && !fixedQaPoint)
             throw new InvalidOperationException("WSMTXCA configured point of sale is not active for CAE issuance.");
         return true;
     }
@@ -70,6 +79,11 @@ internal sealed class FiscalHomologationWsmtxcaChannel(
         return selected is not null && selected.Bloqueado == SiNoSimpleType.N && selected.FechaBaja is null;
     }
 
+    internal static bool IsFixedQaPointOfSaleAllowed(ConsultarPuntosVentaCaeResponse? response,
+        ArcaEnvironment environment, int pointOfSale, bool enabled)
+        => enabled && environment == ArcaEnvironment.Homologation && pointOfSale == 2 &&
+            response is { ArrayPuntosVenta.Count: 0, Evento: null };
+
     public async Task<long> QueryLastAuthorizedAsync(ArcaTenantContext tenant, int pointOfSale, int voucherType, CancellationToken cancellationToken)
     {
         var response = await service.consultarUltimoComprobanteAutorizadoAsync(tenant, new ConsultarUltimoComprobanteAutorizadoRequestType
@@ -77,9 +91,24 @@ internal sealed class FiscalHomologationWsmtxcaChannel(
             ConsultaUltimoComprobanteAutorizadoRequest = new ConsultaUltimoComprobanteAutorizadoRequestType
             { CodigoTipoComprobante = checked((short)voucherType), NumeroPuntoVenta = pointOfSale }
         }, cancellationToken).ConfigureAwait(false);
-        long? last = response.NumeroComprobante;
-        if (last is null or < 0 or > 99999999) throw new InvalidOperationException("WSMTXCA returned an invalid last-authorized voucher number.");
-        return last.Value;
+        return ReadLastAuthorizedNumber(response, tenant.Environment);
+    }
+
+    internal static long ReadLastAuthorizedNumber(ConsultarUltimoComprobanteAutorizadoResponseType response,
+        ArcaEnvironment environment)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        if (response.NumeroComprobante is { } number)
+        {
+            if (response.ArrayErrores.Count != 0 || response.Evento is not null || number is < 0 or > 99999999)
+                throw new InvalidOperationException("WSMTXCA returned contradictory or invalid last-authorized voucher data.");
+            return number;
+        }
+
+        bool emptySeries = environment == ArcaEnvironment.Homologation && response.ArrayErrores.Count == 1 &&
+            response.ArrayErrores[0].Codigo == 1502 && response.Evento is null;
+        if (emptySeries) return 0;
+        throw new InvalidOperationException("WSMTXCA returned an invalid last-authorized voucher response.");
     }
 
     public InvoiceSubmission CreateSubmission(ArcaTenantContext tenant, string key, int pointOfSale, int voucherType,

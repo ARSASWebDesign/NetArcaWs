@@ -140,7 +140,8 @@ public sealed class ArcaServicesHomologationTests
             var channels = await FiscalHomologationMatrixProfile.CreateRuntimeChannelsAsync(provider,
                 provider.GetRequiredService<SafeInvoiceService>(), journal, tenant, runId, token);
             await ReportAsync("### Matriz fiscal automática: 18 escenarios seleccionados\n" +
-                "La matriz usará solo POS CAE activos encontrados por servicio o el POS ya congelado para este run. " +
+                "La matriz usará POS CAE activos encontrados por servicio; solo ante la respuesta vacía reconocida de homologación podrá usar fixtures sintéticos fijos (WSFE/WSFEX 1 y WSMTXCA 2). " +
+                "El POS de una operación congelada se conserva y vuelve a validar. " +
                 "Cada comprobante se reconcilia y consulta exactamente antes de avanzar.", token);
             try
             {

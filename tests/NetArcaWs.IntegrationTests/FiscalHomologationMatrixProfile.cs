@@ -14,6 +14,47 @@ namespace NetArcaWs.IntegrationTests;
 /// <summary>Fixed, synthetic matrix choices. Runtime ARCA catalogues and eligibility remain authoritative.</summary>
 internal static class FiscalHomologationMatrixProfile
 {
+    internal readonly record struct PointOfSaleChoice(int PointOfSale, bool UsesSyntheticFixture);
+    private sealed record PointOfSaleCatalogue(IReadOnlyList<int> ActivePoints, bool RecognizedEmpty);
+
+    internal static PointOfSaleChoice SelectPointOfSale(string service, IEnumerable<int> activePoints,
+        bool recognizedEmptyCatalogue, ArcaEnvironment environment, bool allowFixedQaFixture,
+        int? frozenPointOfSale = null, int? reservedPointOfSale = null)
+    {
+        ArgumentNullException.ThrowIfNull(activePoints);
+        int fixture = service switch
+        {
+            "wsfe" => 1,
+            "wsfex" => 1,
+            "wsmtxca" => 2,
+            _ => throw new InvalidOperationException("No POS fixture is defined for this service.")
+        };
+        int[] active = activePoints.Where(x => x > 0).Distinct().Order().ToArray();
+        if (recognizedEmptyCatalogue && active.Length != 0)
+            throw new InvalidOperationException($"{service} reported a recognized empty POS catalogue with active entries.");
+
+        if (frozenPointOfSale is { } frozen)
+        {
+            bool validActive = active.Contains(frozen);
+            bool validFixture = environment == ArcaEnvironment.Homologation && allowFixedQaFixture &&
+                recognizedEmptyCatalogue && frozen == fixture;
+            if (!validActive && !validFixture)
+                throw new InvalidOperationException($"Frozen {service} point of sale {frozen} is not active or the approved empty-catalogue QA fixture.");
+            if (reservedPointOfSale == frozen)
+                throw new InvalidOperationException($"Frozen {service} POS {frozen} conflicts with another service's fiscal identity.");
+            return new(frozen, validFixture && !validActive);
+        }
+
+        int selected = active.FirstOrDefault(x => x != reservedPointOfSale);
+        if (selected > 0) return new(selected, false);
+        if (active.Length != 0)
+            throw new InvalidOperationException($"Every active {service} POS conflicts with another service's fiscal identity.");
+        if (environment == ArcaEnvironment.Homologation && allowFixedQaFixture && recognizedEmptyCatalogue &&
+            reservedPointOfSale != fixture)
+            return new(fixture, true);
+        throw new InvalidOperationException($"ARCA has no active CAE point of sale available for {service}.");
+    }
+
     // Official QR invoice example identifies this as a test CUIT: https://www.afip.gob.ar/fe/qr/documentos/30000000007_001_00010_00000094.pdf
     // The recipient fixture is synthetic and is never treated as proof of current homologation eligibility.
     internal static readonly FiscalHomologationReceiver RegisteredReceiver = new(80, 20_000_000_001, 1, FixtureReviewed: true);
@@ -95,16 +136,8 @@ internal static class FiscalHomologationMatrixProfile
         }
 
         var wsfexFixture = CreateExportFixture(paymentDate);
-        var channels = new Dictionary<string, IFiscalHomologationChannel>(StringComparer.Ordinal)
-        {
-            ["wsfe"] = new FiscalHomologationWsfeChannel(provider.GetRequiredService<IWsfev1Service>(), invoices,
-                RegisteredReceiver, ConsumerReceiver),
-            ["wsfex"] = new FiscalHomologationWsfexChannel(provider.GetRequiredService<IWsfexv1Service>(), invoices, wsfexFixture),
-            ["wsmtxca"] = new FiscalHomologationWsmtxcaChannel(provider.GetRequiredService<IWsmtxcav1Service>(), invoices,
-                RegisteredReceiver, ConsumerReceiver)
-        };
-
         var positions = new Dictionary<string, int>(StringComparer.Ordinal);
+        var selections = new Dictionary<string, PointOfSaleChoice>(StringComparer.Ordinal);
         foreach (string service in new[] { "wsfe", "wsfex", "wsmtxca" })
         {
             int? frozenPos = null;
@@ -118,53 +151,63 @@ internal static class FiscalHomologationMatrixProfile
                     throw new InvalidOperationException($"Frozen {service} matrix cases use inconsistent point-of-sale identities.");
                 frozenPos = candidate;
             }
-            if (frozenPos is { } prior)
-            {
-                positions.Add(service, prior);
-                continue;
-            }
-            positions.Add(service, await FindFirstActivePointOfSaleAsync(provider, service, tenant, cancellationToken).ConfigureAwait(false));
+            PointOfSaleCatalogue catalogue = await GetPointOfSaleCatalogueAsync(provider, service, tenant, cancellationToken).ConfigureAwait(false);
+            int? reserved = service == "wsmtxca" ? positions.GetValueOrDefault("wsfe") : null;
+            PointOfSaleChoice selection = SelectPointOfSale(service, catalogue.ActivePoints, catalogue.RecognizedEmpty,
+                tenant.Environment, allowFixedQaFixture: true, frozenPos, reserved);
+            selections.Add(service, selection);
+            positions.Add(service, selection.PointOfSale);
         }
+        var channels = new Dictionary<string, IFiscalHomologationChannel>(StringComparer.Ordinal)
+        {
+            ["wsfe"] = new FiscalHomologationWsfeChannel(provider.GetRequiredService<IWsfev1Service>(), invoices,
+                RegisteredReceiver, ConsumerReceiver, allowFixedQaPointOfSaleForEmptyCatalogue: selections["wsfe"].UsesSyntheticFixture),
+            ["wsfex"] = new FiscalHomologationWsfexChannel(provider.GetRequiredService<IWsfexv1Service>(), invoices,
+                wsfexFixture, allowFixedQaPointOfSaleForEmptyCatalogue: selections["wsfex"].UsesSyntheticFixture),
+            ["wsmtxca"] = new FiscalHomologationWsmtxcaChannel(provider.GetRequiredService<IWsmtxcav1Service>(), invoices,
+                RegisteredReceiver, ConsumerReceiver, allowFixedQaPointOfSaleForEmptyCatalogue: selections["wsmtxca"].UsesSyntheticFixture)
+        };
         return (channels, positions, wsfexFixture);
     }
 
-    private static async Task<int> FindFirstActivePointOfSaleAsync(IServiceProvider provider, string service,
+    private static async Task<PointOfSaleCatalogue> GetPointOfSaleCatalogueAsync(IServiceProvider provider, string service,
         ArcaTenantContext tenant, CancellationToken cancellationToken)
     {
-        IEnumerable<int> candidates = service switch
+        return service switch
         {
             "wsfe" => await GetWsfePointsAsync(provider, tenant, cancellationToken).ConfigureAwait(false),
             "wsfex" => await GetWsfexPointsAsync(provider, tenant, cancellationToken).ConfigureAwait(false),
             "wsmtxca" => await GetWsmtxcaPointsAsync(provider, tenant, cancellationToken).ConfigureAwait(false),
             _ => throw new InvalidOperationException("No POS catalogue is supported for this service.")
         };
-        return candidates.Order().FirstOrDefault() is int pos && pos > 0
-            ? pos : throw new InvalidOperationException($"ARCA has no active CAE point of sale available for {service}.");
     }
 
-    private static async Task<IEnumerable<int>> GetWsfePointsAsync(IServiceProvider provider, ArcaTenantContext tenant, CancellationToken ct)
+    private static async Task<PointOfSaleCatalogue> GetWsfePointsAsync(IServiceProvider provider, ArcaTenantContext tenant, CancellationToken ct)
     {
         var response = await provider.GetRequiredService<IWsfev1Service>().FEParamGetPtosVentaAsync(tenant, new FeParamGetPtosVenta(), ct).ConfigureAwait(false);
         var result = response.FeParamGetPtosVentaResult ?? throw new InvalidOperationException("WSFE returned no point-of-sale catalogue.");
-        if (result.Errors.Count != 0) throw new InvalidOperationException("WSFE point-of-sale catalogue returned errors.");
-        return result.ResultGet.Where(x => x is not null && x.EmisionTipo == "CAE" && x.Bloqueado == "N" &&
-            (string.IsNullOrWhiteSpace(x.FchBaja) || x.FchBaja == "00000000")).Select(x => x!.Nro);
+        bool empty602 = FiscalHomologationWsfeChannel.IsKnownEmptyQaPointOfSaleCatalogue(result, tenant.Environment);
+        if (result.Errors.Count != 0 && !empty602) throw new InvalidOperationException("WSFE point-of-sale catalogue returned errors.");
+        return new(result.ResultGet.Where(x => x is not null && x.EmisionTipo == "CAE" && x.Bloqueado == "N" &&
+            (string.IsNullOrWhiteSpace(x.FchBaja) || x.FchBaja == "00000000")).Select(x => x!.Nro).ToArray(), empty602);
     }
 
-    private static async Task<IEnumerable<int>> GetWsfexPointsAsync(IServiceProvider provider, ArcaTenantContext tenant, CancellationToken ct)
+    private static async Task<PointOfSaleCatalogue> GetWsfexPointsAsync(IServiceProvider provider, ArcaTenantContext tenant, CancellationToken ct)
     {
         var response = await provider.GetRequiredService<IWsfexv1Service>().FEXGetPARAM_PtoVentaAsync(tenant, new FexGetParamPtoVenta(), ct).ConfigureAwait(false);
         var result = response.FexGetParamPtoVentaResult ?? throw new InvalidOperationException("WSFEX returned no point-of-sale catalogue.");
         if (result.FexErr is { ErrCode: not 0 }) throw new InvalidOperationException("WSFEX point-of-sale catalogue returned an error.");
-        return result.FexResultGet.Where(x => x is not null && x.PveBloqueado == "N" &&
-            (string.IsNullOrWhiteSpace(x.PveFchBaja) || x.PveFchBaja == "00000000")).Select(x => x!.PveNro);
+        return new(result.FexResultGet.Where(x => x is not null && x.PveBloqueado == "N" &&
+            (string.IsNullOrWhiteSpace(x.PveFchBaja) || x.PveFchBaja == "00000000")).Select(x => x!.PveNro).ToArray(),
+            FiscalHomologationWsfexChannel.IsFixedQaPointOfSaleAllowed(result, tenant.Environment, 1, enabled: true));
     }
 
-    private static async Task<IEnumerable<int>> GetWsmtxcaPointsAsync(IServiceProvider provider, ArcaTenantContext tenant, CancellationToken ct)
+    private static async Task<PointOfSaleCatalogue> GetWsmtxcaPointsAsync(IServiceProvider provider, ArcaTenantContext tenant, CancellationToken ct)
     {
         var response = await provider.GetRequiredService<IWsmtxcav1Service>().consultarPuntosVentaCAEAsync(tenant,
             new ConsultarPuntosVentaCaeRequestType(), ct).ConfigureAwait(false);
-        return response.ArrayPuntosVenta.Where(x => x is not null && x.Bloqueado == SiNoSimpleType.N && x.FechaBaja is null)
-            .Select(x => x!.NumeroPuntoVenta);
+        return new(response.ArrayPuntosVenta.Where(x => x is not null && x.Bloqueado == SiNoSimpleType.N && x.FechaBaja is null)
+            .Select(x => x!.NumeroPuntoVenta).ToArray(), tenant.Environment == ArcaEnvironment.Homologation &&
+            response.ArrayPuntosVenta.Count == 0 && response.Evento is null);
     }
 }
