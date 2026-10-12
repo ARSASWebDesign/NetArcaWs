@@ -132,7 +132,7 @@ internal sealed class FiscalHomologationWsfeChannel(
             assoc.Environment != ArcaEnvironment.Homologation || assoc.VoucherNumber <= 0))
             throw new ArgumentException("WSFE note association must identify a verified invoice in the same family and point of sale.", nameof(associatedInvoice));
         bool hasVat = voucherType is 1 or 2 or 3 or 6 or 7 or 8;
-        double net = hasVat ? 100d : 100d;
+        double net = 100d;
         double vat = hasVat ? 21d : 0d;
         var detail = new FecaeDetRequest
         {
