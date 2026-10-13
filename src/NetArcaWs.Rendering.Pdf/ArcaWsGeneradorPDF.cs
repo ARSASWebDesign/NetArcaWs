@@ -67,7 +67,16 @@ public sealed class ArcaWsGeneradorPDF
         if (!string.IsNullOrWhiteSpace(datos.Receptor.Domicilio)) AddLine(section, "Domicilio", datos.Receptor.Domicilio);
         string receiverCondition = DocumentFiscalRules.ReceiverCondition(datos);
         if (!string.IsNullOrWhiteSpace(receiverCondition)) AddLine(section, DocumentFiscalRules.ReceiverConditionLabel(datos), receiverCondition);
-        AddLine(section, "Identificación", datos.Receptor.IdentificacionFiscal ?? datos.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture));
+        string? receiverId = !string.IsNullOrWhiteSpace(datos.Receptor.IdentificacionFiscal)
+            ? datos.Receptor.IdentificacionFiscal
+            : datos.Receptor.Identificacion > 0 ? datos.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture) : null;
+        if (receiverId is not null) AddLine(section, "Identificación", receiverId);
+        IReadOnlyList<string> associatedDocuments = FiscalAssociatedDocuments.Read(datos);
+        if (associatedDocuments.Count != 0)
+        {
+            section.AddParagraph("Comprobantes asociados", "Heading2");
+            foreach (string reference in associatedDocuments) section.AddParagraph(reference);
+        }
 
         if (datos.Detalles.Count > 0) AddDetailTable(section, datos);
         else if (datos.Tipo == TipoComprobanteGenerado.Fiscal) AddSummaryRows(section, datos);

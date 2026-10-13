@@ -4,6 +4,7 @@
 [Dd]ebug/
 [Rr]elease/
 artifacts/
+.playwright-cli/
 TestResults/
 
 # Local credentials; test fixtures are embedded public test data in C#.

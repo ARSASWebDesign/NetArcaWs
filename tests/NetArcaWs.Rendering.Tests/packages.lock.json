@@ -459,6 +459,15 @@
           "System.Security.Cryptography.Pkcs": "[10.0.12, )"
         }
       },
+      "netarcaws.rendering.examples": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Data.Sqlite": "[10.0.12, )",
+          "NetArcaWs": "[0.6.0, )",
+          "NetArcaWs.Rendering.Html": "[0.6.0, )",
+          "NetArcaWs.Rendering.Pdf": "[0.6.0, )"
+        }
+      },
       "netarcaws.rendering.html": {
         "type": "Project",
         "dependencies": {

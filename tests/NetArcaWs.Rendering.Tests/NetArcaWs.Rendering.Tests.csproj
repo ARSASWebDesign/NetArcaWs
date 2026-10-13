@@ -17,5 +17,6 @@
     <ProjectReference Include="../../src/NetArcaWs/NetArcaWs.csproj" />
     <ProjectReference Include="../../src/NetArcaWs.Rendering.Html/NetArcaWs.Rendering.Html.csproj" />
     <ProjectReference Include="../../src/NetArcaWs.Rendering.Pdf/NetArcaWs.Rendering.Pdf.csproj" />
+    <ProjectReference Include="../../examples/NetArcaWs.Rendering.Examples/NetArcaWs.Rendering.Examples.csproj" />
   </ItemGroup>
 </Project>

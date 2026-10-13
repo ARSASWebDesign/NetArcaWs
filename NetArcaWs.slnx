@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="examples/NetArcaWs.Examples/NetArcaWs.Examples.csproj" />
+  <Project Path="examples/NetArcaWs.Rendering.Examples/NetArcaWs.Rendering.Examples.csproj" />
   <Project Path="tools/NetArcaWs.Build/NetArcaWs.Build.csproj" />
   <Project Path="tests/NetArcaWs.Build.Tests/NetArcaWs.Build.Tests.csproj" />
   <Project Path="src/NetArcaWs/NetArcaWs.csproj" />

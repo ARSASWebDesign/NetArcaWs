@@ -25,6 +25,15 @@ jobs:
         run: dotnet run --project tools/NetArcaWs.Build --configuration Release --no-restore -- release-version
       - run: dotnet build NetArcaWs.slnx --configuration Release --no-restore
       - run: dotnet test --solution NetArcaWs.slnx --configuration Release --no-build --no-restore
+      - name: Generate synthetic rendering gallery
+        run: dotnet run --project examples/NetArcaWs.Rendering.Examples --configuration Release --no-build --no-restore -- --output artifacts/comprobantes
+      - name: Upload synthetic rendering gallery
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: comprobantes-sinteticos
+          path: artifacts/comprobantes/**
+          if-no-files-found: error
+          retention-days: 3
       - run: dotnet run --project tools/NetArcaWs.Build --configuration Release --no-build --no-restore -- persistence-schema --check
       - run: dotnet run --project tools/NetArcaWs.Build --configuration Release --no-build --no-restore -- persistence-migrations --check
       - run: dotnet pack src/NetArcaWs/NetArcaWs.csproj --configuration Release --no-build --no-restore --output artifacts

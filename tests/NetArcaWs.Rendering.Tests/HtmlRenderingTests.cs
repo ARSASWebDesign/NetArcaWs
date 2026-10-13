@@ -9,6 +9,7 @@ using NetArcaWs.Contracts.WsfexV1;
 using NetArcaWs.Contracts.Wsmtxca;
 using NetArcaWs.Documents;
 using NetArcaWs.Rendering.Html;
+using NetArcaWs.Rendering.Pdf;
 using QRCoder;
 using ZXing;
 using Xunit;
@@ -28,12 +29,13 @@ public sealed partial class HtmlRenderingTests
     private const string LeyendaMonotributo = "El crédito fiscal discriminado en el presente comprobante, solo podrá ser computado a efectos del Régimen de Sostenimiento e Inclusión Fiscal para Pequeños Contribuyentes de la Ley Nº 27.618";
 
     private static ComprobanteGenerado Fiscal(string servicio = "wsfe", int tipo = 1, string state = "Authorized",
-        int? condition = 6, string conditionText = "Monotributista", IReadOnlyList<string>? legends = null) =>
+        int? condition = 6, string conditionText = "Monotributista", IReadOnlyList<string>? legends = null,
+        long receiverId = 20304050607, int receiverType = 80, bool associated = false) =>
         new(1, TipoComprobanteGenerado.Fiscal, new(servicio, "Homologacion", 30123456789, 4, tipo, 123), "tenant",
-            state, new DatosReceptor(20304050607, "Cliente", "Calle 2", conditionText, 80), "ARS", 121m,
-            [], [], legends ?? [], WsfeRequestSnapshot(tipo, condition ?? 6), 1,
+            state, new DatosReceptor(receiverId, "Cliente", "Calle 2", conditionText, receiverType), "ARS", 121m,
+            [], [], legends ?? [], WsfeRequestSnapshot(tipo, condition ?? 6, receiverType, receiverId, associated), 1,
             new ResultadoComprobante("12345678901234", new DateOnly(2026, 10, 23), [], [], "A", "E"), fecha: new DateOnly(2026, 10, 13), cotizacion: 1,
-            snapshotResponse: WsfeResponseSnapshot(tipo), snapshotResponseVersion: 1, neto: 121, exento: 0, noGravado: 0, iva: 0,
+            snapshotResponse: WsfeResponseSnapshot(tipo, receiverType, receiverId), snapshotResponseVersion: 1, neto: 121, exento: 0, noGravado: 0, iva: 0,
             codigoCondicionIvaReceptor: condition);
 
     [Fact]
@@ -83,6 +85,60 @@ public sealed partial class HtmlRenderingTests
             Assert.Equal(qrUrl, DecodeRenderedQr(html));
         }
         finally { CultureInfo.CurrentCulture = original; }
+    }
+
+    [Fact]
+    public void Consumer_final_without_document_number_does_not_print_a_zero_identification()
+    {
+        ComprobanteGenerado document = Fiscal(tipo: 6, condition: 5, conditionText: "Consumidor final",
+            receiverId: 0, receiverType: 99, legends: []);
+        string html = new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(document);
+        Assert.DoesNotContain("Identificación:", html);
+        Assert.DoesNotContain("Identificación:</b> 0", html);
+        using JsonDocument qr = JsonDocument.Parse(Convert.FromBase64String(ExtractQrPayload(html)));
+        Assert.False(qr.RootElement.TryGetProperty("tipoDocRec", out _));
+        Assert.False(qr.RootElement.TryGetProperty("nroDocRec", out _));
+        byte[] pdf = new ArcaWsGeneradorPDF(Issuer()).GenerarPDFComprobante(document);
+        using var parsed = UglyToad.PdfPig.PdfDocument.Open(pdf);
+        string text = string.Join("\n", parsed.GetPages().Select(page => page.Text));
+        Assert.DoesNotContain("Identificación", text);
+        Assert.DoesNotContain("Identificación 0", text);
+    }
+
+    [Fact]
+    public void Consumer_transparency_contains_a_separated_emphasized_grand_total()
+    {
+        ComprobanteGenerado document = Fiscal(tipo: 6, condition: 5, conditionText: "Consumidor final", legends: []);
+        string html = new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(document);
+        int sectionStart = html.IndexOf("<section class=\"transparency\">", StringComparison.Ordinal);
+        int totalStart = html.IndexOf("<div class=\"grand-total\">", sectionStart, StringComparison.Ordinal);
+        int sectionEnd = html.IndexOf("</section>", sectionStart, StringComparison.Ordinal);
+        Assert.True(sectionStart >= 0 && totalStart > sectionStart && sectionEnd > totalStart,
+            "The total must stay inside the consumer-transparency section.");
+        Assert.Contains(".transparency>.grand-total", html);
+        Assert.Contains("121,00 pesos", html[totalStart..sectionEnd]);
+    }
+
+    [Fact]
+    public void Associated_invoice_from_typed_snapshot_is_printed_in_html_and_pdf()
+    {
+        ComprobanteGenerado document = Fiscal(tipo: 3, associated: true, legends: []);
+        Assert.Contains("CbtesAsoc", document.SnapshotRequest);
+        var serializer = new XmlSerializer(typeof(FecaeRequest));
+        using var input = new StringReader(document.SnapshotRequest!);
+        var parsedRequest = (FecaeRequest)serializer.Deserialize(input)!;
+        Assert.Single(parsedRequest.FeDetReq.Single().CbtesAsoc);
+        string html = new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(document);
+        Assert.Contains("Comprobantes asociados", html);
+        Assert.Contains("Factura A 00004-00000122", html);
+        byte[] pdf = new ArcaWsGeneradorPDF(Issuer()).GenerarPDFComprobante(document);
+        using var parsed = UglyToad.PdfPig.PdfDocument.Open(pdf);
+        string text = string.Join("\n", parsed.GetPages().Select(page => page.Text));
+        string normalizedText = string.Concat(text.Where(character => !char.IsWhiteSpace(character)));
+        Assert.Contains("Comprobantesasociados", normalizedText);
+        Assert.Contains("FacturaA00004-00000122", normalizedText);
+        string withoutAssociation = new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(Fiscal(legends: []));
+        Assert.DoesNotContain("Comprobantes asociados", withoutAssociation);
     }
 
     [Fact]
@@ -282,15 +338,16 @@ public sealed partial class HtmlRenderingTests
         return html[start..end];
     }
 
-    private static string WsfeRequestSnapshot(int type = 1, int condition = 6)
+    private static string WsfeRequestSnapshot(int type = 1, int condition = 6, int docType = 80, long docNumber = 20304050607, bool associated = false)
     {
         var request = new FecaeRequest { FeCabReq = new FecaeCabRequest { CantReg = 1, PtoVta = 4, CbteTipo = type } };
         request.FeDetReq.Add(new FecaeDetRequest
         {
-            Concepto = 1, DocTipo = 80, DocNro = 20304050607, CbteDesde = 123, CbteHasta = 123,
+            Concepto = 1, DocTipo = docType, DocNro = docNumber, CbteDesde = 123, CbteHasta = 123,
             CbteFch = "20261013", ImpTotal = 121, ImpTotConc = 0, ImpNeto = 121, ImpOpEx = 0,
             ImpTrib = 0, ImpIva = 0, MonId = "ARS", MonCotiz = 1, CondicionIvaReceptorId = condition
         });
+        if (associated) request.FeDetReq[0].CbtesAsoc.Add(new CbteAsoc { Tipo = 1, PtoVta = 4, Nro = 122, Cuit = "30123456789", CbteFch = "20261012" });
         return Serialize(request);
     }
 
@@ -419,12 +476,12 @@ public sealed partial class HtmlRenderingTests
         return new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(doc);
     }
 
-    private static string WsfeResponseSnapshot(int type = 1)
+    private static string WsfeResponseSnapshot(int type = 1, int docType = 80, long docNumber = 20304050607)
     {
         var result = new FecaeResponse { FeCabResp = new FecaeCabResponse { CantReg = 1, Cuit = 30123456789, PtoVta = 4, CbteTipo = type, Resultado = "A" } };
         result.FeDetResp.Add(new FecaeDetResponse
         {
-            Concepto = 1, DocTipo = 80, DocNro = 20304050607, CbteDesde = 123, CbteHasta = 123,
+            Concepto = 1, DocTipo = docType, DocNro = docNumber, CbteDesde = 123, CbteHasta = 123,
             CbteFch = "20261013", Resultado = "A", Cae = "12345678901234", CaeFchVto = "20261023"
         });
         return Serialize(new FecaeSolicitarResponse { FecaeSolicitarResult = result });

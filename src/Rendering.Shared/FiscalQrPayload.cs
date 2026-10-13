@@ -31,7 +31,9 @@ internal static class FiscalQrPayload
         string? recipientNumber = document.Identidad!.Servicio.Equals("wsfex", StringComparison.OrdinalIgnoreCase)
             ? document.Receptor.IdentificacionFiscal
             : document.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture);
-        if (docType is not null)
+        bool receiverIdentifierPresent = !string.IsNullOrWhiteSpace(document.Receptor.IdentificacionFiscal) ||
+            document.Receptor.Identificacion > 0;
+        if (docType is not null && receiverIdentifierPresent)
         {
             if (string.IsNullOrEmpty(recipientNumber) || recipientNumber.Length > 20 ||
                 recipientNumber.Any(character => !char.IsAsciiDigit(character)) ||
