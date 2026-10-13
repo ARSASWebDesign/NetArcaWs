@@ -71,6 +71,23 @@ public sealed class RenderingSampleTests
     }
 
     [Fact]
+    public void FiscalSampleScenarios_UseUniqueArcaIdentityAcrossServices()
+    {
+        var duplicates = SampleGallery.CreateCases()
+            .Where(sample => sample.Document.Tipo == TipoComprobanteGenerado.Fiscal)
+            .GroupBy(sample =>
+            {
+                IdentidadComprobante identity = sample.Document.Identidad!;
+                return (identity.Ambiente, identity.Cuit, identity.PuntoVenta, identity.Tipo, identity.Numero);
+            })
+            .Where(group => group.Count() > 1)
+            .Select(group => new { Identity = group.Key, Scenarios = group.Select(sample => sample.Id).ToArray() })
+            .ToArray();
+
+        Assert.Empty(duplicates);
+    }
+
+    [Fact]
     public void SqliteJsonRoundTrip_RendersSameFiscalContentWithoutNetwork()
     {
         string directory = Path.Combine(Path.GetTempPath(), $"netarcaws-rendering-{Guid.NewGuid():N}");
