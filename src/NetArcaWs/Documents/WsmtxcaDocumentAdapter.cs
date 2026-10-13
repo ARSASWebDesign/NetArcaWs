@@ -17,20 +17,28 @@ internal static class WsmtxcaDocumentAdapter
         ComprobanteValidator.ValidateCurrency(request.CodigoMoneda);
         if (request.ImporteTotal < 0 || request.CotizacionMoneda is not > 0)
             throw new ArgumentException("Los importes WSMTXCA deben ser finitos y no negativos, con cotización positiva.", nameof(request));
-        if (request.ImporteTotal != request.ImporteSubtotal + (request.ImporteOtrosTributos ?? 0m))
-            throw new ArgumentException("El subtotal y otros tributos WSMTXCA no coinciden con el total.", nameof(request));
+        decimal expectedTotal = request.ImporteSubtotal + (request.ImporteOtrosTributos ?? 0m) + request.ArraySubtotalesIva.Sum(item => item.Importe);
+        if (!AmountsWithinWsmtxcaTolerance(request.ImporteTotal, expectedTotal))
+            throw new ArgumentException("El subtotal, IVA y otros tributos WSMTXCA no coinciden con el total.", nameof(request));
         if (request.ArrayOtrosTributos.Count > 0 && request.ArrayOtrosTributos.Sum(tax => tax.Importe) != request.ImporteOtrosTributos)
             throw new ArgumentException("Los otros tributos WSMTXCA no coinciden con su total.", nameof(request));
         if (request.FechaEmision is null) throw new ArgumentException("WSMTXCA requiere una fecha explícita.", nameof(request));
         foreach (ItemType item in request.ArrayItems)
-            if (item.Cantidad is < 0 || item.PrecioUnitario is < 0 || item.ImporteItem < 0 ||
-                item.ImporteIva is < 0 || item.ImporteBonificacion is < 0)
+            if (item.Cantidad is < 0 || item.PrecioUnitario is < 0 || item.ImporteBonificacion is < 0 ||
+                (item.ImporteItem < 0 || item.ImporteIva is < 0) && item.CodigoUnidadMedida != 99)
                 throw new ArgumentException("Los conceptos WSMTXCA contienen cantidades o importes inválidos.", nameof(request));
         ArcaWsComprobantes.ValidateSupplemental(presentation, request.CodigoMoneda, request.ImporteTotal);
         _ = ArcaWsComprobantes.MergeSupplementalTaxes(FiscalTaxes(request, request.CodigoMoneda), presentation, request.CodigoMoneda);
         _ = ArcaWsComprobantes.ApplyPresentationDescriptions(request.ArrayItems.Select(item => new LineaComprobante(
             item.Descripcion, item.ImporteItem, request.CodigoMoneda, item.Codigo ?? item.CodigoMtx,
             item.Cantidad, item.CodigoUnidadMedida, item.PrecioUnitario)).ToArray(), presentation, request.CodigoMoneda);
+    }
+
+    private static bool AmountsWithinWsmtxcaTolerance(decimal actual, decimal expected)
+    {
+        decimal difference = Math.Abs(actual - expected);
+        decimal scale = Math.Max(Math.Abs(actual), Math.Abs(expected));
+        return difference <= 0.01m || scale > 0 && difference / scale <= 0.0001m;
     }
 
     internal static ComprobanteGenerado Map(InvoiceOperation operation, DatosPresentacion presentation)

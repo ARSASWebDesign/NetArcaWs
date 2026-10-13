@@ -1,0 +1,227 @@
+using System.Globalization;
+using System.Text.Json;
+using System.Xml.Linq;
+using System.Xml.Serialization;
+using System.Net;
+using StbImageSharp;
+using NetArcaWs.Contracts.WsfeV1;
+using NetArcaWs.Documents;
+using NetArcaWs.Rendering.Html;
+using QRCoder;
+using ZXing;
+using Xunit;
+
+namespace NetArcaWs.Rendering.Tests;
+
+public sealed class HtmlRenderingTests
+{
+    private static DatosEmisor Issuer(byte[]? logo = null) => new(30123456789, "Emisor <&>", "Comercial", "Calle 1",
+        "Responsable Inscripto", logo, "123-456", new DateOnly(2010, 1, 2));
+
+    private static ComprobanteGenerado Receipt() => new(1, TipoComprobanteGenerado.ReciboX, null, null, "Local",
+        new DatosReceptor(20304050607, "Cliente <&>", "Calle 2", "Consumidor Final"), "ARS", 125m,
+        [new LineaComprobante("Servicio <b>", 125m, "ARS")], [], [], null, null, null,
+        numeroInterno: "X-1", fecha: new DateOnly(2026, 10, 13), pagos: [new PagoReciboX("Efectivo", 125m, "ARS")]);
+
+    private const string LeyendaMonotributo = "El crédito fiscal discriminado en el presente comprobante, solo podrá ser computado a efectos del Régimen de Sostenimiento e Inclusión Fiscal para Pequeños Contribuyentes de la Ley Nº 27.618";
+
+    private static ComprobanteGenerado Fiscal(string servicio = "wsfe", int tipo = 1, string state = "Authorized",
+        int? condition = 6, string conditionText = "Monotributista", IReadOnlyList<string>? legends = null) =>
+        new(1, TipoComprobanteGenerado.Fiscal, new(servicio, "Homologacion", 30123456789, 4, tipo, 123), "tenant",
+            state, new DatosReceptor(20304050607, "Cliente", "Calle 2", conditionText, 80), "ARS", 121m,
+            [], [], legends ?? [], WsfeRequestSnapshot(tipo), 1,
+            new ResultadoComprobante("12345678901234", new DateOnly(2026, 10, 23), [], [], "A", "E"), fecha: new DateOnly(2026, 10, 13), cotizacion: 1,
+            snapshotResponse: WsfeResponseSnapshot(tipo), snapshotResponseVersion: 1, neto: 121, exento: 0, noGravado: 0, iva: 0,
+            codigoCondicionIvaReceptor: condition);
+
+    [Fact]
+    public void X_receipt_renders_required_legend_and_escapes_text_without_qr()
+    {
+        string html = new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(Receipt());
+        Assert.Contains("Recibo X", html);
+        Assert.Contains("DOCUMENTO NO VALIDO COMO FACTURA", html);
+        Assert.Contains("Emisor &lt;&amp;&gt;", html);
+        Assert.Contains("Cliente &lt;&amp;&gt;", html);
+        Assert.Contains("Servicio &lt;b&gt;", html);
+        Assert.DoesNotContain("<img class=\"qr\"", html);
+    }
+
+    [Fact]
+    public void X_receipt_embeds_logo_when_supplied()
+    {
+        using var qrData = QRCodeGenerator.GenerateQrCode("logo", QRCodeGenerator.ECCLevel.M);
+        byte[] logo = new PngByteQRCode(qrData).GetGraphic(2);
+        string html = new ArcaWsGeneradorHTML(Issuer(logo)).GenerarHTMLComprobante(Receipt());
+        Assert.Contains("data:image/png;base64,", html);
+    }
+
+    [Fact]
+    public void Fiscal_receipt_uses_qr_url_and_revalidates_correlated_data()
+    {
+        CultureInfo original = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
+            string html = new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(Fiscal());
+            if (Environment.GetEnvironmentVariable("NETARCAWS_RENDER_SAMPLE_PATH") is { Length: > 0 } samplePath)
+                File.WriteAllText(samplePath, html);
+            Assert.Contains("Factura A", html);
+            Assert.Contains("Monotributista", html);
+            Assert.Contains("27.618", html);
+            Assert.Contains("121,00 pesos", html);
+            Assert.Contains("https://www.arca.gob.ar/fe/qr/", html);
+            string payload = ExtractQrPayload(html);
+            using JsonDocument json = JsonDocument.Parse(Convert.FromBase64String(payload));
+            Assert.Equal("2026-10-13", json.RootElement.GetProperty("fecha").GetString());
+            Assert.Equal(12345678901234L, json.RootElement.GetProperty("codAut").GetInt64());
+            Assert.Equal(121m, json.RootElement.GetProperty("importe").GetDecimal());
+            Assert.Equal("ARS", json.RootElement.GetProperty("moneda").GetString());
+            Assert.Equal("E", json.RootElement.GetProperty("tipoCodAut").GetString());
+            string qrUrl = "https://www.arca.gob.ar/fe/qr/?p=" + payload;
+            Assert.Equal(qrUrl, DecodeRenderedQr(html));
+        }
+        finally { CultureInfo.CurrentCulture = original; }
+    }
+
+    [Fact]
+    public void Required_fiscal_legends_are_added_from_correlated_type_and_receiver_condition()
+    {
+        string monotributo = new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(Fiscal(legends: []));
+        Assert.Contains(LeyendaMonotributo, WebUtility.HtmlDecode(monotributo));
+
+        string consumidorFinal = new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(
+            Fiscal(tipo: 6, condition: 5, conditionText: "Consumidor final", legends: []));
+        Assert.Contains("A CONSUMIDOR FINAL", consumidorFinal);
+        Assert.Contains("Régimen de Transparencia Fiscal al Consumidor (Ley 27.743)", consumidorFinal);
+        Assert.Contains("Otros impuestos nacionales indirectos", consumidorFinal);
+        Assert.Contains("0,00 pesos", consumidorFinal);
+    }
+
+    [Fact]
+    public void Fiscal_qr_accepts_trailing_zero_scales_but_rejects_excess_precision()
+    {
+        ComprobanteGenerado valid = Fiscal();
+        var scaled = new ComprobanteGenerado(valid.Version, valid.Tipo, valid.Identidad, valid.TenantId, valid.Estado,
+            valid.Receptor, valid.Moneda, 121.0000m, valid.Detalles, valid.Impuestos, valid.Leyendas,
+            valid.SnapshotRequest, valid.SnapshotVersion, valid.Resultado, fecha: valid.Fecha,
+            cotizacion: 1.00000000m, neto: valid.Neto, exento: valid.Exento, noGravado: valid.NoGravado,
+            iva: valid.Iva, snapshotResponse: valid.SnapshotResponse, snapshotResponseVersion: valid.SnapshotResponseVersion,
+            codigoCondicionIvaReceptor: valid.CodigoCondicionIvaReceptor);
+        string html = new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(scaled);
+        Assert.Contains("121.00", JsonDocument.Parse(Convert.FromBase64String(ExtractQrPayload(html))).RootElement.GetRawText());
+
+        var excess = new ComprobanteGenerado(valid.Version, valid.Tipo, valid.Identidad, valid.TenantId, valid.Estado,
+            valid.Receptor, valid.Moneda, 121.001m, valid.Detalles, valid.Impuestos, valid.Leyendas,
+            valid.SnapshotRequest, valid.SnapshotVersion, valid.Resultado, fecha: valid.Fecha,
+            cotizacion: valid.Cotizacion, neto: valid.Neto, exento: valid.Exento, noGravado: valid.NoGravado,
+            iva: valid.Iva, snapshotResponse: valid.SnapshotResponse, snapshotResponseVersion: valid.SnapshotResponseVersion,
+            codigoCondicionIvaReceptor: valid.CodigoCondicionIvaReceptor);
+        Assert.Throws<InvalidOperationException>(() => new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(excess));
+    }
+
+    [Fact]
+    public void Fiscal_render_rejects_wrong_issuer_or_incomplete_result()
+    {
+        var otherIssuer = new DatosEmisor(30987654321, "Otro", null, "Calle", "RI");
+        Assert.Throws<ArgumentException>(() => new ArcaWsGeneradorHTML(otherIssuer).GenerarHTMLComprobante(Fiscal()));
+        ComprobanteGenerado incomplete = Fiscal();
+        incomplete = new ComprobanteGenerado(1, incomplete.Tipo, incomplete.Identidad, incomplete.TenantId, incomplete.Estado,
+            incomplete.Receptor, incomplete.Moneda, incomplete.Total, incomplete.Detalles, incomplete.Impuestos,
+            incomplete.Leyendas, incomplete.SnapshotRequest, incomplete.SnapshotVersion, null,
+            fecha: incomplete.Fecha, cotizacion: incomplete.Cotizacion, snapshotResponse: incomplete.SnapshotResponse,
+            snapshotResponseVersion: incomplete.SnapshotResponseVersion, codigoCondicionIvaReceptor: incomplete.CodigoCondicionIvaReceptor);
+        Assert.Throws<InvalidOperationException>(() => new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(incomplete));
+    }
+
+    [Fact]
+    public void Fiscal_render_rejects_mismatched_request_response_and_auth_material()
+    {
+        ComprobanteGenerado valid = Fiscal();
+        Assert.Throws<InvalidOperationException>(() => new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(
+            Copy(valid, request: valid.SnapshotRequest!.Replace("<ImpTotal>121</ImpTotal>", "<ImpTotal>122</ImpTotal>", StringComparison.Ordinal))));
+        Assert.Throws<InvalidOperationException>(() => new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(
+            Copy(valid, response: valid.SnapshotResponse!.Replace("<Resultado>A</Resultado>", "<Resultado>R</Resultado>", StringComparison.Ordinal))));
+        XDocument authDocument = XDocument.Parse(valid.SnapshotRequest!);
+        authDocument.Root!.Add(new XElement("Auth", new XElement("Token", "test-only")));
+        string withAuth = authDocument.ToString(SaveOptions.DisableFormatting);
+        Assert.Throws<InvalidOperationException>(() => new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(Copy(valid, request: withAuth)));
+    }
+
+    [Fact]
+    public async Task Two_issuers_render_concurrently_without_cross_contamination()
+    {
+        var issuerA = Issuer();
+        var issuerB = new DatosEmisor(30987654321, "Segundo emisor", null, "Otra calle", "Responsable Inscripto", ingresosBrutos: "Exento", inicioActividades: new DateOnly(2020, 2, 3));
+        ComprobanteGenerado docA = Fiscal();
+        ComprobanteGenerado docB = Copy(docA, identity: docA.Identidad! with { Cuit = issuerB.Identificacion });
+        Task<string> renderA = Task.Run(() => new ArcaWsGeneradorHTML(issuerA).GenerarHTMLComprobante(docA));
+        Task<string> renderB = Task.Run(() => new ArcaWsGeneradorHTML(issuerB).GenerarHTMLComprobante(docB));
+        string[] html = await Task.WhenAll(renderA, renderB);
+        Assert.Contains("Emisor &lt;&amp;&gt;", html[0]);
+        Assert.DoesNotContain("Segundo emisor", html[0]);
+        Assert.Contains("Segundo emisor", html[1]);
+        Assert.DoesNotContain("Emisor &lt;&amp;&gt;", html[1]);
+    }
+
+    private static ComprobanteGenerado Copy(ComprobanteGenerado source, IdentidadComprobante? identity = null,
+        string? request = null, string? response = null) => new(1, source.Tipo, identity ?? source.Identidad, source.TenantId,
+        source.Estado, source.Receptor, source.Moneda, source.Total, source.Detalles, source.Impuestos, source.Leyendas,
+        request ?? source.SnapshotRequest, source.SnapshotVersion, source.Resultado, numeroInterno: source.NumeroInterno,
+        fecha: source.Fecha, pagos: source.Pagos, imputaciones: source.Imputaciones, cotizacion: source.Cotizacion,
+        neto: source.Neto, exento: source.Exento, noGravado: source.NoGravado, iva: source.Iva,
+        fechaDesde: source.FechaDesde, fechaHasta: source.FechaHasta, fechaPago: source.FechaPago,
+        snapshotResponse: response ?? source.SnapshotResponse, snapshotResponseVersion: source.SnapshotResponseVersion,
+        condicionIvaReceptor: source.CondicionIvaReceptor, codigoCondicionIvaReceptor: source.CodigoCondicionIvaReceptor);
+
+    private static string ExtractQrPayload(string html)
+    {
+        int start = html.IndexOf("https://www.arca.gob.ar/fe/qr/?p=", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+        start += "https://www.arca.gob.ar/fe/qr/?p=".Length;
+        int end = html.IndexOf('"', start);
+        return html[start..end];
+    }
+
+    private static string WsfeRequestSnapshot(int type = 1)
+    {
+        var request = new FecaeRequest { FeCabReq = new FecaeCabRequest { CantReg = 1, PtoVta = 4, CbteTipo = type } };
+        request.FeDetReq.Add(new FecaeDetRequest
+        {
+            Concepto = 1, DocTipo = 80, DocNro = 20304050607, CbteDesde = 123, CbteHasta = 123,
+            CbteFch = "20261013", ImpTotal = 121, ImpTotConc = 0, ImpNeto = 121, ImpOpEx = 0,
+            ImpTrib = 0, ImpIva = 0, MonId = "ARS", MonCotiz = 1
+        });
+        return Serialize(request);
+    }
+
+    private static string WsfeResponseSnapshot(int type = 1)
+    {
+        var response = new FecaeResponse { FeCabResp = new FecaeCabResponse { CantReg = 1, PtoVta = 4, CbteTipo = type, Resultado = "A" } };
+        response.FeDetResp.Add(new FecaeDetResponse
+        {
+            Concepto = 1, DocTipo = 80, DocNro = 20304050607, CbteDesde = 123, CbteHasta = 123,
+            CbteFch = "20261013", Resultado = "A", Cae = "12345678901234", CaeFchVto = "20261023"
+        });
+        return Serialize(response);
+    }
+
+    private static string Serialize<T>(T value)
+    {
+        var serializer = new XmlSerializer(typeof(T));
+        using var writer = new StringWriter(CultureInfo.InvariantCulture);
+        serializer.Serialize(writer, value);
+        return writer.ToString();
+    }
+
+    private static string DecodeRenderedQr(string html)
+    {
+        int imageStart = html.IndexOf("data:image/png;base64,", StringComparison.Ordinal);
+        Assert.True(imageStart >= 0);
+        imageStart += "data:image/png;base64,".Length;
+        int imageEnd = html.IndexOf('"', imageStart);
+        byte[] png = Convert.FromBase64String(html[imageStart..imageEnd]);
+        ImageResult image = ImageResult.FromMemory(png, ColorComponents.RedGreenBlueAlpha);
+        var source = new RGBLuminanceSource(image.Data, image.Width, image.Height, RGBLuminanceSource.BitmapFormat.RGB32);
+        return new BarcodeReaderGeneric().Decode(source)?.Text ?? throw new InvalidOperationException("The independent QR decoder could not decode the fiscal sample.");
+    }
+}

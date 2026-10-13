@@ -88,6 +88,51 @@ public sealed class ArcaWsComprobantesTests
         mtx.Detalles.Single().Descripcion.Should().Be("Item MTXCA");
         mtx.Impuestos.Should().ContainSingle(x => x.Codigo == "4" && x.Importe == 10m && x.Tipo == TipoImpuestoComprobante.Iva);
         mtx.Impuestos.Should().ContainSingle(x => x.Codigo == "5" && x.Importe == 11m && x.Tipo == TipoImpuestoComprobante.Iva);
+        mtx.Total.Should().Be(121m);
+        mtx.Neto.Should().Be(100m);
+        mtx.Iva.Should().Be(21m);
+    }
+
+    [Fact]
+    public async Task Wsmtxca_total_correlates_subtotal_vat_and_other_taxes_before_write()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        var transport = new RecordingSoapTransport();
+        ArcaWsComprobantes facade = CreateFacade(database, transport);
+        ComprobanteType request = WsmtxcaRequest();
+        request.ImporteTotal = 120;
+
+        Func<Task> act = () => facade.GenerarComprobanteAsync(Tenant(), "incorrect-wsmtxca-total", request,
+            Presentation(new LineaComprobante("Descripción adicional", 121, "PES")), cancellationToken);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        transport.CallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Wsmtxca_unit_99_discount_preserves_negative_fiscal_amounts()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        var transport = new RecordingSoapTransport(_ => WsmtxcaResponse());
+        ArcaWsComprobantes facade = CreateFacade(database, transport);
+        ComprobanteType request = WsmtxcaRequest();
+        request.ImporteSubtotal = 90;
+        request.ImporteGravado = 90;
+        request.ImporteTotal = 108.9m;
+        request.ArrayItems[0].ImporteItem = 121;
+        request.ArrayItems[0].ImporteIva = 21;
+        request.ArrayItems.Add(new ItemType { Codigo = "DESCUENTO", Descripcion = "Descuento", Cantidad = 1,
+            CodigoUnidadMedida = 99, PrecioUnitario = 0, CodigoCondicionIva = 1, ImporteIva = -2.1m, ImporteItem = -12.1m });
+        request.ArraySubtotalesIva[1].Importe = 8.9m;
+
+        ComprobanteGenerado result = await facade.GenerarComprobanteAsync(Tenant(), "discount-wsmtxca", request, Presentation(), cancellationToken);
+
+        result.Total.Should().Be(108.9m);
+        result.Detalles.Select(line => line.Importe).Should().Equal(121m, -12.1m);
+        result.SnapshotRequest.Should().Contain("-12.1");
+        ComprobanteValidator.Validate(result);
     }
 
     [Fact]
@@ -339,7 +384,7 @@ public sealed class ArcaWsComprobantesTests
     private static ComprobanteType WsmtxcaRequest()
     {
         var request = new ComprobanteType { CodigoTipoComprobante = 1, NumeroPuntoVenta = 1,
-            NumeroComprobante = 12, FechaEmision = new DateTime(2026, 10, 6), ImporteSubtotal = 121, ImporteTotal = 121,
+            NumeroComprobante = 12, FechaEmision = new DateTime(2026, 10, 6), ImporteSubtotal = 100, ImporteTotal = 121,
             ImporteGravado = 100, CodigoMoneda = "PES", CotizacionMoneda = 1,
             CodigoTipoDocumento = 80, NumeroDocumento = 20304050607,
             FechaServicioDesde = new DateTime(2026, 10, 1), FechaServicioHasta = new DateTime(2026, 10, 6),

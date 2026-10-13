@@ -12,7 +12,10 @@ public static class ComprobanteValidator
             throw new ArgumentException("El receptor es obligatorio y debe estar identificado.", nameof(comprobante));
         ValidateCurrency(comprobante.Moneda);
         if (comprobante.Total < 0) throw new ArgumentException("El total no puede ser negativo.", nameof(comprobante));
-        if (comprobante.Detalles.Any(x => x is null || x.Importe < 0 || !SameCurrency(x.Moneda, comprobante.Moneda)))
+        if (comprobante.Detalles.Any(x => x is null ||
+            x.Importe < 0 && !(comprobante.Tipo == TipoComprobanteGenerado.Fiscal &&
+                string.Equals(comprobante.Identidad?.Servicio, "wsmtxca", StringComparison.OrdinalIgnoreCase) && x.CodigoUnidadMedida == 99) ||
+            !SameCurrency(x.Moneda, comprobante.Moneda)))
             throw new ArgumentException("Los detalles deben tener importes y monedas coherentes.", nameof(comprobante));
         if (comprobante.Impuestos.Any(x => x is null || x.Importe < 0 || !SameCurrency(x.Moneda, comprobante.Moneda)))
             throw new ArgumentException("Los impuestos deben tener importes y monedas coherentes.", nameof(comprobante));
