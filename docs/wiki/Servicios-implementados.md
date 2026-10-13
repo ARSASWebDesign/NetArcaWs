@@ -1,11 +1,6 @@
 # Servicios implementados
 
-Esta página resume para qué sirve cada cliente .NET y dónde consultar el detalle
-de sus operaciones. Los métodos SOAP, requests y responses se documentan en las
-referencias por operación, generadas desde WSDL identificados en
-[proveniencia de contratos](../reference/contracts/sources.md). El contrato
-describe el intercambio XML; el manual ARCA define el uso funcional, las
-condiciones de acceso y las validaciones de negocio.
+Esta página resume para qué sirve cada cliente .NET y dónde consultar el detalle de sus operaciones. Los métodos SOAP, requests y responses se documentan en las referencias por operación, generadas desde WSDL identificados en [proveniencia de contratos](../reference/contracts/sources.md). El contrato describe el intercambio XML; el manual ARCA define el uso funcional, las condiciones de acceso y las validaciones de negocio.
 
 ## Clientes disponibles
 
@@ -23,42 +18,16 @@ condiciones de acceso y las validaciones de negocio.
 | **WSFECred** | Gestiona aceptación/rechazo, cancelaciones, cuentas corrientes, estados y operaciones del ciclo de FCE MiPyME. No autoriza la factura original. | [Operaciones WSFECred](../reference/operations/wsfecred.md), [guía WSFECred](WSFECred.md) | [Manual oficial del Web Service FECred](https://servicioscf.afip.gob.ar/facturadecreditoelectronica/documentos/Manual-Desarrollador-WSFECRED.pdf) |
 | **WSCPE** | Gestiona Carta de Porte Electrónica automotor y ferroviaria, derivados granarios y ductos, contingencias, destinos y estados. | [Operaciones WSCPE](../reference/operations/wscpe.md), [guía de Carta de Porte](WSCPE.md) | [Manual oficial WSCPE v2.2.1](https://www.arca.gob.ar/ws/documentos/manual-wscpe.pdf) |
 
-Los nombres A4/A5/A10/A13 se refieren a los contratos/endpoints y no determinan
-por sí solos cuál servicio debe usar una aplicación. En particular, A5 se
-presenta actualmente como Constancia de Inscripción en el catálogo y manual;
-consultá allí el identificador WSAA que corresponde. El
-[catálogo oficial de servicios web](https://ftp.afip.gob.ar/ws/documentacion/catalogo.asp)
-ayuda a verificar nombres y estado publicados por ARCA.
+Los nombres A4/A5/A10/A13 se refieren a los contratos/endpoints y no determinan por sí solos cuál servicio debe usar una aplicación. En particular, A5 se presenta actualmente como Constancia de Inscripción en el catálogo y manual; consultá allí el identificador WSAA que corresponde. El [catálogo oficial de servicios web](https://ftp.afip.gob.ar/ws/documentacion/catalogo.asp) ayuda a verificar nombres y estado publicados por ARCA.
 
 ## Integración desde .NET
 
-Registra los servicios con `AddNetArcaWs` y construye un
-`ArcaTenantContext` con tenant, CUIT representada, ambiente y certificado
-obtenidos desde fuentes confiables de tu aplicación. Pasa el contexto en cada
-operación autenticada. Los clientes aceptan requests tipados generados a partir
-del contrato; el host debe llenar y validar los datos comerciales y fiscales
-antes de enviarlos.
+Registra los servicios con `AddNetArcaWs` y construye un `ArcaTenantContext` con tenant, CUIT representada, ambiente y certificado obtenidos desde fuentes confiables de tu aplicación. Pasa el contexto en cada operación autenticada. Los clientes aceptan requests tipados generados a partir del contrato; el host debe llenar y validar los datos comerciales y fiscales antes de enviarlos.
 
-Para emisión CAE unitaria de WSFEv1, WSFEXv1 y WSMTXCA, usa
-`SafeInvoiceService` y el diario para conservar el payload y reconciliar un
-resultado incierto. Una consulta de Padrón es lectura autenticada; el `dummy`
-de un servicio es un probe de disponibilidad y no acredita permisos fiscales.
-Ver [emisión durable](Diario-fiscal.md), [multitenancy](Contexto-multitenant.md)
-y [health checks](Health-checks.md).
+Para emisión CAE unitaria de WSFEv1, WSFEXv1 y WSMTXCA, usa `SafeInvoiceService` y el diario para conservar el payload y reconciliar un resultado incierto. Una consulta de Padrón es lectura autenticada; el `dummy` de un servicio es un probe de disponibilidad y no acredita permisos fiscales. Ver [emisión durable](Diario-fiscal.md), [multitenancy](Contexto-multitenant.md) y [health checks](Health-checks.md).
 
-El proyecto [GuideExamples.cs](../../examples/NetArcaWs.Examples/GuideExamples.cs)
-contiene ejemplos C# compilables para WSAA, tenant, health checks, cálculo y
-emisión durable WSFEv1. La referencia por operación aporta las clases y campos
-del contrato; no construyas requests productivos copiando fixtures o ejemplos
-de prueba sin validar sus datos.
+El proyecto [GuideExamples.cs](../../examples/NetArcaWs.Examples/GuideExamples.cs) contiene ejemplos C# compilables para WSAA, tenant, health checks, cálculo y emisión durable WSFEv1. La referencia por operación aporta las clases y campos del contrato; no construyas requests productivos copiando fixtures o ejemplos de prueba sin validar sus datos.
 
 ## Alcance
 
-Esta lista contiene los clientes fiscales descritos en el alcance implementado
-actual. [Servicios y cobertura](Servicios-y-cobertura.md) diferencia sus
-operaciones contractuales de infraestructura (transporte, certificados,
-health checks y diario). Otros servicios mencionados por PyAfipWs o en manuales
-generales no forman parte de estos clientes .NET; consulta el
-[inventario upstream](../reference/upstream-inventory.md) antes de asumir una
-equivalencia. El [seguimiento priorizado de los servicios pendientes](https://github.com/ARSASWebDesign/NetArcaWs/issues/10)
-conserva su clasificación por fuente y organismo.
+Esta lista contiene los clientes fiscales descritos en el alcance implementado actual. [Servicios y cobertura](Servicios-y-cobertura.md) diferencia sus operaciones contractuales de infraestructura (transporte, certificados, health checks y diario). Otros servicios mencionados por PyAfipWs o en manuales generales no forman parte de estos clientes .NET; consulta el [inventario upstream](../reference/upstream-inventory.md) antes de asumir una equivalencia. El [seguimiento priorizado de los servicios pendientes](https://github.com/ARSASWebDesign/NetArcaWs/issues/10) conserva su clasificación por fuente y organismo.

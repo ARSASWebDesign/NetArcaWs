@@ -5,8 +5,7 @@ using System.Security.Cryptography.X509Certificates;
 namespace NetArcaWs.Cryptography;
 
 /// <summary>
-/// Immutable in-memory signing material obtained from configuration, a vault or a database.
-/// Contains secrets; retain only as long as needed. No certificate files are created.
+/// Immutable in-memory signing material obtained from configuration, a vault or a database. Contains secrets; retain only as long as needed. No certificate files are created.
 /// </summary>
 [DebuggerDisplay("WsaaCertificateContent (secrets hidden)")]
 public sealed class WsaaCertificateContent
@@ -50,9 +49,7 @@ public sealed class WsaaCertificateContent
     }
 
     /// <summary>
-    /// Creates a new independently owned certificate with its RSA private key; the caller must dispose it.
-    /// PFX requires platform support for EphemeralKeySet (Windows/Linux; use PEM on macOS).
-    /// Certificate validity is checked by WsaaService when authenticating.
+    /// Creates a new independently owned certificate with its RSA private key; the caller must dispose it. PFX requires platform support for EphemeralKeySet (Windows/Linux; use PEM on macOS). Certificate validity is checked by WsaaService when authenticating.
     /// </summary>
     public X509Certificate2 LoadCertificate()
     {

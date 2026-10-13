@@ -35,8 +35,7 @@ public interface IWsaaTicketProtector
 }
 
 /// <summary>
-/// AES-GCM protector for shared WSAA ticket material. Supply key material and a key ID from the application;
-/// this class does not persist, derive, distribute, or retrieve keys.
+/// AES-GCM protector for shared WSAA ticket material. Supply key material and a key ID from the application; this class does not persist, derive, distribute, or retrieve keys.
 /// </summary>
 public sealed class AesGcmWsaaTicketProtector : IWsaaTicketProtector, IDisposable
 {

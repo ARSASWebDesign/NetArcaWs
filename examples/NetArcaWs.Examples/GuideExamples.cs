@@ -15,9 +15,7 @@ using NetArcaWs.Contracts.WsfeCred;
 namespace NetArcaWs.Examples;
 
 /// <summary>
-/// Compilable counterparts for the repository's authentication, tenant, health,
-/// safe-invoice, tax-calculation, and certificate-tool guides. These methods are
-/// examples only; constructing this class or building its values makes no network call.
+/// Compilable counterparts for the repository's authentication, tenant, health, safe-invoice, tax-calculation, and certificate-tool guides. These methods are examples only; constructing this class or building its values makes no network call.
 /// </summary>
 public static class GuideExamples
 {
@@ -88,8 +86,7 @@ public static class GuideExamples
             .AddWsfev1HealthCheck(ArcaEnvironment.Production, timeout: TimeSpan.FromSeconds(3));
 
     /// <summary>
-    /// Adds one caller-validated fiscal detail to a single-voucher WSFE request.
-    /// The host must populate and validate all protocol and business fields before calling this method.
+    /// Adds one caller-validated fiscal detail to a single-voucher WSFE request. The host must populate and validate all protocol and business fields before calling this method.
     /// </summary>
     public static FecaeRequest CreateSingleVoucherRequest(int pointOfSale, int voucherType,
         FecaeDetRequest validatedDetail)
@@ -140,8 +137,7 @@ public static class GuideExamples
         => TaxCalculator.FromGross(gross, ratePercent);
 
     /// <summary>
-    /// Prepares the local certificate-generation CLI invocation. The caller may start it
-    /// explicitly; this method does not execute a process or set/read secret values.
+    /// Prepares the local certificate-generation CLI invocation. The caller may start it explicitly; this method does not execute a process or set/read secret values.
     /// </summary>
     public static ProcessStartInfo CreateDevelopmentCertificateCommand(string cuit,
         string organization, string commonName, string outputDirectory, string passwordEnvironmentName)

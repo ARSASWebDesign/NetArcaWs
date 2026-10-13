@@ -2,361 +2,114 @@
 
 # Arquitectura de NetArcaWs
 
-La biblioteca `src/NetArcaWs` apunta a net10.0. Las pruebas se separan en
-`NetArcaWs.UnitTests` y `NetArcaWs.IntegrationTests`. No requiere un host ASP.NET;
-las dependencias Microsoft se distribuyen como paquetes NuGet.
+La biblioteca `src/NetArcaWs` apunta a net10.0. Las pruebas se separan en `NetArcaWs.UnitTests` y `NetArcaWs.IntegrationTests`. No requiere un host ASP.NET; las dependencias Microsoft se distribuyen como paquetes NuGet.
 
 ## Flujo
 
-1. `AuthenticateAsync` valida servicio, el certificado configurado en opciones y
-   su vigencia; `AuthenticateWithContentAsync` permite pasar contenido distinto
-   por operación. Ambos consultan IMemoryCache usando endpoint, certificado y
-   servicio como identidad.
-2. Si falta un TA vigente, espera un semáforo compartido por las instancias
-   que usan esa caché y vuelve a consultarla. Un conjunto fijo de 64 semáforos
-   evita acumular locks por cada clave; colisiones solo serializan llamadas.
-3. `CreateTra` serializa un TRA UTF-8, con uniqueId uint32 y fechas UTC. El TTL
-   simétrico conserva el comportamiento de `create_tra` y es configurable.
-4. `SignTra` usa SignedCms, RSA/SHA-256 y contenido encapsulado. Solo incluye el
-   certificado firmante. AsnWriter codifica el CSR PKCS#10 y su DN.
-5. `LoginCmsAsync` obtiene un HttpClient de la fábrica y llama SOAP 1.1
-   document/literal, con SOAPAction vacío y namespaces del WSDL oficial.
-6. XmlSerializer transforma el envelope y el TA en DTOs. Se prohíben DTD,
-   se limita la respuesta y se valida estructura, fechas, campos y expiración.
-7. El TA inmutable se guarda hasta expirationTime. No se cachean errores ni
-   se renueva anticipadamente. Todos los caminos liberan el semáforo.
+1. `AuthenticateAsync` valida servicio, el certificado configurado en opciones y su vigencia; `AuthenticateWithContentAsync` permite pasar contenido distinto por operación. Ambos consultan IMemoryCache usando endpoint, certificado y servicio como identidad.
+2. Si falta un TA vigente, espera un semáforo compartido por las instancias que usan esa caché y vuelve a consultarla. Un conjunto fijo de 64 semáforos evita acumular locks por cada clave; colisiones solo serializan llamadas.
+3. `CreateTra` serializa un TRA UTF-8, con uniqueId uint32 y fechas UTC. El TTL simétrico conserva el comportamiento de `create_tra` y es configurable.
+4. `SignTra` usa SignedCms, RSA/SHA-256 y contenido encapsulado. Solo incluye el certificado firmante. AsnWriter codifica el CSR PKCS#10 y su DN.
+5. `LoginCmsAsync` obtiene un HttpClient de la fábrica y llama SOAP 1.1 document/literal, con SOAPAction vacío y namespaces del WSDL oficial.
+6. XmlSerializer transforma el envelope y el TA en DTOs. Se prohíben DTD, se limita la respuesta y se valida estructura, fechas, campos y expiración.
+7. El TA inmutable se guarda hasta expirationTime. No se cachean errores ni se renueva anticipadamente. Todos los caminos liberan el semáforo.
 
 ## Integración y límites
 
-El contrato compilado está basado en el WSDL guardado en
-`docs/reference/wsaa-homologation.wsdl`; no se descarga ni genera código en cada
-llamada. Los DTOs públicos existen para XmlSerializer; la API de negocio es
-WsaaService/WsaaTicket. Los prefijos XML son irrelevantes, las URI no.
+El contrato compilado está basado en el WSDL guardado en `docs/reference/wsaa-homologation.wsdl`; no se descarga ni genera código en cada llamada. Los DTOs públicos existen para XmlSerializer; la API de negocio es WsaaService/WsaaTicket. Los prefijos XML son irrelevantes, las URI no.
 
-TimeProvider permite comprobar expiraciones sin esperas. IHttpClientFactory
-administra handlers y conexiones; el cliente se libera por operación. Si la
-aplicación obtiene un `X509Certificate2` con `LoadCertificate()`, quien llama
-es responsable de desecharlo. La aplicación puede configurar proxy/TLS mediante
-el builder de DI. No hay bypass TLS ni ejecución de procesos externos.
+TimeProvider permite comprobar expiraciones sin esperas. IHttpClientFactory administra handlers y conexiones; el cliente se libera por operación. Si la aplicación obtiene un `X509Certificate2` con `LoadCertificate()`, quien llama es responsable de desecharlo. La aplicación puede configurar proxy/TLS mediante el builder de DI. No hay bypass TLS ni ejecución de procesos externos.
 
 ## Fachadas fiscales y contratos de servicio
 
-El repositorio contiene modelos públicos XML y fachadas generadas desde los
-WSDL versionados. El inventario actual es de 183 operaciones: WSFEv1 22,
-WSFEXv1 19, WSMTXCA 27, Padrón A4 2, Constancia por ruta A5 5, A10 2, A13 4,
-WSCDC 6, WSFECred 21 y WSCPE 75. Están en `NetArcaWs.Contracts.*` y
-`NetArcaWs.Services`; `AddNetArcaWs` registra las diez fachadas de negocio y
-`PadronService`. Los requests/responses autenticados son
-tipados 1:1 con los XSD y la llamada recibe `ArcaTenantContext`; el cliente pide
-su ticket a WSAA e inserta la autenticación en una copia serializable del request.
-Los `Dummy` sin autenticación eligen entorno explícito y no piden ticket.
+El repositorio contiene modelos públicos XML y fachadas generadas desde los WSDL versionados. El inventario actual es de 183 operaciones: WSFEv1 22, WSFEXv1 19, WSMTXCA 27, Padrón A4 2, Constancia por ruta A5 5, A10 2, A13 4, WSCDC 6, WSFECred 21 y WSCPE 75. Están en `NetArcaWs.Contracts.*` y `NetArcaWs.Services`; `AddNetArcaWs` registra las diez fachadas de negocio y `PadronService`. Los requests/responses autenticados son tipados 1:1 con los XSD y la llamada recibe `ArcaTenantContext`; el cliente pide su ticket a WSAA e inserta la autenticación en una copia serializable del request. Los `Dummy` sin autenticación eligen entorno explícito y no piden ticket.
 
-El mapeo conserva las diferencias contractuales en vez de normalizarlas: por
-ejemplo, algunos importes WSFE son `xsd:double` y el código público generado los
-expone como `double`. La calculadora `decimal` es un helper opcional de dominio;
-no cambia la representación SOAP. No se usa WCF: las fachadas usan
-`ISoapTransport`/`SoapTransport`, que aplica SOAP 1.1. Los snapshots archivados
-son la fuente reproducible para la generación, no una afirmación de compatibilidad
-con todos los cambios futuros del servicio.
+El mapeo conserva las diferencias contractuales en vez de normalizarlas: por ejemplo, algunos importes WSFE son `xsd:double` y el código público generado los expone como `double`. La calculadora `decimal` es un helper opcional de dominio; no cambia la representación SOAP. No se usa WCF: las fachadas usan `ISoapTransport`/`SoapTransport`, que aplica SOAP 1.1. Los snapshots archivados son la fuente reproducible para la generación, no una afirmación de compatibilidad con todos los cambios futuros del servicio.
 
-La verificación Release actual tuvo 420 casos, 415 aprobados, 5 omitidos
-(4 dependientes de ARCA y 1 test opt-in de engine), 0 fallos, 0 warnings y 0 errors.
-Las 183 operaciones se cotejaron con sus WSDL y 369 tipos
-raíz XML pasaron round-trip; los 56 tipos con `DateTime` (`xs:date`/`xs:dateTime`)
-conservaron sus valores. Los snapshots QA/producción de WSCDC, WSFECred y WSCPE tienen
-schemas coincidentes. En una corrida anterior a WSCPE respondieron 9 probes
-`Dummy` en QA real; 2 pruebas
-autenticadas se omitieron por falta de certificados. La homologación fiscal
-autenticada sigue pendiente.
+La verificación Release actual tuvo 420 casos, 415 aprobados, 5 omitidos (4 dependientes de ARCA y 1 test opt-in de engine), 0 fallos, 0 warnings y 0 errors. Las 183 operaciones se cotejaron con sus WSDL y 369 tipos raíz XML pasaron round-trip; los 56 tipos con `DateTime` (`xs:date`/`xs:dateTime`) conservaron sus valores. Los snapshots QA/producción de WSCDC, WSFECred y WSCPE tienen schemas coincidentes. En una corrida anterior a WSCPE respondieron 9 probes `Dummy` en QA real; 2 pruebas autenticadas se omitieron por falta de certificados. La homologación fiscal autenticada sigue pendiente.
 
-WSMTXCA modela el web service de factura electrónica con detalle y sus
-operaciones CAE/CAEA. WSFECred implementa el contrato posterior para la gestión
-de FCE MiPyME y cuentas corrientes, pero no está integrado con el diario ni
-`SafeInvoiceService`. Ver el [ADR de contratos](Decisi%C3%B3n-4-Contratos-SOAP-p%C3%BAblicos)
-y la [matriz de operaciones](Servicios-y-cobertura).
+WSMTXCA modela el web service de factura electrónica con detalle y sus operaciones CAE/CAEA. WSFECred implementa el contrato posterior para la gestión de FCE MiPyME y cuentas corrientes, pero no está integrado con el diario ni `SafeInvoiceService`. Ver el [ADR de contratos](Decisi%C3%B3n-4-Contratos-SOAP-p%C3%BAblicos) y la [matriz de operaciones](Servicios-y-cobertura).
 
-En WSMTXCA, `codigoTipoAutorizacion=E` identifica un CAE; `A` corresponde a
-CAEA, según los ejemplos del [manual oficial](https://arca.gob.ar/fe/ayuda/documentos/wsmtxca-RG-2904.pdf).
-Para detalle, `unidadesMtx` debe informarse salvo unidades 99/97; los fixtures
-con unidad 7 envían 1. Si no hay otros tributos, el fixture omite
-`ImporteOtrosTributos` junto con el array vacío, consistente con su
-opcionalidad en el contrato y el cálculo requerido por el manual.
+En WSMTXCA, `codigoTipoAutorizacion=E` identifica un CAE; `A` corresponde a CAEA, según los ejemplos del [manual oficial](https://arca.gob.ar/fe/ayuda/documentos/wsmtxca-RG-2904.pdf). Para detalle, `unidadesMtx` debe informarse salvo unidades 99/97; los fixtures con unidad 7 envían 1. Si no hay otros tributos, el fixture omite `ImporteOtrosTributos` junto con el array vacío, consistente con su opcionalidad en el contrato y el cálculo requerido por el manual.
 
-`SoapTransport` limita la serialización del request y la lectura de response a
-4 MiB por defecto cada una, configurable entre 1 KiB y 32 MiB. El tope de
-request actúa durante la serialización, antes de que se envíe HTTP; ambos límites
-se aplican independientemente.
+`SoapTransport` limita la serialización del request y la lectura de response a 4 MiB por defecto cada una, configurable entre 1 KiB y 32 MiB. El tope de request actúa durante la serialización, antes de que se envíe HTTP; ambos límites se aplican independientemente.
 
 ### Certificados en memoria
 
-`WsaaCertificateContent` encapsula de forma inmutable el material de certificado
-y clave privada sin exponerlo en `ToString`. `FromPem(certificatePem,
-privateKeyPem, password)` requiere certificado y clave; `FromPkcs12(data,
-password)` acepta bytes PFX y `FromPkcs12Base64(base64, password)` decodifica
-Base64 en memoria. Base64 solo representa los bytes y no cifra por sí mismo el
-PFX. `LoadCertificate()` devuelve un `X509Certificate2` que es propiedad del
-llamador y este debe liberar.
+`WsaaCertificateContent` encapsula de forma inmutable el material de certificado y clave privada sin exponerlo en `ToString`. `FromPem(certificatePem, privateKeyPem, password)` requiere certificado y clave; `FromPkcs12(data, password)` acepta bytes PFX y `FromPkcs12Base64(base64, password)` decodifica Base64 en memoria. Base64 solo representa los bytes y no cifra por sí mismo el PFX. `LoadCertificate()` devuelve un `X509Certificate2` que es propiedad del llamador y este debe liberar.
 
-Las aplicaciones pueden cargar certificados y claves de sus propios almacenes
-de manera asíncrona y pasar el contenido resultante. NetArcaWs no incorpora
-integraciones ni SDK de vault, y no crea archivos temporales como alternativa
-de importación. El contenido configurado en `WsaaOptions.Certificate` se
-copia al crear el singleton del servicio; esa opción no sigue cambios posteriores
-del proveedor de configuración. Para una rotación explícita de una identidad
-individual, el llamador crea el contenido actualizado y lo pasa a
-`AuthenticateWithContentAsync(service, content, cancellationToken)` en cada
-operación. La ruta de opciones permite
-`AuthenticateAsync(service, cancellationToken)` con la credencial configurada.
+Las aplicaciones pueden cargar certificados y claves de sus propios almacenes de manera asíncrona y pasar el contenido resultante. NetArcaWs no incorpora integraciones ni SDK de vault, y no crea archivos temporales como alternativa de importación. El contenido configurado en `WsaaOptions.Certificate` se copia al crear el singleton del servicio; esa opción no sigue cambios posteriores del proveedor de configuración. Para una rotación explícita de una identidad individual, el llamador crea el contenido actualizado y lo pasa a `AuthenticateWithContentAsync(service, content, cancellationToken)` en cada operación. La ruta de opciones permite `AuthenticateAsync(service, cancellationToken)` con la credencial configurada.
 
-La importación PKCS#12 usa `EphemeralKeySet` en Windows y Linux para mantener la
-clave fuera del almacén persistente. La implementación de .NET no admite esa
-importación efímera de PFX en macOS; allí la aplicación debe proporcionar PEM.
-No hay fallback a disco. La ruta PEM no escribe archivos temporales explícitos y
-no necesita que la aplicación materialice archivos; al importar, .NET usa el
-proveedor criptográfico del sistema operativo, por lo que la biblioteca no promete
-que ese proveedor nunca use un keychain u otro backing storage del sistema. Las
-operaciones criptográficas dependen de los proveedores del sistema operativo y sus
-capacidades, como describe la
-[documentación multiplataforma de .NET](https://learn.microsoft.com/en-us/dotnet/standard/security/cross-platform-cryptography).
+La importación PKCS#12 usa `EphemeralKeySet` en Windows y Linux para mantener la clave fuera del almacén persistente. La implementación de .NET no admite esa importación efímera de PFX en macOS; allí la aplicación debe proporcionar PEM. No hay fallback a disco. La ruta PEM no escribe archivos temporales explícitos y no necesita que la aplicación materialice archivos; al importar, .NET usa el proveedor criptográfico del sistema operativo, por lo que la biblioteca no promete que ese proveedor nunca use un keychain u otro backing storage del sistema. Las operaciones criptográficas dependen de los proveedores del sistema operativo y sus capacidades, como describe la [documentación multiplataforma de .NET](https://learn.microsoft.com/en-us/dotnet/standard/security/cross-platform-cryptography).
 
-La caché TA sigue identificando la credencial por endpoint, huella SHA-256 del
-certificado y servicio. Una rotación cambia la huella y separa la entrada; usar
-un certificado en más de una instancia no proporciona una caché distribuida ni
-coordinación entre procesos. La aplicación debe elegir y proteger su propia
-estrategia de persistencia compartida si la necesita.
+La caché TA sigue identificando la credencial por endpoint, huella SHA-256 del certificado y servicio. Una rotación cambia la huella y separa la entrada; usar un certificado en más de una instancia no proporciona una caché distribuida ni coordinación entre procesos. La aplicación debe elegir y proteger su propia estrategia de persistencia compartida si la necesita.
 
 ### Contexto de tenant para WSAA
 
-`ArcaTenantContext` es un valor inmutable con `TenantId`, `Cuit`, `Environment`
-(`NetArcaWs.HealthChecks.ArcaEnvironment`) y `Certificate` (`WsaaCertificateContent`).
-`WsaaService.AuthenticateForTenantAsync(service, tenant, cancellationToken)` usa el
-ambiente del contexto para seleccionar el endpoint oficial sin cambiar el estado de
-`WsaaOptions` compartido. La clave local de caché agrega tenant y CUIT a endpoint,
-servicio y huella SHA-256 del certificado; así una misma biblioteca singleton puede
-atender contextos distintos sin mezclar sus tickets locales.
+`ArcaTenantContext` es un valor inmutable con `TenantId`, `Cuit`, `Environment` (`NetArcaWs.HealthChecks.ArcaEnvironment`) y `Certificate` (`WsaaCertificateContent`). `WsaaService.AuthenticateForTenantAsync(service, tenant, cancellationToken)` usa el ambiente del contexto para seleccionar el endpoint oficial sin cambiar el estado de `WsaaOptions` compartido. La clave local de caché agrega tenant y CUIT a endpoint, servicio y huella SHA-256 del certificado; así una misma biblioteca singleton puede atender contextos distintos sin mezclar sus tickets locales.
 
-El contexto no autentica ni autoriza quién puede seleccionar un tenant. La capa de
-aplicación debe obtener tenant, CUIT representado, ambiente y contenido del
-certificado desde una resolución autenticada y autorizada; nunca debe tratar valores
-libres de un request como contexto confiable. El CUIT representado puede no ser el
-del titular del certificado cuando existe una delegación vigente de ARCA, por lo
-que el sistema no debe exigir que ambos coincidan. `AuthenticateWithContentAsync`
-sigue siendo una primitiva de llamada por contenido, pero no sustituye el contexto
-para aislamiento multitenant.
+El contexto no autentica ni autoriza quién puede seleccionar un tenant. La capa de aplicación debe obtener tenant, CUIT representado, ambiente y contenido del certificado desde una resolución autenticada y autorizada; nunca debe tratar valores libres de un request como contexto confiable. El CUIT representado puede no ser el del titular del certificado cuando existe una delegación vigente de ARCA, por lo que el sistema no debe exigir que ambos coincidan. `AuthenticateWithContentAsync` sigue siendo una primitiva de llamada por contenido, pero no sustituye el contexto para aislamiento multitenant.
 
-El tenant separa entradas de caché locales, no la identidad que ARCA ve en el
-certificado. Reutilizar una misma credencial en dos contextos puede producir
-`coe.alreadyAuthenticated` y no promete sesiones remotas independientes. WSFEv1,
-WSFEXv1, WSMTXCA y Padrones ya tienen fachadas con el contexto por operación
-autenticada, verificadas con la suite local. No hubo llamadas autenticadas reales
-en QA por falta de certificados autorizados. Los health checks son probes de
-infraestructura por servicio/ambiente y no usan contexto ni certificados ni
-verifican permiso fiscal del tenant.
+El tenant separa entradas de caché locales, no la identidad que ARCA ve en el certificado. Reutilizar una misma credencial en dos contextos puede producir `coe.alreadyAuthenticated` y no promete sesiones remotas independientes. WSFEv1, WSFEXv1, WSMTXCA y Padrones ya tienen fachadas con el contexto por operación autenticada, verificadas con la suite local. No hubo llamadas autenticadas reales en QA por falta de certificados autorizados. Los health checks son probes de infraestructura por servicio/ambiente y no usan contexto ni certificados ni verifican permiso fiscal del tenant.
 
-`SafeInvoiceService` mantiene la clave fiscal global definida en
-[ADR 0001](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros): ambiente, CUIT emisora, punto
-de venta, tipo y número. No se debe agregar tenant como parte de esa
-unicidad. Dos tenants que operan la misma CUIT no pueden registrar dos veces el
-mismo comprobante; el límite por tenant controla acceso y visibilidad, no duplica
-identidad fiscal.
+`SafeInvoiceService` mantiene la clave fiscal global definida en [ADR 0001](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros): ambiente, CUIT emisora, punto de venta, tipo y número. No se debe agregar tenant como parte de esa unicidad. Dos tenants que operan la misma CUIT no pueden registrar dos veces el mismo comprobante; el límite por tenant controla acceso y visibilidad, no duplica identidad fiscal.
 
-Un token enlazado aplica el timeout del cliente al envío y a toda la lectura
-del cuerpo, también con ResponseHeadersRead. La cancelación del consumidor se
-conserva; un vencimiento propio se comunica como TaskCanceledException con
-TimeoutException interna.
+Un token enlazado aplica el timeout del cliente al envío y a toda la lectura del cuerpo, también con ResponseHeadersRead. La cancelación del consumidor se conserva; un vencimiento propio se comunica como TaskCanceledException con TimeoutException interna.
 
-La lectura de claves tradicionales RSA AES-256-CBC conserva compatibilidad con
-las generadas por PyAfipWs. Solo esa importación legacy usa EVP_BytesToKey/MD5;
-las nuevas claves usan PKCS#8/PBKDF2-SHA256 y las firmas usan RSA/SHA256. Los
-buffers privados de descifrado se limpian después del uso. Los strings PEM y
-credenciales son administrados y no garantizan borrado de memoria.
+La lectura de claves tradicionales RSA AES-256-CBC conserva compatibilidad con las generadas por PyAfipWs. Solo esa importación legacy usa EVP_BytesToKey/MD5; las nuevas claves usan PKCS#8/PBKDF2-SHA256 y las firmas usan RSA/SHA256. Los buffers privados de descifrado se limpian después del uso. Los strings PEM y credenciales son administrados y no garantizan borrado de memoria.
 
-El TA contiene secretos. Su ToString los oculta, pero las propiedades Token,
-Sign y Xml siguen siendo sensibles. El servicio no registra mensajes SOAP.
-La caché incorporada es local al proceso. El paquete EF optativo agrega tickets
-cifrados compartidos cuando se selecciona explícitamente; el registro del
-paquete base no activa almacenamiento distribuido. Sus invariantes están en
-[ADR 0006](ADR-0006-shared-wsaa-tickets).
+El TA contiene secretos. Su ToString los oculta, pero las propiedades Token, Sign y Xml siguen siendo sensibles. El servicio no registra mensajes SOAP. La caché incorporada es local al proceso. El paquete EF optativo agrega tickets cifrados compartidos cuando se selecciona explícitamente; el registro del paquete base no activa almacenamiento distribuido. Sus invariantes están en [ADR 0006](ADR-0006-shared-wsaa-tickets).
 
 ## Hito 1: agentes y validación
 
-Luna Cripto desarrolló las operaciones criptográficas; Luna DevOps estructuró
-proyectos, empaquetado y licencias; Luna Testing escribió las pruebas. El
-coordinador implementó el servicio e integró los componentes. El rol Luna
-Integración revisó el contrato SOAP y la caché en una segunda tarea del agente
-Cripto, debido al límite de threads del entorno.
+Luna Cripto desarrolló las operaciones criptográficas; Luna DevOps estructuró proyectos, empaquetado y licencias; Luna Testing escribió las pruebas. El coordinador implementó el servicio e integró los componentes. El rol Luna Integración revisó el contrato SOAP y la caché en una segunda tarea del agente Cripto, debido al límite de threads del entorno.
 
-La suite validada comprobó CMS y CSR con primitivas independientes de
-verificación, simuló HTTP/SOAP y controló el reloj. La suite Release actual pasó
-253/256 casos (3 omitidos); build con 0 warnings y 0 errors. Los Dummies reales
-en QA comprobaron disponibilidad, no autorización de negocio. La suite de
-homologación autenticada requiere certificados autorizados; compilar y pasar
-tests no demuestra aceptación fiscal. El inventario y las diferencias con Python están documentados en
-`docs/plans/hito-1.md`; no se declara compatibilidad binaria/COM ni paridad de
-todos los módulos del repositorio original.
+La suite validada comprobó CMS y CSR con primitivas independientes de verificación, simuló HTTP/SOAP y controló el reloj. La suite Release actual pasó 253/256 casos (3 omitidos); build con 0 warnings y 0 errors. Los Dummies reales en QA comprobaron disponibilidad, no autorización de negocio. La suite de homologación autenticada requiere certificados autorizados; compilar y pasar tests no demuestra aceptación fiscal. El inventario y las diferencias con Python están documentados en `docs/plans/hito-1.md`; no se declara compatibilidad binaria/COM ni paridad de todos los módulos del repositorio original.
 
 ## Health checks opt-in
 
-`NetArcaWs.HealthChecks` implementa `IHealthCheck` sin dependencia de ASP.NET ni
-certificados. `AddHealthChecks().AddWsfev1HealthCheck(...)` registra únicamente
-WSFEv1; los demás WS se agregan individualmente. Cada registro tiene nombre,
-entorno, endpoint, timeout y tags propios. No hay un registro global implícito,
-trabajo en segundo plano ni una dependencia del cliente WSAA.
+`NetArcaWs.HealthChecks` implementa `IHealthCheck` sin dependencia de ASP.NET ni certificados. `AddHealthChecks().AddWsfev1HealthCheck(...)` registra únicamente WSFEv1; los demás WS se agregan individualmente. Cada registro tiene nombre, entorno, endpoint, timeout y tags propios. No hay un registro global implícito, trabajo en segundo plano ni una dependencia del cliente WSAA.
 
-La fábrica HttpClient administra conexiones; cada ejecución tiene un token de
-timeout que cubre envío y lectura. Los probes no se reintentan ni cachean: el
-monitor decide cuándo volver a consultar. La cancelación del consumidor se
-propaga y no se registra como una caída de ARCA. HTTP, TLS/red, XML inválido,
-respuesta excesiva y estados no OK se convierten en Unhealthy con motivo acotado.
+La fábrica HttpClient administra conexiones; cada ejecución tiene un token de timeout que cubre envío y lectura. Los probes no se reintentan ni cachean: el monitor decide cuándo volver a consultar. La cancelación del consumidor se propaga y no se registra como una caída de ARCA. HTTP, TLS/red, XML inválido, respuesta excesiva y estados no OK se convierten en Unhealthy con motivo acotado.
 
-Los perfiles del protocolo son explícitos: WSFE/FEX tienen resultado y campos
-calificados; Padrón devuelve `return` y campos sin namespace; MTXCA usa Body vacío
-y campos directos. XmlSerializer y lectores sin DTD preservan esas diferencias.
-WSAA verifica únicamente el WSDL, nunca solicita un ticket. Los detalles y fuentes
-del contrato están en `docs/reference/healthchecks-contracts.md`.
+Los perfiles del protocolo son explícitos: WSFE/FEX tienen resultado y campos calificados; Padrón devuelve `return` y campos sin namespace; MTXCA usa Body vacío y campos directos. XmlSerializer y lectores sin DTD preservan esas diferencias. WSAA verifica únicamente el WSDL, nunca solicita un ticket. Los detalles y fuentes del contrato están en `docs/reference/healthchecks-contracts.md`.
 
 ## Diario fiscal y reintentos
 
-`InvoiceCoordinator`, `IInvoiceJournal` y `SqliteInvoiceJournal` implementan las
-primitivas del diario: guardan payload/hash e identidad fiscal, adquieren leases
-con fencing y conservan estados inciertos para reconciliación explícita. El
-archivo SQLite local permite procesos del mismo host; no NFS ni hosts
-distribuidos. Otra implementación transaccional compartida debe conservar
-idempotencia y unicidad para multi-host.
+`InvoiceCoordinator`, `IInvoiceJournal` y `SqliteInvoiceJournal` implementan las primitivas del diario: guardan payload/hash e identidad fiscal, adquieren leases con fencing y conservan estados inciertos para reconciliación explícita. El archivo SQLite local permite procesos del mismo host; no NFS ni hosts distribuidos. Otra implementación transaccional compartida debe conservar idempotencia y unicidad para multi-host.
 
-`SafeInvoiceService` conecta las fachadas con autorización CAE unitaria y
-consultas de reconciliación exactas por WSFEv1, WSFEXv1 y WSMTXCA. La suite y la
-validación de contratos de esos flujos pasaron; el transporte común no reintenta.
-`ResumeAsync` envía solo un snapshot aún `Prepared`; estados
-inciertos se reconcilian sin reenvío. Corregir un rechazo confirmado genera una
-revisión auditable que queda preparada hasta que la aplicación invoque
-explícitamente `ResumeAsync`. El paquete EF opcional agrega una cola y un worker
-opt-in para esa misma política. Aplican las reglas del
-[ADR 0001](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros); una prueba de diario no prueba
-la garantía del ciclo fiscal completo.
+`SafeInvoiceService` conecta las fachadas con autorización CAE unitaria y consultas de reconciliación exactas por WSFEv1, WSFEXv1 y WSMTXCA. La suite y la validación de contratos de esos flujos pasaron; el transporte común no reintenta. `ResumeAsync` envía solo un snapshot aún `Prepared`; estados inciertos se reconcilian sin reenvío. Corregir un rechazo confirmado genera una revisión auditable que queda preparada hasta que la aplicación invoque explícitamente `ResumeAsync`. El paquete EF opcional agrega una cola y un worker opt-in para esa misma política. Aplican las reglas del [ADR 0001](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros); una prueba de diario no prueba la garantía del ciclo fiscal completo.
 
-La adjudicación explícita de las validaciones WSFEX 1550 por tag omitido y
-1673 por fecha de pago prohibida usa la
-capacidad opcional `IInvoiceRejectionAdjudicationJournal`. El diario SQLite core
-conserva atómicamente la evidencia original en un ledger inmutable, archiva la
-operación previa y cambia únicamente el estado de la versión esperada a
-`Rejected`. No envía SOAP, no cambia la identidad ni corrige el payload. Una
-revisión posterior explícita mantiene número e Id remoto. El wrapper de
-homologación respalda también este ledger en el estado protegido. Los providers
-sin esta capacidad, incluido EF Core en esta etapa, fallan explícitamente; no
-se agregan tablas EF ni migraciones de sus motores por esta API. Las consultas
-negativas o incompletas permanecen inciertas y no habilitan reenvíos. La regla
-1673 exige el mensaje literal confirmado, una nota tipo 20/21 de exportación
-de servicios (`TipoExpo=2`) y una fecha válida en el request original. La
-revisión aprobada omite únicamente `Fecha_pago`; el ADR detalla los límites.
+La adjudicación explícita de las validaciones WSFEX 1550 por tag omitido y 1673 por fecha de pago prohibida usa la capacidad opcional `IInvoiceRejectionAdjudicationJournal`. El diario SQLite core conserva atómicamente la evidencia original en un ledger inmutable, archiva la operación previa y cambia únicamente el estado de la versión esperada a `Rejected`. No envía SOAP, no cambia la identidad ni corrige el payload. Una revisión posterior explícita mantiene número e Id remoto. El wrapper de homologación respalda también este ledger en el estado protegido. Los providers sin esta capacidad, incluido EF Core en esta etapa, fallan explícitamente; no se agregan tablas EF ni migraciones de sus motores por esta API. Las consultas negativas o incompletas permanecen inciertas y no habilitan reenvíos. La regla 1673 exige el mensaje literal confirmado, una nota tipo 20/21 de exportación de servicios (`TipoExpo=2`) y una fecha válida en el request original. La revisión aprobada omite únicamente `Fecha_pago`; el ADR detalla los límites.
 
 ### Persistencia opcional con Entity Framework Core
 
-El paquete `NetArcaWs.EntityFrameworkCore` implementa `IInvoiceJournal` sobre
-un `DbContext` mediante `IDbContextFactory<TContext>`. El paquete base no
-depende de EF. `NetArcaWsModelOptions` habilita, de forma inmutable, facturación
-(WSFEv1, WSFEXv1 y/o WSMTXCA), tickets WSAA para servicios seleccionados, el
-store independiente de certificados y/o la cola `InvoiceRecovery`. Para cada
-servicio de recuperación también debe seleccionarse `AddInvoicing(...)`; la
-selección de modelo no registra el worker ni ejecuta DDL. El modelo operativo
-conserva solo las tablas elegidas.
+El paquete `NetArcaWs.EntityFrameworkCore` implementa `IInvoiceJournal` sobre un `DbContext` mediante `IDbContextFactory<TContext>`. El paquete base no depende de EF. `NetArcaWsModelOptions` habilita, de forma inmutable, facturación (WSFEv1, WSFEXv1 y/o WSMTXCA), tickets WSAA para servicios seleccionados, el store independiente de certificados y/o la cola `InvoiceRecovery`. Para cada servicio de recuperación también debe seleccionarse `AddInvoicing(...)`; la selección de modelo no registra el worker ni ejecuta DDL. El modelo operativo conserva solo las tablas elegidas.
 
-Los providers de stores MySQL, PostgreSQL y SQL Server son extras separados;
-MySQL/MariaDB requiere una versión explícita. Cinco extras de migraciones
-(`NetArcaWs.EntityFrameworkCore.Migrations.{Sqlite,MySql,MariaDb,PostgreSql,SqlServer}`)
-contienen contextos fijos e historias separadas por motor y módulo. Los cuatro
-módulos (facturación, tickets WSAA, certificados y recuperación) se seleccionan
-por separado.
-La tarea de
-despliegue registra el paquete elegido, consulta `INetArcaWsMigrator.GetStatusAsync`,
-puede revisar SQL con `GenerateScript(module, fromMigration, toMigration,
-idempotent)` y llama `ApplyAsync` para avanzar. El modelo operativo del consumidor
-mantiene su propia historia; la ruta soportada de migrations oficiales usa sus
-contextos dedicados.
+Los providers de stores MySQL, PostgreSQL y SQL Server son extras separados; MySQL/MariaDB requiere una versión explícita. Cinco extras de migraciones (`NetArcaWs.EntityFrameworkCore.Migrations.{Sqlite,MySql,MariaDb,PostgreSql,SqlServer}`) contienen contextos fijos e historias separadas por motor y módulo. Los cuatro módulos (facturación, tickets WSAA, certificados y recuperación) se seleccionan por separado. La tarea de despliegue registra el paquete elegido, consulta `INetArcaWsMigrator.GetStatusAsync`, puede revisar SQL con `GenerateScript(module, fromMigration, toMigration, idempotent)` y llama `ApplyAsync` para avanzar. El modelo operativo del consumidor mantiene su propia historia; la ruta soportada de migrations oficiales usa sus contextos dedicados.
 
-El módulo `InvoiceRecovery` agrega `NetArcaInvoiceRecoveryJobs` y su historial
-`__NetArcaWsInvoiceRecoveryMigrations`; su migración inicial es
-`20261007000400_InitialInvoiceRecovery`. El contexto y el apply aislados crean
-solo la tabla de cola. Los artefactos actuales suman 25 DDL nativos y 20 IDs de
-migración: cinco selecciones y cuatro módulos para cada uno de cinco motores.
+El módulo `InvoiceRecovery` agrega `NetArcaInvoiceRecoveryJobs` y su historial `__NetArcaWsInvoiceRecoveryMigrations`; su migración inicial es `20261007000400_InitialInvoiceRecovery`. El contexto y el apply aislados crean solo la tabla de cola. Los artefactos actuales suman 25 DDL nativos y 20 IDs de migración: cinco selecciones y cuatro módulos para cada uno de cinco motores.
 
-El registro DI y el inicio normal de la API no conectan ni aplican migraciones.
-El actor de despliegue usa permisos de esquema; runtime usa permisos de datos
-mínimos. Serializá jobs externamente por base: el preflight ocurre antes del lock
-EF y no coordina otros actores. Los cuatro módulos se pueden aplicar en cualquiera
-de los 24 órdenes posibles. Deshabilitarlos preserva tablas, historial y filas. Updates usan paquetes
-actualizados más migraciones oficiales pendientes; el consumidor no crea
-migraciones para esas tablas. Un cambio futuro añade una migración por módulo y
-motor, preserva las publicadas y prueba desde la anterior.
+El registro DI y el inicio normal de la API no conectan ni aplican migraciones. El actor de despliegue usa permisos de esquema; runtime usa permisos de datos mínimos. Serializá jobs externamente por base: el preflight ocurre antes del lock EF y no coordina otros actores. Los cuatro módulos se pueden aplicar en cualquiera de los 24 órdenes posibles. Deshabilitarlos preserva tablas, historial y filas. Updates usan paquetes actualizados más migraciones oficiales pendientes; el consumidor no crea migraciones para esas tablas. Un cambio futuro añade una migración por módulo y motor, preserva las publicadas y prueba desde la anterior.
 
-No se adopta automáticamente el diario SQLite core, `EnsureCreated`, DDL manual
-o esquema con historia del consumidor. Tablas existentes sin historia oficial,
-IDs desconocidos, gaps y esquema incompleto se rechazan; no hay baseline
-automático ni instrucciones para insertar historia o borrar datos. SQLite no
-admite scripts idempotentes. Sus migraciones pueden crear además
-`__EFMigrationsLock`. PostgreSQL usa `public` y SQL Server usa `dbo`; los otros
-motores usan su schema por defecto. La API de conveniencia avanza solamente y no
-promete rollback uniforme de DDL entre motores.
+No se adopta automáticamente el diario SQLite core, `EnsureCreated`, DDL manual o esquema con historia del consumidor. Tablas existentes sin historia oficial, IDs desconocidos, gaps y esquema incompleto se rechazan; no hay baseline automático ni instrucciones para insertar historia o borrar datos. SQLite no admite scripts idempotentes. Sus migraciones pueden crear además `__EFMigrationsLock`. PostgreSQL usa `public` y SQL Server usa `dbo`; los otros motores usan su schema por defecto. La API de conveniencia avanza solamente y no promete rollback uniforme de DDL entre motores.
 
-El modelo relacional documenta siete tablas funcionales, 25 DDL actuales (cinco
-selecciones × cinco motores) y 20 scripts de migración inicial versionados
-(cuatro módulos × cinco motores). El DDL representa el modelo actual y los scripts
-el upgrade real `0`→`latest`; no son intercambiables ni baselines automáticos.
+El modelo relacional documenta siete tablas funcionales, 25 DDL actuales (cinco selecciones × cinco motores) y 20 scripts de migración inicial versionados (cuatro módulos × cinco motores). El DDL representa el modelo actual y los scripts el upgrade real `0`→`latest`; no son intercambiables ni baselines automáticos.
 
-El módulo opcional `TenantCertificates` almacena versiones inmutables cifradas y
-un puntero activo por tenant/CUIT/ambiente. La aplicación autoriza ese alcance
-antes de leer o escribir; el store no otorga permisos ni solicita, renueva o
-habilita certificados ante ARCA. El protector AES-GCM recibe un keyring externo
-de la aplicación. DI no conecta ni ejecuta migraciones; el despliegue selecciona
-y aplica explícitamente su historial independiente. La emisión durable no
-incluye `VersionId` en su hash ni en sus tablas: el consumidor registra la
-versión escogida junto a su propia operación preparada. Véase la
-[guía multitenant](Certificados-multitenant) y el
-[ADR 0007](ADR-0007-tenant-certificate-store).
+El módulo opcional `TenantCertificates` almacena versiones inmutables cifradas y un puntero activo por tenant/CUIT/ambiente. La aplicación autoriza ese alcance antes de leer o escribir; el store no otorga permisos ni solicita, renueva o habilita certificados ante ARCA. El protector AES-GCM recibe un keyring externo de la aplicación. DI no conecta ni ejecuta migraciones; el despliegue selecciona y aplica explícitamente su historial independiente. La emisión durable no incluye `VersionId` en su hash ni en sus tablas: el consumidor registra la versión escogida junto a su propia operación preparada. Véase la [guía multitenant](Certificados-multitenant) y el [ADR 0007](ADR-0007-tenant-certificate-store).
 
-CI 37547645296 pasó 510 pruebas (491 aprobadas, 19 opt-in skips, 0 fallos),
-build Release con 0 warnings; MySQL 8.4.11 20/20, MariaDB 11.4.13 20/20,
-PostgreSQL 17.6 19/19 y SQL Server Developer 16.0.4295.3 19/19, sin skips de
-motor. La corrida validó también los 10 SQL de migración, 15 DDL, 11 paquetes y
-un consumer/CLI nuevo. Es evidencia limitada a estas versiones/escenarios; no
-hubo llamadas ARCA en esa corrida. Consultar
-[ADR 0005](ADR-0005-ef-core-invoice-journal), la
-[guía del diario](Diario-fiscal) y el
-[modelo relacional](Modelo-relacional).
+CI 37547645296 pasó 510 pruebas (491 aprobadas, 19 opt-in skips, 0 fallos), build Release con 0 warnings; MySQL 8.4.11 20/20, MariaDB 11.4.13 20/20, PostgreSQL 17.6 19/19 y SQL Server Developer 16.0.4295.3 19/19, sin skips de motor. La corrida validó también los 10 SQL de migración, 15 DDL, 11 paquetes y un consumer/CLI nuevo. Es evidencia limitada a estas versiones/escenarios; no hubo llamadas ARCA en esa corrida. Consultar [ADR 0005](ADR-0005-ef-core-invoice-journal), la [guía del diario](Diario-fiscal) y el [modelo relacional](Modelo-relacional).
 
-Las corridas locales de la cola/worker de recuperación fiscal reportadas para el issue #24
-son sintéticas y están desglosadas en `PROGRESS.md`; el consumer smoke con feed
-local nuevo, la instalación de CLI y el pack local de once proyectos pasaron.
-La revisión completa aprobó restore locked, build Release (0 warnings/0 errors),
-630 pruebas (588 aprobadas, 42 skips opt-in, 0 fallos), 25 DDL y 20 scripts de
-migración. No se hicieron llamadas a ARCA en esas corridas.
+Las corridas locales de la cola/worker de recuperación fiscal reportadas para el issue #24 son sintéticas y están desglosadas en `PROGRESS.md`; el consumer smoke con feed local nuevo, la instalación de CLI y el pack local de once proyectos pasaron. La revisión completa aprobó restore locked, build Release (0 warnings/0 errors), 630 pruebas (588 aprobadas, 42 skips opt-in, 0 fallos), 25 DDL y 20 scripts de migración. No se hicieron llamadas a ARCA en esas corridas.
 
 ## Herramienta de certificados
 
-`NetArcaWs.Tool` es un paquete .NET tool independiente que referencia la biblioteca.
-`CertificateTool` separa la ejecución de comandos de consola y recibe salida,
-errores y acceso al entorno para probarlos sin exponer secretos. Reutiliza la
-criptografía nativa del port: RSA, CSR PKCS#10 y claves PKCS#8 cifradas. No ejecuta
-procesos externos ni conecta con ARCA.
+`NetArcaWs.Tool` es un paquete .NET tool independiente que referencia la biblioteca. `CertificateTool` separa la ejecución de comandos de consola y recibe salida, errores y acceso al entorno para probarlos sin exponer secretos. Reutiliza la criptografía nativa del port: RSA, CSR PKCS#10 y claves PKCS#8 cifradas. No ejecuta procesos externos ni conecta con ARCA.
 
-Los comandos exigen un destino nuevo. Escriben cuatro archivos en una carpeta
-hermana temporal privada y publican el conjunto con Directory.Move. Los permisos
-Unix son 0700/0600; Windows hereda las ACL del directorio padre. La contraseña se
-obtiene de una variable de entorno, nunca de un argumento literal. El manifiesto
-incluye la huella de la clave pública, nunca la clave privada ni su contraseña.
+Los comandos exigen un destino nuevo. Escriben cuatro archivos en una carpeta hermana temporal privada y publican el conjunto con Directory.Move. Los permisos Unix son 0700/0600; Windows hereda las ACL del directorio padre. La contraseña se obtiene de una variable de entorno, nunca de un argumento literal. El manifiesto incluye la huella de la clave pública, nunca la clave privada ni su contraseña.
 
-`cert-info` lee cada entrada desde un único handle con límite de 1 MiB, exige RSA,
-comprueba vigencia local y opcionalmente la correspondencia de la clave privada.
-No determina confianza, revocación ni habilitaciones de ARCA. Los strings PEM
-administrados conservan la limitación de borrado de memoria descrita arriba.
-La suite `NetArcaWs.Tool.Tests` valida comandos, CSR, claves, concurrencia,
-permisos, cancelación y errores. CI empaqueta e instala la herramienta para
-comprobar también su ejecución fuera de la solución.
+`cert-info` lee cada entrada desde un único handle con límite de 1 MiB, exige RSA, comprueba vigencia local y opcionalmente la correspondencia de la clave privada. No determina confianza, revocación ni habilitaciones de ARCA. Los strings PEM administrados conservan la limitación de borrado de memoria descrita arriba. La suite `NetArcaWs.Tool.Tests` valida comandos, CSR, claves, concurrencia, permisos, cancelación y errores. CI empaqueta e instala la herramienta para comprobar también su ejecución fuera de la solución.
 
 ## Documentación de decisiones y publicación
 
-El [ADR 0003](Decisi%C3%B3n-3-Certificados-en-memoria) formaliza el contrato de
-certificados en memoria y complementa el contexto multitenant del ADR 0002.
-El [hito final del wiki](Plan-de-documentaci%C3%B3n-y-wiki) consolidará toda la
-documentación y las decisiones, con trazabilidad hacia las fuentes de PyAfipWs
-y una matriz explícita de compatibilidad y extras de NetArcaWs.
+El [ADR 0003](Decisi%C3%B3n-3-Certificados-en-memoria) formaliza el contrato de certificados en memoria y complementa el contexto multitenant del ADR 0002. El [hito final del wiki](Plan-de-documentaci%C3%B3n-y-wiki) consolidará toda la documentación y las decisiones, con trazabilidad hacia las fuentes de PyAfipWs y una matriz explícita de compatibilidad y extras de NetArcaWs.

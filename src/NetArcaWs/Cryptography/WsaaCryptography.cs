@@ -16,8 +16,7 @@ public static class WsaaCryptography
     private static readonly Oid SerialNumberOid = new("2.5.4.5");
 
     /// <summary>
-    /// Signs a TRA as an attached CMS SignedData object and returns its base64 encoding.
-    /// The content is signed as UTF-8 bytes without MIME canonicalization.
+    /// Signs a TRA as an attached CMS SignedData object and returns its base64 encoding. The content is signed as UTF-8 bytes without MIME canonicalization.
     /// </summary>
     public static string SignTra(string tra, X509Certificate2 certificate)
     {
@@ -64,9 +63,7 @@ public static class WsaaCryptography
     }
 
     /// <summary>
-    /// Creates a PKCS#10 request signed with SHA-256 and RSA PKCS#1 v1.5.
-    /// Its subject follows pyafipws: C=AR, O=organization, CN=commonName,
-    /// serialNumber="CUIT {cuit}".
+    /// Creates a PKCS#10 request signed with SHA-256 and RSA PKCS#1 v1.5. Its subject follows pyafipws: C=AR, O=organization, CN=commonName, serialNumber="CUIT {cuit}".
     /// </summary>
     public static string CreateCertificateRequest(
         RSA key,
@@ -142,8 +139,7 @@ public static class WsaaCryptography
     }
 
     /// <summary>
-    /// Loads a PEM certificate and its matching RSA private key. Encrypted PKCS#8 is supported
-    /// by .NET; traditional OpenSSL RSA PEM supports the upstream AES-256-CBC format.
+    /// Loads a PEM certificate and its matching RSA private key. Encrypted PKCS#8 is supported by .NET; traditional OpenSSL RSA PEM supports the upstream AES-256-CBC format.
     /// </summary>
     public static X509Certificate2 LoadPem(
         string certificatePem,

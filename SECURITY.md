@@ -14,5 +14,4 @@ Security fixes are made against the latest released version. Users should upgrad
 
 ## Repository and release controls
 
-See the [repository and publication security guide](docs/wiki/Seguridad-y-publicacion.md)
-for required reviews, protected release tags, scanning, and the isolated OIDC publisher.
+See the [repository and publication security guide](docs/wiki/Seguridad-y-publicacion.md) for required reviews, protected release tags, scanning, and the isolated OIDC publisher.

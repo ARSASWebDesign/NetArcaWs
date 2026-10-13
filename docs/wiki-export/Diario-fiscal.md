@@ -2,11 +2,7 @@
 
 # Diario fiscal, emisión y reconciliación
 
-`SafeInvoiceService` compone las fachadas SOAP tipadas con el diario y aplica
-una política conservadora para solicitudes CAE unitarias de WSFEv1, WSFEXv1 y
-WSMTXCA. `InvoiceCoordinator` controla preparación, lease, fencing y persistencia
-del resultado. No reserva la numeración del contribuyente ni promete una
-ejecución exactly-once frente a ARCA.
+`SafeInvoiceService` compone las fachadas SOAP tipadas con el diario y aplica una política conservadora para solicitudes CAE unitarias de WSFEv1, WSFEXv1 y WSMTXCA. `InvoiceCoordinator` controla preparación, lease, fencing y persistencia del resultado. No reserva la numeración del contribuyente ni promete una ejecución exactly-once frente a ARCA.
 
 ## Registro en DI
 
@@ -16,23 +12,18 @@ Para SQLite local:
 services.AddNetArcaWsSqliteInvoicing(databasePath);
 ```
 
-Esto registra `SqliteInvoiceJournal`, WSAA, transporte y fachadas, además de
-`InvoiceCoordinator` y `SafeInvoiceService`. Si la aplicación ya implementa un
-diario transaccional compartido, registrar `IInvoiceJournal` y luego:
+Esto registra `SqliteInvoiceJournal`, WSAA, transporte y fachadas, además de `InvoiceCoordinator` y `SafeInvoiceService`. Si la aplicación ya implementa un diario transaccional compartido, registrar `IInvoiceJournal` y luego:
 
 ```csharp
 services.AddSingleton<IInvoiceJournal, MyTransactionalInvoiceJournal>();
 services.AddNetArcaWsInvoicing();
 ```
 
-La extensión general configura WSAA y servicios. El proveedor elegido debe
-garantizar idempotencia por tenant/clave, unicidad fiscal entre tenants/servicios,
-bloqueo de serie y fencing equivalentes al contrato de `IInvoiceJournal`.
+La extensión general configura WSAA y servicios. El proveedor elegido debe garantizar idempotencia por tenant/clave, unicidad fiscal entre tenants/servicios, bloqueo de serie y fencing equivalentes al contrato de `IInvoiceJournal`.
 
 ## Autorizar un comprobante
 
-Las APIs reciben el contexto confiable, una clave de idempotencia estable de la
-aplicación y un request tipado público:
+Las APIs reciben el contexto confiable, una clave de idempotencia estable de la aplicación y un request tipado público:
 
 ```csharp
 var invoices = provider.GetRequiredService<SafeInvoiceService>();
@@ -41,40 +32,19 @@ InvoiceOperation wsfe = await invoices.AuthorizeWsfeAsync(
     tenant, idempotencyKey, fecaeRequest, cancellationToken);
 ```
 
-Para los otros contratos, la forma es `AuthorizeWsfexAsync(tenant, key,
-ClsFexRequest, cancellationToken)` y `AuthorizeWsmtxcaAsync(tenant, key,
-ComprobanteType, cancellationToken)`. Cada ejemplo corresponde a una llamada
-alternativa: no reutilizar una misma clave de idempotencia para requests distintos.
+Para los otros contratos, la forma es `AuthorizeWsfexAsync(tenant, key, ClsFexRequest, cancellationToken)` y `AuthorizeWsmtxcaAsync(tenant, key, ComprobanteType, cancellationToken)`. Cada ejemplo corresponde a una llamada alternativa: no reutilizar una misma clave de idempotencia para requests distintos.
 
-Construir `tenant` después de resolver/autenticar la autorización de la
-aplicación, no con campos libres del request entrante. El número de comprobante
-lo asigna y entrega la aplicación dentro del DTO: la biblioteca no consulta el
-último número para asignar el siguiente. La misma clave y el mismo payload
-devuelven la operación existente sin reenvío; reutilizar la clave con contenido
-distinto, o usar una identidad fiscal ocupada, produce conflicto.
+Construir `tenant` después de resolver/autenticar la autorización de la aplicación, no con campos libres del request entrante. El número de comprobante lo asigna y entrega la aplicación dentro del DTO: la biblioteca no consulta el último número para asignar el siguiente. La misma clave y el mismo payload devuelven la operación existente sin reenvío; reutilizar la clave con contenido distinto, o usar una identidad fiscal ocupada, produce conflicto.
 
 Restricciones del orquestador actual:
 
-- WSFEv1 exige `CantReg = 1`, un detalle, un único número (`CbteDesde = CbteHasta`),
-  fecha y cotización explícitas. La interfaz low-level sigue permitiendo los
-  contratos batch, pero este flujo durable no procesa lotes.
+- WSFEv1 exige `CantReg = 1`, un detalle, un único número (`CbteDesde = CbteHasta`), fecha y cotización explícitas. La interfaz low-level sigue permitiendo los contratos batch, pero este flujo durable no procesa lotes.
 - WSFEXv1 exige `Cmp.Id` positivo, fecha y cotización explícitas.
-- WSMTXCA exige fecha de emisión y cotización y rechaza requests con campos de
-  autorización ya presentes.
+- WSMTXCA exige fecha de emisión y cotización y rechaza requests con campos de autorización ya presentes.
 
-La respuesta de autorización se compara con el tenant/identidad y con los campos
-fiscales correlacionables del request. Solo una respuesta completa y correlacionada
-con CAE válido se registra como `Authorized`. `Rejected` requiere el detalle de
-rechazo correlacionado y sin CAE, salvo las dos validaciones terminales WSFEX
-allowlisted de forma exacta más abajo. XML ausente, campos incompletos, diferencia
-de payload o resultado contradictorio no se tratan como rechazo: el resultado
-queda `Unknown` o `Conflict`. Un error de transporte se persiste como `Unknown`
-y se propaga al caller.
+La respuesta de autorización se compara con el tenant/identidad y con los campos fiscales correlacionables del request. Solo una respuesta completa y correlacionada con CAE válido se registra como `Authorized`. `Rejected` requiere el detalle de rechazo correlacionado y sin CAE, salvo las dos validaciones terminales WSFEX allowlisted de forma exacta más abajo. XML ausente, campos incompletos, diferencia de payload o resultado contradictorio no se tratan como rechazo: el resultado queda `Unknown` o `Conflict`. Un error de transporte se persiste como `Unknown` y se propaga al caller.
 
-WSMTXCA tiene una forma de rechazo propia: resultado `R`, errores no vacíos y
-ausencia de `ComprobanteResponse` es un rechazo de negocio documentado. Los
-resultados `A`/`O` solo se aceptan como autorización si traen un comprobante
-correlacionado y CAE válido; no se interpreta ausencia del objeto como éxito.
+WSMTXCA tiene una forma de rechazo propia: resultado `R`, errores no vacíos y ausencia de `ComprobanteResponse` es un rechazo de negocio documentado. Los resultados `A`/`O` solo se aceptan como autorización si traen un comprobante correlacionado y CAE válido; no se interpreta ausencia del objeto como éxito.
 
 ## Recuperar y reconciliar
 
@@ -84,11 +54,7 @@ var pending = await journal.ListPendingAsync(tenant.TenantId,
     cancellationToken: cancellationToken);
 ```
 
-`ListPendingAsync` devuelve `Prepared`, `Unknown`, `Conflict` y `ManualReview`,
-además de operaciones `Submitting`/`Reconciling` con lease vencida. Se filtra por
-tenant y el límite predeterminado es 100 (máximo 1000). En el paquete core la
-aplicación inicia la recuperación directamente. El worker opcional EF descrito
-más abajo agrega polling y backoff para la cola durable.
+`ListPendingAsync` devuelve `Prepared`, `Unknown`, `Conflict` y `ManualReview`, además de operaciones `Submitting`/`Reconciling` con lease vencida. Se filtra por tenant y el límite predeterminado es 100 (máximo 1000). En el paquete core la aplicación inicia la recuperación directamente. El worker opcional EF descrito más abajo agrega polling y backoff para la cola durable.
 
 Use `ResumeAsync` para que el diario decida la acción según el estado guardado:
 
@@ -100,104 +66,36 @@ foreach (InvoiceOperation item in pending)
 }
 ```
 
-`ResumeAsync` vuelve a enviar únicamente una operación `Prepared`, usando el
-payload fiscal inmutable ya almacenado. Comprueba CUIT y ambiente del contexto.
-Para cualquier otro estado delega en `ReconcileAsync`, que consulta el servicio
-asociado y no llama al método de autorización. Así se recupera una caída ocurrida
-después de preparar y antes del envío sin permitir que la aplicación cambie el
-request congelado. Un resultado incierto no es un permiso para reintentar.
+`ResumeAsync` vuelve a enviar únicamente una operación `Prepared`, usando el payload fiscal inmutable ya almacenado. Comprueba CUIT y ambiente del contexto. Para cualquier otro estado delega en `ReconcileAsync`, que consulta el servicio asociado y no llama al método de autorización. Así se recupera una caída ocurrida después de preparar y antes del envío sin permitir que la aplicación cambie el request congelado. Un resultado incierto no es un permiso para reintentar.
 
-`ReconcileAsync` usa la consulta exacta del servicio asociado a la operación y
-compara el resultado remoto con una proyección de todos los campos fiscales
-comparables. Una respuesta que no encuentra el comprobante, incompleta o que no
-puede correlacionarse conserva `Unknown`; diferencias fiscales terminan en
-`Conflict`. La reconciliación no puede clasificar una respuesta negativa como
-ausencia segura ni volver a llamar el método de autorización, incluso si el
-manual describe un reenvío seguro. Solo una coincidencia positiva y autorizada
-puede resolver a `Authorized`. La repetición de la propia llamada
-`ReconcileAsync` es una nueva consulta, no una nueva emisión.
+`ReconcileAsync` usa la consulta exacta del servicio asociado a la operación y compara el resultado remoto con una proyección de todos los campos fiscales comparables. Una respuesta que no encuentra el comprobante, incompleta o que no puede correlacionarse conserva `Unknown`; diferencias fiscales terminan en `Conflict`. La reconciliación no puede clasificar una respuesta negativa como ausencia segura ni volver a llamar el método de autorización, incluso si el manual describe un reenvío seguro. Solo una coincidencia positiva y autorizada puede resolver a `Authorized`. La repetición de la propia llamada `ReconcileAsync` es una nueva consulta, no una nueva emisión.
 
-Si ARCA respondió pero falla el guardado local, el coordinador intenta conservar
-el XML de respuesta como evidencia en estado `Unknown` y propaga el error
-original. Si también falla esa escritura, la operación sigue con su lease
-durable; una vez vencida, `ResumeAsync` consulta el comprobante antes de resolver
-el resultado. Si el commit de `Authorized` se realizó pero se perdió su acuse,
-el fencing impide degradarlo a `Unknown`: la recuperación devuelve el resultado
-guardado. Ninguno de estos caminos vuelve a emitir la autorización. La evidencia
-no puede garantizarse si el almacenamiento permanece inaccesible.
+Si ARCA respondió pero falla el guardado local, el coordinador intenta conservar el XML de respuesta como evidencia en estado `Unknown` y propaga el error original. Si también falla esa escritura, la operación sigue con su lease durable; una vez vencida, `ResumeAsync` consulta el comprobante antes de resolver el resultado. Si el commit de `Authorized` se realizó pero se perdió su acuse, el fencing impide degradarlo a `Unknown`: la recuperación devuelve el resultado guardado. Ninguno de estos caminos vuelve a emitir la autorización. La evidencia no puede garantizarse si el almacenamiento permanece inaccesible.
 
-Antes de consultar o devolver un resultado ya terminal, `ReconcileAsync` comprueba
-que tenant, CUIT representada, ambiente y versión de canonicalización coincidan
-con el registro. El contexto incorrecto no revela ni devuelve la operación.
+Antes de consultar o devolver un resultado ya terminal, `ReconcileAsync` comprueba que tenant, CUIT representada, ambiente y versión de canonicalización coincidan con el registro. El contexto incorrecto no revela ni devuelve la operación.
 
-Una respuesta de rechazo correlacionada sí puede corregirse mediante una
-revisión explícita. `ReviseRejectedAsync(tenant, key, expectedVersion,
-replacement)` tiene sobrecargas para `FecaeRequest`, `ClsFexRequest` y
-`ComprobanteType`. Solo admite una operación confirmada como `Rejected` y usa
-control de versión para evitar corregir una versión que cambió. El diario guarda
-el snapshot rechazado como revisión inmutable, preserva clave de idempotencia e
-identidad fiscal y prepara el nuevo payload; esta llamada no contacta ARCA.
-`ListRevisionsAsync(tenantId, key)` permite consultar el historial. Tras revisar
-la corrección, la aplicación llama explícitamente a `ResumeAsync(tenant, key)`
-para enviar el nuevo snapshot `Prepared`.
+Una respuesta de rechazo correlacionada sí puede corregirse mediante una revisión explícita. `ReviseRejectedAsync(tenant, key, expectedVersion, replacement)` tiene sobrecargas para `FecaeRequest`, `ClsFexRequest` y `ComprobanteType`. Solo admite una operación confirmada como `Rejected` y usa control de versión para evitar corregir una versión que cambió. El diario guarda el snapshot rechazado como revisión inmutable, preserva clave de idempotencia e identidad fiscal y prepara el nuevo payload; esta llamada no contacta ARCA. `ListRevisionsAsync(tenantId, key)` permite consultar el historial. Tras revisar la corrección, la aplicación llama explícitamente a `ResumeAsync(tenant, key)` para enviar el nuevo snapshot `Prepared`.
 
-El diario bloquea preparar otra operación de la serie `(ambiente, CUIT, punto de
-venta, tipo)` si existe una operación no terminal. La serie se libera cuando
-la anterior queda `Authorized` o `Rejected`; `Unknown`, `Conflict` y
-`ManualReview` requieren intervención/revisión. La unicidad de comprobante es
-global por `(ambiente, CUIT, punto de venta, tipo, número)`, sin `tenantId` ni
-servicio. Los tenants limitan acceso y visibilidad; no habilitan duplicar un
-comprobante para la misma CUIT.
+El diario bloquea preparar otra operación de la serie `(ambiente, CUIT, punto de venta, tipo)` si existe una operación no terminal. La serie se libera cuando la anterior queda `Authorized` o `Rejected`; `Unknown`, `Conflict` y `ManualReview` requieren intervención/revisión. La unicidad de comprobante es global por `(ambiente, CUIT, punto de venta, tipo, número)`, sin `tenantId` ni servicio. Los tenants limitan acceso y visibilidad; no habilitan duplicar un comprobante para la misma CUIT.
 
 ## Excepciones WSFEX de rechazo de validación
 
-Dos errores de validación documentados pueden cerrar un intento WSFEX cuando la
-respuesta directa de `FEXAuthorize` y el request congelado satisfacen predicados
-separados y estrictos. No se extiende la regla al resto de `FEXErr`:
+Dos errores de validación documentados pueden cerrar un intento WSFEX cuando la respuesta directa de `FEXAuthorize` y el request congelado satisfacen predicados separados y estrictos. No se extiende la regla al resto de `FEXErr`:
 
-- **1550 — `Permiso_existente` omitido:** solo si el tag no estaba en el request,
-  el mensaje confirma el tag omitido y `FEXResultAuth` está ausente.
-- **1673 — `Fecha_pago` no permitida:** solo para tipo 20/21, `TipoExpo == 2`, un
-  único `Fecha_pago` válido (`yyyyMMdd`) en el snapshot y este mensaje literal,
-  comparado ordinalmente sin trim ni normalización: `Para facturas de exportacion
-  de productos y para las notas de debito y credito no informar fecha de pago`.
-  La respuesta debe tener un único error 1673 y no incluir `FEXResultAuth`.
+- **1550 — `Permiso_existente` omitido:** solo si el tag no estaba en el request, el mensaje confirma el tag omitido y `FEXResultAuth` está ausente.
+- **1673 — `Fecha_pago` no permitida:** solo para tipo 20/21, `TipoExpo == 2`, un único `Fecha_pago` válido (`yyyyMMdd`) en el snapshot y este mensaje literal, comparado ordinalmente sin trim ni normalización: `Para facturas de exportacion de productos y para las notas de debito y credito no informar fecha de pago`. La respuesta debe tener un único error 1673 y no incluir `FEXResultAuth`.
 
-Ambas reglas verifican el QName/estructura XML, snapshot, identidad e Id remoto;
-duplicados, namespaces inesperados, mensaje/código diferente, fecha ausente,
-vacía o inválida y datos de autorización contradictorios fallan cerrados. Para
-una operación incierta existente, la adjudicación además requiere la respuesta
-original íntegra, versión esperada, ausencia de lease activa y evidencia
-append-only de operador/origen/motivo. La respuesta actual debe ser la misma
-validación admitida o una consulta exacta 1020 sin evidencia positiva; 1020 no
-es motivo de rechazo.
+Ambas reglas verifican el QName/estructura XML, snapshot, identidad e Id remoto; duplicados, namespaces inesperados, mensaje/código diferente, fecha ausente, vacía o inválida y datos de autorización contradictorios fallan cerrados. Para una operación incierta existente, la adjudicación además requiere la respuesta original íntegra, versión esperada, ausencia de lease activa y evidencia append-only de operador/origen/motivo. La respuesta actual debe ser la misma validación admitida o una consulta exacta 1020 sin evidencia positiva; 1020 no es motivo de rechazo.
 
-La capability de adjudicación es explícita y hoy la ofrece SQLite y su wrapper
-protegido; otros providers sin ella fallan cerrados. Adjudicar solo cambia el
-estado y agrega auditoría inmutable, sin alterar el payload, la identidad, el
-número o el Id y sin SOAP. Una revisión posterior también es explícita y no
-envía. Para la nota 1673 observada, la revisión permitida elimina únicamente
-`Fecha_pago` y conserva el resto del snapshot y la misma identidad/Id. La
-operación histórica sigue `Unknown` hasta una adjudicación explícita; no hay
-reclasificación automática ni envío de esa revisión acreditado en vivo. Ver el
-[ADR de emisión durable](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros) para las condiciones
-completas.
+La capability de adjudicación es explícita y hoy la ofrece SQLite y su wrapper protegido; otros providers sin ella fallan cerrados. Adjudicar solo cambia el estado y agrega auditoría inmutable, sin alterar el payload, la identidad, el número o el Id y sin SOAP. Una revisión posterior también es explícita y no envía. Para la nota 1673 observada, la revisión permitida elimina únicamente `Fecha_pago` y conserva el resto del snapshot y la misma identidad/Id. La operación histórica sigue `Unknown` hasta una adjudicación explícita; no hay reclasificación automática ni envío de esa revisión acreditado en vivo. Ver el [ADR de emisión durable](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros) para las condiciones completas.
 
 ## Almacenamiento y garantías
 
-`SqliteInvoiceJournal` permite varios procesos del mismo host que comparten el
-mismo archivo SQLite local. No usar ese archivo en NFS ni compartirlo entre
-hosts. Para réplicas multi-host, implementar `IInvoiceJournal` sobre una base
-transaccional común. El diario guarda requests y respuestas fiscales, que pueden
-contener datos personales: asegurar acceso, backups y retención de la base, y no
-volcar payloads a logs.
+`SqliteInvoiceJournal` permite varios procesos del mismo host que comparten el mismo archivo SQLite local. No usar ese archivo en NFS ni compartirlo entre hosts. Para réplicas multi-host, implementar `IInvoiceJournal` sobre una base transaccional común. El diario guarda requests y respuestas fiscales, que pueden contener datos personales: asegurar acceso, backups y retención de la base, y no volcar payloads a logs.
 
 ### Entity Framework Core opcional
 
-El paquete `NetArcaWs.EntityFrameworkCore` integra el diario con un contexto EF
-del consumidor; el paquete principal no depende de EF. La configuración fija
-qué servicios de factura y qué servicios autenticados tendrán tickets
-compartidos. Se puede habilitar uno o ambos módulos:
+El paquete `NetArcaWs.EntityFrameworkCore` integra el diario con un contexto EF del consumidor; el paquete principal no depende de EF. La configuración fija qué servicios de factura y qué servicios autenticados tendrán tickets compartidos. Se puede habilitar uno o ambos módulos:
 
 ```csharp
 NetArcaWsModelOptions modelOptions = NetArcaWsModelOptions.Configure(options =>
@@ -209,25 +107,11 @@ services.AddDbContextFactory<MyApplicationDbContext>(options => options.UseSqlit
 services.AddNetArcaWsEntityFrameworkStores<MyApplicationDbContext>(modelOptions);
 ```
 
-`OnModelCreating` del contexto agrega `modelBuilder.AddNetArcaWs(modelOptions)`.
-Usá la misma instancia de opciones para el modelo y los stores. El contexto
-consumidor debe registrar `IDbContextFactory<TContext>`; la aplicación conserva
-la propiedad de las migraciones y del despliegue del esquema. La selección puede
-ser solo `AddInvoicing(...)`, solo `AddWsaaTickets(...)`, o incluir los módulos
-adicionales requeridos. `AddInvoiceRecovery(...)` requiere el mismo servicio
-dentro de `AddInvoicing(...)`. El diario acepta WSFEv1, WSFEXv1 y WSMTXCA; los
-tickets admiten servicios autenticados explícitos.
+`OnModelCreating` del contexto agrega `modelBuilder.AddNetArcaWs(modelOptions)`. Usá la misma instancia de opciones para el modelo y los stores. El contexto consumidor debe registrar `IDbContextFactory<TContext>`; la aplicación conserva la propiedad de las migraciones y del despliegue del esquema. La selección puede ser solo `AddInvoicing(...)`, solo `AddWsaaTickets(...)`, o incluir los módulos adicionales requeridos. `AddInvoiceRecovery(...)` requiere el mismo servicio dentro de `AddInvoicing(...)`. El diario acepta WSFEv1, WSFEXv1 y WSMTXCA; los tickets admiten servicios autenticados explícitos.
 
-Para `AddWsaaTickets(...)`, registrá `IWsaaTicketProtector` antes de
-`AddNetArcaWsEntityFrameworkStores` y compartí el mismo keyring entre las
-réplicas. También registrá `AddNetArcaWs()` para WSAA; si seleccionaste el
-diario, `AddNetArcaWsInvoicing()` registra WSAA, las fachadas y
-`SafeInvoiceService`. No guardes las claves del protector en la misma base que
-los tickets.
+Para `AddWsaaTickets(...)`, registrá `IWsaaTicketProtector` antes de `AddNetArcaWsEntityFrameworkStores` y compartí el mismo keyring entre las réplicas. También registrá `AddNetArcaWs()` para WSAA; si seleccionaste el diario, `AddNetArcaWsInvoicing()` registra WSAA, las fachadas y `SafeInvoiceService`. No guardes las claves del protector en la misma base que los tickets.
 
-Para el helper MySQL/MariaDB, agregar el paquete separado
-`NetArcaWs.EntityFrameworkCore.MySql` y pasar la versión del servidor de forma
-explícita:
+Para el helper MySQL/MariaDB, agregar el paquete separado `NetArcaWs.EntityFrameworkCore.MySql` y pasar la versión del servidor de forma explícita:
 
 ```csharp
 services.AddNetArcaWsMySqlStores(
@@ -236,29 +120,11 @@ services.AddNetArcaWsMySqlStores(
     modelOptions);
 ```
 
-Para MariaDB se usa `MariaDbServerVersion`. Los paquetes
-`NetArcaWs.EntityFrameworkCore.PostgreSql` y
-`NetArcaWs.EntityFrameworkCore.SqlServer` exponen
-`AddNetArcaWsPostgreSqlStores(connectionString, modelOptions)` y
-`AddNetArcaWsSqlServerStores(connectionString, modelOptions)`. Cada helper
-configura el contexto dedicado y los stores, pero no conecta, migra, crea tablas
-ni agrega estrategia de reintentos EF o reintentos SOAP. Los paquetes opcionales incluyen EF Core, tres providers relacionales y cinco
-paquetes de migraciones oficiales por módulo y motor. Consultar el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19)
-para el estado de entrega. El [modelo relacional](Modelo-relacional) contiene
-el diccionario de columnas y los scripts DDL por proveedor. El cifrado de tickets requiere que la aplicación
-registre `IWsaaTicketProtector` con claves administradas fuera de la base de
-datos; ver el [ADR 0006](ADR-0006-shared-wsaa-tickets).
+Para MariaDB se usa `MariaDbServerVersion`. Los paquetes `NetArcaWs.EntityFrameworkCore.PostgreSql` y `NetArcaWs.EntityFrameworkCore.SqlServer` exponen `AddNetArcaWsPostgreSqlStores(connectionString, modelOptions)` y `AddNetArcaWsSqlServerStores(connectionString, modelOptions)`. Cada helper configura el contexto dedicado y los stores, pero no conecta, migra, crea tablas ni agrega estrategia de reintentos EF o reintentos SOAP. Los paquetes opcionales incluyen EF Core, tres providers relacionales y cinco paquetes de migraciones oficiales por módulo y motor. Consultar el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19) para el estado de entrega. El [modelo relacional](Modelo-relacional) contiene el diccionario de columnas y los scripts DDL por proveedor. El cifrado de tickets requiere que la aplicación registre `IWsaaTicketProtector` con claves administradas fuera de la base de datos; ver el [ADR 0006](ADR-0006-shared-wsaa-tickets).
 
 ## Cola y worker de recuperación durable (EF opcional)
 
-El módulo `InvoiceRecovery` agrega una tabla de metadatos de cola al diario EF,
-sin copiar su payload fiscal. Seleccioná cada servicio dos veces, como servicio
-de facturación y como servicio de recuperación. El siguiente ejemplo usa SQLite
-para el registro operativo local. No conecta ni migra al configurar el worker.
-Referenciá `NetArcaWs.EntityFrameworkCore.Migrations.Sqlite` para el actor de
-despliegue. El bloque compila como una unidad con imports implícitos habilitados;
-el host implementa `IArcaRecoveryAuthorization` con su sistema de identidad y
-credenciales:
+El módulo `InvoiceRecovery` agrega una tabla de metadatos de cola al diario EF, sin copiar su payload fiscal. Seleccioná cada servicio dos veces, como servicio de facturación y como servicio de recuperación. El siguiente ejemplo usa SQLite para el registro operativo local. No conecta ni migra al configurar el worker. Referenciá `NetArcaWs.EntityFrameworkCore.Migrations.Sqlite` para el actor de despliegue. El bloque compila como una unidad con imports implícitos habilitados; el host implementa `IArcaRecoveryAuthorization` con su sistema de identidad y credenciales:
 
 ```csharp
 using Microsoft.EntityFrameworkCore;
@@ -367,94 +233,22 @@ public static class RecoveryExample
 }
 ```
 
-La fábrica registra el servicio de autorización scoped. Debe autorizar tenant,
-CUIT y ambiente, y devolver el contexto usando la versión exacta nombrada por
-`credentialReference`; si esa versión fue revocada, eliminada o dejó de estar
-autorizada, debe rechazarla sin sustituirla. El processor vuelve a comprobar
-tenant, CUIT, ambiente, servicio y fencing antes de llamar a `SafeInvoiceService`.
-El contexto no autoriza al usuario final. Antes de invocar
-`ConfigureRecoveryWorker`, el host registra su implementación real de
-`IWsfev1Service`; `AddNetArcaWsInvoicing` registra `SafeInvoiceService` y el store
-EF registra `IInvoiceRecoveryQueue`.
+La fábrica registra el servicio de autorización scoped. Debe autorizar tenant, CUIT y ambiente, y devolver el contexto usando la versión exacta nombrada por `credentialReference`; si esa versión fue revocada, eliminada o dejó de estar autorizada, debe rechazarla sin sustituirla. El processor vuelve a comprobar tenant, CUIT, ambiente, servicio y fencing antes de llamar a `SafeInvoiceService`. El contexto no autoriza al usuario final. Antes de invocar `ConfigureRecoveryWorker`, el host registra su implementación real de `IWsfev1Service`; `AddNetArcaWsInvoicing` registra `SafeInvoiceService` y el store EF registra `IInvoiceRecoveryQueue`.
 
-Al preparar, el ejemplo crea el mismo snapshot tipado de la emisión normal y lo
-encola en una transacción con factura y reserva de serie. La referencia es opaca,
-opcional y de hasta 512 unidades UTF-16: puede ser un ID de versión, pero nunca
-incluye PFX/PEM, clave privada, Token o Sign. Un replay compatible conserva
-intento, próximo horario, referencia y claim. Un cambio del payload fiscal o de
-la referencia en la misma generación entra en conflicto. Para revisar un
-`Rejected`, prepará antes la revisión explícita del diario.
+Al preparar, el ejemplo crea el mismo snapshot tipado de la emisión normal y lo encola en una transacción con factura y reserva de serie. La referencia es opaca, opcional y de hasta 512 unidades UTF-16: puede ser un ID de versión, pero nunca incluye PFX/PEM, clave privada, Token o Sign. Un replay compatible conserva intento, próximo horario, referencia y claim. Un cambio del payload fiscal o de la referencia en la misma generación entra en conflicto. Para revisar un `Rejected`, prepará antes la revisión explícita del diario.
 
-`InspectRecoveryMigrationsAsync` devuelve el estado y el SQL para revisión; solo
-después de aprobarlos ejecutá `ApplyReviewedMigrationsAsync` desde el actor de
-despliegue. El método vuelve a registrar el migrator y `ApplyAsync` repite el
-preflight antes de aplicar. El estado `UntrackedSchema`, IDs desconocidos, historia inconsistente
-o esquema incompleto requiere diagnóstico, no baseline ni retry ciego. La
-historia independiente es `__NetArcaWsInvoiceRecoveryMigrations` y el ID inicial
-`20261007000400_InitialInvoiceRecovery`; el apply exclusivo crea solo
-`NetArcaInvoiceRecoveryJobs`. SQLite no admite SQL idempotente. MySQL/MariaDB
-pueden confirmar DDL parcial y el preflight bloquea el reintento ciego.
+`InspectRecoveryMigrationsAsync` devuelve el estado y el SQL para revisión; solo después de aprobarlos ejecutá `ApplyReviewedMigrationsAsync` desde el actor de despliegue. El método vuelve a registrar el migrator y `ApplyAsync` repite el preflight antes de aplicar. El estado `UntrackedSchema`, IDs desconocidos, historia inconsistente o esquema incompleto requiere diagnóstico, no baseline ni retry ciego. La historia independiente es `__NetArcaWsInvoiceRecoveryMigrations` y el ID inicial `20261007000400_InitialInvoiceRecovery`; el apply exclusivo crea solo `NetArcaInvoiceRecoveryJobs`. SQLite no admite SQL idempotente. MySQL/MariaDB pueden confirmar DDL parcial y el preflight bloquea el reintento ciego.
 
-El worker hace un claim por iteración, crea un scope DI, resuelve autorización y
-procesa fuera de la transacción de base. Los valores iniciales son lease de cinco
-minutos, intervalo idle de cinco segundos, diez intentos, backoff de dos segundos
-a cinco minutos y jitter de 0,2. Los rangos admitidos son lease mayor que cero y
-hasta 30 minutos, idle mayor que cero y hasta un día, backoff base mayor que cero
-y no superior al máximo, máximo de un día, 1–1000 intentos y jitter finito de 0–1.
-El worker no es un scheduler distribuido; la aplicación controla instancias y
-scope tenant/servicio.
+El worker hace un claim por iteración, crea un scope DI, resuelve autorización y procesa fuera de la transacción de base. Los valores iniciales son lease de cinco minutos, intervalo idle de cinco segundos, diez intentos, backoff de dos segundos a cinco minutos y jitter de 0,2. Los rangos admitidos son lease mayor que cero y hasta 30 minutos, idle mayor que cero y hasta un día, backoff base mayor que cero y no superior al máximo, máximo de un día, 1–1000 intentos y jitter finito de 0–1. El worker no es un scheduler distribuido; la aplicación controla instancias y scope tenant/servicio.
 
-Un claim vencido mientras el journal siga `Prepared` hace que la misma
-transacción cambie el journal a `Unknown` antes de devolver un claim de
-reconciliación. Por eso un lease vencido nunca significa que ARCA no recibió la
-escritura. Solo `Prepared` con claim vigente puede enviar; `Unknown` o
-`Submitting`/`Reconciling` vencidos consultan la misma identidad fiscal. Una
-consulta vacía/no disponible solo reprograma la reconciliación. Backoff acotado
-y jitter regulan esas consultas, no el reenvío fiscal. Al llegar a `MaxAttempts`,
-el trabajo se suspende y requiere `ScheduleAsync(tenantId, key,
-expectedInvoiceVersion, credentialReference)` explícito. Este método valida la
-versión exacta y reactiva un trabajo compatible; nunca hace SOAP. `FindAsync(scope,
-key)` devuelve metadata segura (estado, intento, horarios, generación y motivo),
-sin identidad, tenant/key, hash, referencia ni payload.
+Un claim vencido mientras el journal siga `Prepared` hace que la misma transacción cambie el journal a `Unknown` antes de devolver un claim de reconciliación. Por eso un lease vencido nunca significa que ARCA no recibió la escritura. Solo `Prepared` con claim vigente puede enviar; `Unknown` o `Submitting`/`Reconciling` vencidos consultan la misma identidad fiscal. Una consulta vacía/no disponible solo reprograma la reconciliación. Backoff acotado y jitter regulan esas consultas, no el reenvío fiscal. Al llegar a `MaxAttempts`, el trabajo se suspende y requiere `ScheduleAsync(tenantId, key, expectedInvoiceVersion, credentialReference)` explícito. Este método valida la versión exacta y reactiva un trabajo compatible; nunca hace SOAP. `FindAsync(scope, key)` devuelve metadata segura (estado, intento, horarios, generación y motivo), sin identidad, tenant/key, hash, referencia ni payload.
 
-La cola solo cubre CAE unitario WSFEv1, WSFEXv1 y WSMTXCA. No agrega batch,
-WSFECred, WSCPE, retry SOAP genérico, failover ni garantía exactly-once. SQLite
-solo admite archivo local y procesos del mismo host; para multi-host se necesita
-una base transaccional de servidor compartida por un provider soportado. Esta API
-forma parte del módulo opcional de recuperación durable.
+La cola solo cubre CAE unitario WSFEv1, WSFEXv1 y WSMTXCA. No agrega batch, WSFECred, WSCPE, retry SOAP genérico, failover ni garantía exactly-once. SQLite solo admite archivo local y procesos del mismo host; para multi-host se necesita una base transaccional de servidor compartida por un provider soportado. Esta API forma parte del módulo opcional de recuperación durable.
 
-La evidencia de Task 3 reporta suites locales completas para estas revisiones:
-SQLite 131/131, MySQL 8.4.11 29/29, MariaDB 11.4.13 29/29, PostgreSQL 17.6
-28/28 y SQL Server Developer 28/28; los proyectos offline de metadatos aprobaron
-PostgreSQL 8/8 y SQL Server 19/19. Las comprobaciones recovery focalizadas
-posteriores cubrieron preflight, fallos y cancelación. Algunas repiten casos de
-esas matrices y no deben sumarse como pruebas únicas; las ejecuciones dedicadas
-MySQL y MariaDB de cancelación aprobaron 1/1 cada una.
-Son datos sintéticos y verifican las versiones indicadas; no son homologación
-ARCA ni compatibilidad universal. El consumer smoke usó un feed local y caché
-nueva, aplicó los cuatro módulos SQLite, verificó recovery sintético, generó
-scripts offline para los cinco providers e instaló el CLI; también se empaquetaron
-los once proyectos empaquetables. La revisión de solución completa aprobó restore
-locked, build Release (0 warnings/0 errors), 630 pruebas (588 aprobadas, 42
-skips opt-in, 0 fallos), 25 DDL y 20 scripts de migración.
+La evidencia de Task 3 reporta suites locales completas para estas revisiones: SQLite 131/131, MySQL 8.4.11 29/29, MariaDB 11.4.13 29/29, PostgreSQL 17.6 28/28 y SQL Server Developer 28/28; los proyectos offline de metadatos aprobaron PostgreSQL 8/8 y SQL Server 19/19. Las comprobaciones recovery focalizadas posteriores cubrieron preflight, fallos y cancelación. Algunas repiten casos de esas matrices y no deben sumarse como pruebas únicas; las ejecuciones dedicadas MySQL y MariaDB de cancelación aprobaron 1/1 cada una. Son datos sintéticos y verifican las versiones indicadas; no son homologación ARCA ni compatibilidad universal. El consumer smoke usó un feed local y caché nueva, aplicó los cuatro módulos SQLite, verificó recovery sintético, generó scripts offline para los cinco providers e instaló el CLI; también se empaquetaron los once proyectos empaquetables. La revisión de solución completa aprobó restore locked, build Release (0 warnings/0 errors), 630 pruebas (588 aprobadas, 42 skips opt-in, 0 fallos), 25 DDL y 20 scripts de migración.
 
-La suite normal usa motores y datos sintéticos; los tests opt-in aprobaron 5/5
-con MySQL 8.4.11, 5/5 con MariaDB 11.4.13, 13/13 con PostgreSQL 17.6 y 13/13
-con SQL Server Developer 16.0.4295.3, incluidos casos entre procesos. Son
-versiones y escenarios concretos; no demuestran compatibilidad universal ni
-homologación con ARCA. PostgreSQL y SQL Server corrieron en el
-[job público de CI](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37525573878)
-en runner x64.
+La suite normal usa motores y datos sintéticos; los tests opt-in aprobaron 5/5 con MySQL 8.4.11, 5/5 con MariaDB 11.4.13, 13/13 con PostgreSQL 17.6 y 13/13 con SQL Server Developer 16.0.4295.3, incluidos casos entre procesos. Son versiones y escenarios concretos; no demuestran compatibilidad universal ni homologación con ARCA. PostgreSQL y SQL Server corrieron en el [job público de CI](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37525573878) en runner x64.
 
-El comportamiento es conservador, no exactamente una vez: una caída externa,
-una operación realizada fuera del diario, pérdida de storage o datos remotos no
-comparables pueden requerir revisión humana. No hay asignación automática de
-número, repetición automática de autorizaciones, reenvío automático WSFEX,
-soporte de lote durable por item ni política de retry general. Una corrección
-requiere registrar una revisión y reanudarla explícitamente. WSMTXCA implementa
-su contrato de factura electrónica con detalle y CAE/CAEA, no el ciclo completo
-de Factura de Crédito Electrónica MiPyME.
+El comportamiento es conservador, no exactamente una vez: una caída externa, una operación realizada fuera del diario, pérdida de storage o datos remotos no comparables pueden requerir revisión humana. No hay asignación automática de número, repetición automática de autorizaciones, reenvío automático WSFEX, soporte de lote durable por item ni política de retry general. Una corrección requiere registrar una revisión y reanudarla explícitamente. WSMTXCA implementa su contrato de factura electrónica con detalle y CAE/CAEA, no el ciclo completo de Factura de Crédito Electrónica MiPyME.
 
-La suite Release y los contratos locales están verificados; no inferir aceptación
-fiscal autenticada a partir de estas pruebas. Ver [ADR 0001](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros)
-para las decisiones, los límites y la evolución pendiente.
+La suite Release y los contratos locales están verificados; no inferir aceptación fiscal autenticada a partir de estas pruebas. Ver [ADR 0001](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros) para las decisiones, los límites y la evolución pendiente.

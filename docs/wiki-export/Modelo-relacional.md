@@ -2,21 +2,11 @@
 
 # Modelo relacional de persistencia EF Core
 
-Esta referencia describe el modelo **opcional** agregado por
-`NetArcaWs.EntityFrameworkCore` y los scripts SQL generados desde ese modelo.
-No representa una conversión automática del diario SQLite integrado en el
-paquete principal. Hay dos artefactos distintos: 25 scripts DDL actuales (cinco
-selecciones por cada uno de cinco proveedores) y 20 scripts SQL de las
-migraciones versionadas `0`→`latest` (cuatro módulos por proveedor). El primer grupo
-describe el modelo presente; el segundo contiene las operaciones de migración
-realmente versionadas. Ninguno se usa para adoptar automáticamente tablas
-existentes.
+Esta referencia describe el modelo **opcional** agregado por `NetArcaWs.EntityFrameworkCore` y los scripts SQL generados desde ese modelo. No representa una conversión automática del diario SQLite integrado en el paquete principal. Hay dos artefactos distintos: 25 scripts DDL actuales (cinco selecciones por cada uno de cinco proveedores) y 20 scripts SQL de las migraciones versionadas `0`→`latest` (cuatro módulos por proveedor). El primer grupo describe el modelo presente; el segundo contiene las operaciones de migración realmente versionadas. Ninguno se usa para adoptar automáticamente tablas existentes.
 
 ## Selección de módulos
 
-La selección inmutable de `NetArcaWsModelOptions` decide qué entidades entran
-en el modelo EF. La selección de servicios no agrega tablas: habilita los
-servicios admitidos para las filas del diario o los tickets compartidos.
+La selección inmutable de `NetArcaWsModelOptions` decide qué entidades entran en el modelo EF. La selección de servicios no agrega tablas: habilita los servicios admitidos para las filas del diario o los tickets compartidos.
 
 | Selección | Tablas incluidas |
 | --- | --- |
@@ -27,9 +17,7 @@ servicios admitidos para las filas del diario o los tickets compartidos.
 | `AddCertificates()` | 2: `NetArcaCertificateSlots`, `NetArcaCertificateVersions` |
 | Cualquier combinación de los cuatro | Tablas de cada módulo seleccionado; recovery e invoicing comparten la selección de servicios. |
 
-El diario admite WSFEv1, WSFEXv1 y WSMTXCA. Los tickets permiten cualquier
-servicio autenticado admitido por `ArcaService`, salvo WSAA. La aplicación debe
-usar la misma selección al configurar el modelo y registrar sus stores.
+El diario admite WSFEv1, WSFEXv1 y WSMTXCA. Los tickets permiten cualquier servicio autenticado admitido por `ArcaService`, salvo WSAA. La aplicación debe usar la misma selección al configurar el modelo y registrar sus stores.
 
 ```csharp
 NetArcaWsModelOptions model = NetArcaWsModelOptions.Configure(options =>
@@ -40,28 +28,13 @@ NetArcaWsModelOptions model = NetArcaWsModelOptions.Configure(options =>
 modelBuilder.AddNetArcaWs(model);
 ```
 
-El módulo de certificados es independiente de servicios ARCA, facturación y
-tickets. `AddNetArcaWs` solo incorpora sus entidades cuando está seleccionado;
-su registro no conecta ni ejecuta migraciones. Ver la [guía del store
-multitenant](Certificados-multitenant) para autorización, keyring externo,
-rotación y recuperación.
+El módulo de certificados es independiente de servicios ARCA, facturación y tickets. `AddNetArcaWs` solo incorpora sus entidades cuando está seleccionado; su registro no conecta ni ejecuta migraciones. Ver la [guía del store multitenant](Certificados-multitenant) para autorización, keyring externo, rotación y recuperación.
 
-`InvoiceRecovery` agrega una tabla y un historial migratorio separados:
-`NetArcaInvoiceRecoveryJobs` y `__NetArcaWsInvoiceRecoveryMigrations`. La migración
-inicial `20261007000400_InitialInvoiceRecovery` se publica en cada paquete
-provider. El contexto exclusivo del módulo genera únicamente la tabla de cola.
-El paquete EF de runtime no ejecuta migraciones al registrar DI; el actor de
-despliegue selecciona el módulo, revisa `GetStatusAsync` y el SQL de
-`GenerateScript(...)`, y aplica expresamente con `ApplyAsync`. MySQL y MariaDB
-pueden dejar DDL parcial al fallar; el preflight bloquea el reintento ciego. El
-detalle de procedimiento está en [Diario fiscal](Diario-fiscal).
+`InvoiceRecovery` agrega una tabla y un historial migratorio separados: `NetArcaInvoiceRecoveryJobs` y `__NetArcaWsInvoiceRecoveryMigrations`. La migración inicial `20261007000400_InitialInvoiceRecovery` se publica en cada paquete provider. El contexto exclusivo del módulo genera únicamente la tabla de cola. El paquete EF de runtime no ejecuta migraciones al registrar DI; el actor de despliegue selecciona el módulo, revisa `GetStatusAsync` y el SQL de `GenerateScript(...)`, y aplica expresamente con `ApplyAsync`. MySQL y MariaDB pueden dejar DDL parcial al fallar; el preflight bloquea el reintento ciego. El detalle de procedimiento está en [Diario fiscal](Diario-fiscal).
 
 ## Diagrama lógico
 
-Las líneas discontinuas muestran la relación que el código interpreta entre
-hashes. El modelo EF actual define **cero claves foráneas**: estas líneas no
-son restricciones físicas y no hay acciones `ON DELETE`, cascadas ni
-restricciones `CHECK` para enums.
+Las líneas discontinuas muestran la relación que el código interpreta entre hashes. El modelo EF actual define **cero claves foráneas**: estas líneas no son restricciones físicas y no hay acciones `ON DELETE`, cascadas ni restricciones `CHECK` para enums.
 
 ```mermaid
 flowchart LR
@@ -78,11 +51,7 @@ flowchart LR
   C -. "versión activa lógica; sin FK" .-> V
 ```
 
-La tabla WSAA es independiente de las entidades fiscales. La identidad lógica
-de un ticket se resume en `KeyHash`, derivado de certificado, endpoint y servicio. No incluye
-tenant ni CUIT: la autorización del contexto corresponde a la aplicación y
-no se almacena en esta identidad remota. Una rotación de certificado puede
-crear otra identidad para ARCA y aún así colisionar con alias remotos.
+La tabla WSAA es independiente de las entidades fiscales. La identidad lógica de un ticket se resume en `KeyHash`, derivado de certificado, endpoint y servicio. No incluye tenant ni CUIT: la autorización del contexto corresponde a la aplicación y no se almacena en esta identidad remota. Una rotación de certificado puede crear otra identidad para ARCA y aún así colisionar con alias remotos.
 
 ## Claves e índices
 
@@ -96,24 +65,13 @@ crear otra identidad para ARCA y aún así colisionar con alias remotos.
 | `NetArcaCertificateSlots` | PK `(TenantHash, Cuit, Environment)`; `ActiveVersionId` y `Generation` mantienen la cabecera activa mediante compare-and-swap. |
 | `NetArcaCertificateVersions` | PK `(TenantHash, Cuit, Environment, VersionId)`; índice de scope y vigencia según el modelo común. No se borra ni muta una versión al rotar. |
 
-Las identidades textuales se hashean con SHA-256 sobre valores codificados de
-forma determinista; los hashes almacenados son hexadecimales de 64 caracteres.
-`TenantHash` y `KeyHash` protegen comparaciones ordinales frente a collations,
-pero los identificadores legibles originales también se conservan para validar
-integridad y resolver colisiones. La clave idempotente no define la unicidad
-fiscal global. `FiscalHash` excluye el tenant, el servicio y el protocolo para
-que una CUIT no pueda duplicar la misma identidad fiscal bajo otra partición.
+Las identidades textuales se hashean con SHA-256 sobre valores codificados de forma determinista; los hashes almacenados son hexadecimales de 64 caracteres. `TenantHash` y `KeyHash` protegen comparaciones ordinales frente a collations, pero los identificadores legibles originales también se conservan para validar integridad y resolver colisiones. La clave idempotente no define la unicidad fiscal global. `FiscalHash` excluye el tenant, el servicio y el protocolo para que una CUIT no pueda duplicar la misma identidad fiscal bajo otra partición.
 
-`RemoteHash` se calcula con ambiente, CUIT, servicio e ID remoto. El índice
-único SQL Server generado es filtrado con `WHERE RemoteHash IS NOT NULL`;
-SQLite, MySQL, MariaDB y PostgreSQL generan un índice único simple y sus motores
-permiten múltiples valores NULL distintos. En todos los casos solo se reserva
-un ID remoto presente.
+`RemoteHash` se calcula con ambiente, CUIT, servicio e ID remoto. El índice único SQL Server generado es filtrado con `WHERE RemoteHash IS NOT NULL`; SQLite, MySQL, MariaDB y PostgreSQL generan un índice único simple y sus motores permiten múltiples valores NULL distintos. En todos los casos solo se reserva un ID remoto presente.
 
 ## Diccionario: `NetArcaInvoices`
 
-Todos los campos salvo `RemoteHash`, `RemoteRequestId`, `LeaseUntilMilliseconds`,
-`AuthorizationCode` y `ResponseXml` son `NOT NULL`.
+Todos los campos salvo `RemoteHash`, `RemoteRequestId`, `LeaseUntilMilliseconds`, `AuthorizationCode` y `ResponseXml` son `NOT NULL`.
 
 | Columna | Longitud EF | Significado |
 | --- | ---: | --- |
@@ -144,9 +102,7 @@ Todos los campos salvo `RemoteHash`, `RemoteRequestId`, `LeaseUntilMilliseconds`
 
 ## Diccionario: `NetArcaInvoiceRevisions`
 
-Todos los campos salvo `RemoteRequestId`, `LeaseUntilMilliseconds`,
-`AuthorizationCode` y `ResponseXml` son `NOT NULL`. Cada fila representa un
-snapshot anterior de una revisión explícita de un rechazo.
+Todos los campos salvo `RemoteRequestId`, `LeaseUntilMilliseconds`, `AuthorizationCode` y `ResponseXml` son `NOT NULL`. Cada fila representa un snapshot anterior de una revisión explícita de un rechazo.
 
 | Columna | Longitud EF | Significado |
 | --- | ---: | --- |
@@ -173,8 +129,7 @@ snapshot anterior de una revisión explícita de un rechazo.
 
 ## Diccionario: `NetArcaInvoiceSeriesReservations`
 
-Las tres columnas son `NOT NULL`. Esta tabla no tiene FK física a la factura.
-La aplicación libera la reserva mediante las transiciones terminales del diario.
+Las tres columnas son `NOT NULL`. Esta tabla no tiene FK física a la factura. La aplicación libera la reserva mediante las transiciones terminales del diario.
 
 | Columna | Longitud EF | Significado |
 | --- | ---: | --- |
@@ -184,12 +139,7 @@ La aplicación libera la reserva mediante las transiciones terminales del diario
 
 ## Diccionario: `NetArcaInvoiceRecoveryJobs`
 
-La cola conserva metadatos operativos y la huella/pin de la factura; no duplica
-el payload fiscal. La tabla contiene tenant y clave originales además de sus
-hashes para validación de integridad, por lo que debe recibir la misma protección
-de acceso que el diario. `CredentialReference` es un identificador opaco opcional,
-nunca material de certificado, clave privada, Token o Sign. No hay clave foránea
-física hacia `NetArcaInvoices`.
+La cola conserva metadatos operativos y la huella/pin de la factura; no duplica el payload fiscal. La tabla contiene tenant y clave originales además de sus hashes para validación de integridad, por lo que debe recibir la misma protección de acceso que el diario. `CredentialReference` es un identificador opaco opcional, nunca material de certificado, clave privada, Token o Sign. No hay clave foránea física hacia `NetArcaInvoices`.
 
 | Columna | Longitud EF | Significado |
 | --- | ---: | --- |
@@ -209,14 +159,11 @@ física hacia `NetArcaInvoices`.
 | `Generation` | — | Fence creciente de la cola; distingue claims sucesivos. |
 | `LastReason` | — | Motivo seguro enumerado; no guarda texto de excepciones. |
 
-El acceso público devuelve únicamente estado, intento, fechas, generación y
-motivo seguro. El processor vuelve a comprobar el fence después de que el
-resolver de la aplicación autoriza y entrega el `ArcaTenantContext`.
+El acceso público devuelve únicamente estado, intento, fechas, generación y motivo seguro. El processor vuelve a comprobar el fence después de que el resolver de la aplicación autoriza y entrega el `ArcaTenantContext`.
 
 ## Diccionario: `NetArcaWsaaTickets`
 
-Todos los campos salvo `OwnerId`, `LeaseUntilUtcTicks`, `ExpiresUtcTicks`,
-`KeyId`, `Nonce`, `Ciphertext` y `Tag` son `NOT NULL`.
+Todos los campos salvo `OwnerId`, `LeaseUntilUtcTicks`, `ExpiresUtcTicks`, `KeyId`, `Nonce`, `Ciphertext` y `Tag` son `NOT NULL`.
 
 | Columna | Longitud EF | Significado |
 | --- | ---: | --- |
@@ -234,16 +181,11 @@ Todos los campos salvo `OwnerId`, `LeaseUntilUtcTicks`, `ExpiresUtcTicks`,
 | `Nonce`, `Ciphertext`, `Tag` | — | Nullable; componentes AES-GCM del ticket cifrado. El protector valida nonce de 12 bytes y tag de 16 bytes; el texto cifrado conserva el XML serializado. |
 | `UpdatedUtcTicks` | — | Instante de actualización en ticks .NET UTC (100 ns). |
 
-El keyring no se guarda en la base de datos. La aplicación registra el
-`IWsaaTicketProtector`, distribuye de forma segura las mismas claves entre
-réplicas y conserva las claves antiguas mientras existan filas cifradas con su
-`KeyId`. Token y Sign están dentro del ciphertext; el endpoint, servicio,
-huella de certificado, nonce y tag quedan visibles como metadatos.
+El keyring no se guarda en la base de datos. La aplicación registra el `IWsaaTicketProtector`, distribuye de forma segura las mismas claves entre réplicas y conserva las claves antiguas mientras existan filas cifradas con su `KeyId`. Token y Sign están dentro del ciphertext; el endpoint, servicio, huella de certificado, nonce y tag quedan visibles como metadatos.
 
 ## Diccionario: `NetArcaCertificateSlots`
 
-Todas las columnas son `NOT NULL`. El tenant se representa con su hash SHA-256;
-el texto original solo se usa en el AAD del contenido cifrado.
+Todas las columnas son `NOT NULL`. El tenant se representa con su hash SHA-256; el texto original solo se usa en el AAD del contenido cifrado.
 
 | Columna | Longitud EF | Significado |
 | --- | ---: | --- |
@@ -269,26 +211,13 @@ Todas las columnas son `NOT NULL`. Cada fila es una versión inmutable.
 | `KeyId` | 128 | ID de clave AES-GCM externa que resuelve el keyring. |
 | `Nonce`, `Ciphertext`, `Tag` | — | Sobre PEM normalizado cifrado; nonce y tag se validan al descifrar. |
 
-El AAD autentica propósito, key ID, scope original, versión, huella, vigencia y
-creación. La fila no conserva el tenant original en claro ni incluye las claves
-de protección. No hay FK física entre la cabecera y las versiones; la
-transacción asegura que la cabecera apunte a una versión guardada. Retención,
-borrado y reenvoltura no son tareas automáticas del store.
+El AAD autentica propósito, key ID, scope original, versión, huella, vigencia y creación. La fila no conserva el tenant original en claro ni incluye las claves de protección. No hay FK física entre la cabecera y las versiones; la transacción asegura que la cabecera apunte a una versión guardada. Retención, borrado y reenvoltura no son tareas automáticas del store.
 
 ## Tipos, límites y restricciones
 
-Los scripts concretan los tipos de cada proveedor. EF configura `HasMaxLength`
-para los identificadores y hashes mostrados arriba. SQL Server, MySQL, MariaDB
-y PostgreSQL traducen esos límites a tipos `nvarchar(n)`, `varchar(n)` o
-`character varying(n)`. SQLite los emite como `TEXT`, que no impone el máximo de
-caracteres. La biblioteca valida identificadores y el tamaño de payload fiscal;
-`HasMaxLength` no equivale a una validación uniforme en la base.
+Los scripts concretan los tipos de cada proveedor. EF configura `HasMaxLength` para los identificadores y hashes mostrados arriba. SQL Server, MySQL, MariaDB y PostgreSQL traducen esos límites a tipos `nvarchar(n)`, `varchar(n)` o `character varying(n)`. SQLite los emite como `TEXT`, que no impone el máximo de caracteres. La biblioteca valida identificadores y el tamaño de payload fiscal; `HasMaxLength` no equivale a una validación uniforme en la base.
 
-La biblioteca también valida estados y el tamaño de clave/nonce/tag del ticket.
-El modelo no crea `CHECK` constraints para estados, hash-length, nonce/tag, ni
-FK o cascadas. Las columnas payload/XML y autorización no tienen `HasMaxLength`.
-`RemoteHash` es nullable; el DDL de SQL Server usa índice filtrado y los otros
-motores permiten múltiples NULL distintos en el índice único simple.
+La biblioteca también valida estados y el tamaño de clave/nonce/tag del ticket. El modelo no crea `CHECK` constraints para estados, hash-length, nonce/tag, ni FK o cascadas. Las columnas payload/XML y autorización no tienen `HasMaxLength`. `RemoteHash` es nullable; el DDL de SQL Server usa índice filtrado y los otros motores permiten múltiples NULL distintos en el índice único simple.
 
 Las migraciones oficiales usan contextos dedicados con modelos fijos por motor y módulo; el `ArcaWsDbContext` operativo y los contextos del consumidor mantienen sus propias historias. Los historiales son `__NetArcaWsInvoiceMigrations`, `__NetArcaWsTicketMigrations`, `__NetArcaWsCertificateMigrations` y `__NetArcaWsInvoiceRecoveryMigrations`. En PostgreSQL están en `public`; en SQL Server, en `dbo`; MySQL, MariaDB y SQLite usan el schema por defecto del motor. EF Core SQLite puede crear además `__EFMigrationsLock` para coordinar la ejecución local.
 
@@ -322,7 +251,4 @@ Los 20 scripts de migración versionados son independientes de los DDL anteriore
 | PostgreSQL | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/postgresql/invoicing/0-latest.sql) | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/postgresql/wsaa-tickets/0-latest.sql) | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/postgresql/tenant-certificates/0-latest.sql) | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/postgresql/invoice-recovery/0-latest.sql) |
 | SQL Server | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/sqlserver/invoicing/0-latest.sql) | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/sqlserver/wsaa-tickets/0-latest.sql) | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/sqlserver/tenant-certificates/0-latest.sql) | [0→latest](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/reference/persistence-migrations/sqlserver/invoice-recovery/0-latest.sql) |
 
-Estos archivos son operaciones de upgrade inicial reales de las cadenas versionadas;
-no son idempotentes ni un mecanismo de adopción/baseline. Se generan y revisan
-con `dotnet run --project tools/NetArcaWs.Build -- persistence-migrations` y se
-verifican con `--check`.
+Estos archivos son operaciones de upgrade inicial reales de las cadenas versionadas; no son idempotentes ni un mecanismo de adopción/baseline. Se generan y revisan con `dotnet run --project tools/NetArcaWs.Build -- persistence-migrations` y se verifican con `--check`.

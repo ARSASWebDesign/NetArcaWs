@@ -2,10 +2,7 @@
 
 # Funcionalidades adicionales
 
-Además de los clientes fiscales, NetArcaWs incluye piezas de infraestructura y
-herramientas para integrarlas en una aplicación .NET. Cada función resuelve una
-parte acotada del flujo; no reemplaza la autorización del usuario, las reglas
-fiscales ni las decisiones de operación del sistema consumidor.
+Además de los clientes fiscales, NetArcaWs incluye piezas de infraestructura y herramientas para integrarlas en una aplicación .NET. Cada función resuelve una parte acotada del flujo; no reemplaza la autorización del usuario, las reglas fiscales ni las decisiones de operación del sistema consumidor.
 
 | Función | Para qué sirve y cómo usarla | Guía y ejemplo |
 |---|---|---|
@@ -21,20 +18,9 @@ fiscales ni las decisiones de operación del sistema consumidor.
 
 ## Cuidados al combinar funciones
 
-1. Autentica al usuario y autoriza su acceso al tenant antes de consultar un
-   padrón o emitir un comprobante. `ArcaTenantContext` organiza datos fiscales
-   de la llamada, pero no otorga permisos por sí mismo.
-2. Protege claves, contraseñas, tickets y datos fiscales según las políticas de
-   la aplicación. Los objetos en memoria reducen archivos temporales explícitos,
-   pero no garantizan el borrado inmediato de strings o memoria administrada.
-3. Usa los helpers aritméticos solo después de aplicar reglas fiscales
-   verificadas. No recalcules ni cambies silenciosamente los importes de una
-   solicitud durante una reconciliación.
-4. Trata los health checks como señales operativas. Conserva pruebas separadas
-   para credenciales, permisos y resultados de negocio en un ambiente ARCA
-   autorizado.
+1. Autentica al usuario y autoriza su acceso al tenant antes de consultar un padrón o emitir un comprobante. `ArcaTenantContext` organiza datos fiscales de la llamada, pero no otorga permisos por sí mismo.
+2. Protege claves, contraseñas, tickets y datos fiscales según las políticas de la aplicación. Los objetos en memoria reducen archivos temporales explícitos, pero no garantizan el borrado inmediato de strings o memoria administrada.
+3. Usa los helpers aritméticos solo después de aplicar reglas fiscales verificadas. No recalcules ni cambies silenciosamente los importes de una solicitud durante una reconciliación.
+4. Trata los health checks como señales operativas. Conserva pruebas separadas para credenciales, permisos y resultados de negocio en un ambiente ARCA autorizado.
 
-El [inicio rápido](Inicio-rapido) muestra el primer registro DI. La página de
-[servicios implementados](Servicios-implementados) resume los clientes y sus
-referencias de operación; el [inventario upstream](Inventario-del-proyecto-original)
-aclara las herramientas de PyAfipWs que aún no tienen equivalente.
+El [inicio rápido](Inicio-rapido) muestra el primer registro DI. La página de [servicios implementados](Servicios-implementados) resume los clientes y sus referencias de operación; el [inventario upstream](Inventario-del-proyecto-original) aclara las herramientas de PyAfipWs que aún no tienen equivalente.

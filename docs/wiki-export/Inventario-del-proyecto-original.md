@@ -2,42 +2,19 @@
 
 # Inventario documental de PyAfipWs
 
-Corte reproducible: repositorio `reingart/pyafipws` rama `main`, commit
-[`d595b072110accec9dae1ddb58165ab847b8520a`](https://github.com/reingart/pyafipws/commit/d595b072110accec9dae1ddb58165ab847b8520a)
-(árbol de 622 archivos); wiki Git, commit `f942ebade93c41969d44e652b065ceabec535220`
-(16 páginas Markdown incluyendo `_Sidebar.md`; [páginas canónicas](https://github.com/reingart/pyafipws/wiki)).
-Se clonaron ambos repositorios y se inventariaron sus árboles fijados. GitHub
-sirve las páginas wiki por nombre y no ofrece un permalink de página con SHA;
-por eso las filas enlazan a las páginas canónicas y el commit del clon fija el
-contenido auditado. El manual web se consultó el 2026-10-06; es una fuente
-externa mutable y no forma parte de esos SHA.
+Corte reproducible: repositorio `reingart/pyafipws` rama `main`, commit [`d595b072110accec9dae1ddb58165ab847b8520a`](https://github.com/reingart/pyafipws/commit/d595b072110accec9dae1ddb58165ab847b8520a) (árbol de 622 archivos); wiki Git, commit `f942ebade93c41969d44e652b065ceabec535220` (16 páginas Markdown incluyendo `_Sidebar.md`; [páginas canónicas](https://github.com/reingart/pyafipws/wiki)). Se clonaron ambos repositorios y se inventariaron sus árboles fijados. GitHub sirve las páginas wiki por nombre y no ofrece un permalink de página con SHA; por eso las filas enlazan a las páginas canónicas y el commit del clon fija el contenido auditado. El manual web se consultó el 2026-10-06; es una fuente externa mutable y no forma parte de esos SHA.
 
 ## Cómo leer los estados
 
-- **Adaptado**: hay una capacidad relacionada en NetArcaWs. No afirma igualdad
-  de API ni cubre todos los helpers, interfaces y usos del original.
-- **No equivalente**: no se encontró contraparte con el propósito del artefacto
-  upstream dentro del alcance actual.
-- **Manual upstream sin soporte**: se conserva como referencia del proveedor
-  original; NetArcaWs no implementa ese flujo o utilidad. Tener una explicación
-  en un manual no significa que el paquete la soporte.
+- **Adaptado**: hay una capacidad relacionada en NetArcaWs. No afirma igualdad de API ni cubre todos los helpers, interfaces y usos del original.
+- **No equivalente**: no se encontró contraparte con el propósito del artefacto upstream dentro del alcance actual.
+- **Manual upstream sin soporte**: se conserva como referencia del proveedor original; NetArcaWs no implementa ese flujo o utilidad. Tener una explicación en un manual no significa que el paquete la soporte.
 
-Los clientes de negocio representados actualmente son WSFEv1, WSFEXv1,
-WSMTXCA, Padrón A4, Constancia por la ruta histórica A5, A10, A13, WSCDC y
-WSFECred; estos nueve contratos suman 108 operaciones según los WSDL fijados.
-WSAA es el cliente de autenticación compartido y no forma parte de ese conteo.
-Para estos servicios, **adaptado** significa cobertura del contrato SOAP
-descrito en [Servicios y cobertura](Servicios-y-cobertura), no
-equivalencia completa con PyAfipWs. Otros módulos, servicios, herramientas,
-aplicaciones o formatos no quedan incluidos por este inventario.
+Los clientes de negocio representados actualmente son WSFEv1, WSFEXv1, WSMTXCA, Padrón A4, Constancia por la ruta histórica A5, A10, A13, WSCDC y WSFECred; estos nueve contratos suman 108 operaciones según los WSDL fijados. WSAA es el cliente de autenticación compartido y no forma parte de ese conteo. Para estos servicios, **adaptado** significa cobertura del contrato SOAP descrito en [Servicios y cobertura](Servicios-y-cobertura), no equivalencia completa con PyAfipWs. Otros módulos, servicios, herramientas, aplicaciones o formatos no quedan incluidos por este inventario.
 
 ## Archivos de documentación y texto del repositorio
 
-Se enumeran todas las rutas versionadas con extensiones documentales o de texto
-(`.md`, `.rst`, `.txt`, `.html/.htm`, `.pdf`, `.adoc`, `.odt`, `.doc/.docx`);
-los `.txt` que son fixtures/datos se identifican como tales. En el SHA
-consultado no había `.rst`, `.html/.htm`, `.adoc`, `.odt` ni `.doc/.docx` dentro
-del repositorio Git.
+Se enumeran todas las rutas versionadas con extensiones documentales o de texto (`.md`, `.rst`, `.txt`, `.html/.htm`, `.pdf`, `.adoc`, `.odt`, `.doc/.docx`); los `.txt` que son fixtures/datos se identifican como tales. En el SHA consultado no había `.rst`, `.html/.htm`, `.adoc`, `.odt` ni `.doc/.docx` dentro del repositorio Git.
 
 | Fuente fijada | Tema | Destino NetArcaWs | Estado |
 |---|---|---|---|
@@ -56,19 +33,11 @@ del repositorio Git.
 | [`tests/txt/entrada_receb1.txt`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/tests/txt/entrada_receb1.txt) | Fixture de interfaz de texto para comprobantes B | Ninguno | Manual upstream sin soporte |
 | [`tests/txt/entrada_recex1.txt`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/tests/txt/entrada_recex1.txt) | Fixture de interfaz de texto de exportación | Ninguno | Manual upstream sin soporte |
 
-`COPYING`, `COPYING.LESSER` y `licencia.txt` también están en el árbol, aunque
-los dos primeros no tienen extensión documental: ver el apartado de licencia
-abajo. El árbol entero contiene además ejemplos en C#, Java, PHP, VB/VFP,
-Delphi, C y otros lenguajes; no son documentación de texto de esta lista ni
-significan que esas interfaces estén portadas.
+`COPYING`, `COPYING.LESSER` y `licencia.txt` también están en el árbol, aunque los dos primeros no tienen extensión documental: ver el apartado de licencia abajo. El árbol entero contiene además ejemplos en C#, Java, PHP, VB/VFP, Delphi, C y otros lenguajes; no son documentación de texto de esta lista ni significan que esas interfaces estén portadas.
 
 ## Páginas de la wiki upstream
 
-GitHub sirve las páginas wiki por nombre y no admite un permalink de página
-con SHA; por eso cada fila enlaza a su URL canónica actual y el SHA del clon fija
-el contenido inventariado. El clon Git con ese commit permite reconstruir la
-copia examinada. Cada página puede remitir a instaladores, protocolos o sitios
-ya obsoletos.
+GitHub sirve las páginas wiki por nombre y no admite un permalink de página con SHA; por eso cada fila enlaza a su URL canónica actual y el SHA del clon fija el contenido inventariado. El clon Git con ese commit permite reconstruir la copia examinada. Cada página puede remitir a instaladores, protocolos o sitios ya obsoletos.
 
 | Página fuente | Tema | Destino NetArcaWs | Estado |
 |---|---|---|---|
@@ -91,10 +60,7 @@ ya obsoletos.
 
 ## Módulos Python de nivel superior
 
-La tabla incluye los 48 `.py` ubicados en la raíz del snapshot upstream. La
-descripción identifica el tema por nombre/implementación; el destino indica el
-componente más cercano en el árbol actual, no una promesa de paridad. Los
-servicios no adaptados también pueden estar descritos en manuales upstream.
+La tabla incluye los 48 `.py` ubicados en la raíz del snapshot upstream. La descripción identifica el tema por nombre/implementación; el destino indica el componente más cercano en el árbol actual, no una promesa de paridad. Los servicios no adaptados también pueden estar descritos en manuales upstream.
 
 | Módulo Python y permalink fijado | Tema | Destino NetArcaWs | Estado |
 |---|---|---|---|
@@ -147,44 +113,18 @@ servicios no adaptados también pueden estar descritos en manuales upstream.
 | [`wsremcarne.py`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/wsremcarne.py) | Remito electrónico cárnico | Ninguno | Manual upstream sin soporte |
 | [`wsremharina.py`](https://github.com/reingart/pyafipws/blob/d595b072110accec9dae1ddb58165ab847b8520a/wsremharina.py) | Remito electrónico de harina | Ninguno | Manual upstream sin soporte |
 
-El listado anterior describe módulos de la raíz únicamente. Paquetes como
-`formatos/`, ejemplos, pruebas, fixtures SOAP, scripts de build y fuentes C
-están en el mismo commit y fueron inspeccionados en el árbol, pero no son
-módulos Python top-level ni parte del inventario documental por extensión.
-Consultar el árbol fijado para hallarlos. Ningún módulo Python se incorporó a
-NetArcaWs.
+El listado anterior describe módulos de la raíz únicamente. Paquetes como `formatos/`, ejemplos, pruebas, fixtures SOAP, scripts de build y fuentes C están en el mismo commit y fueron inspeccionados en el árbol, pero no son módulos Python top-level ni parte del inventario documental por extensión. Consultar el árbol fijado para hallarlos. Ningún módulo Python se incorporó a NetArcaWs.
 
 ## Manual de uso externo y cobertura documental
 
-Se examinó el [Manual de uso PyAfipWs](https://sistemasagiles.com.ar/site/websites/documentacion_herramientas/manualpyafipws.html),
-servido como HTML en la consulta del 2026-10-06 (4.826 líneas expuestas por el
-lector web). Es un manual de producto extenso: instalación y evaluación,
-credenciales/certificados, interfaz COM y herramientas de texto, servicios de
-facturación con operaciones/errores/ejemplos, reintentos/reproceso, PDF y
-herramientas adicionales (padrones, verificaciones, granos, trazabilidad, entre
-otros). Se usó para identificar categorías y dependencias del ecosistema; no se
-copiaron pasajes largos ni ejemplos de código.
+Se examinó el [Manual de uso PyAfipWs](https://sistemasagiles.com.ar/site/websites/documentacion_herramientas/manualpyafipws.html), servido como HTML en la consulta del 2026-10-06 (4.826 líneas expuestas por el lector web). Es un manual de producto extenso: instalación y evaluación, credenciales/certificados, interfaz COM y herramientas de texto, servicios de facturación con operaciones/errores/ejemplos, reintentos/reproceso, PDF y herramientas adicionales (padrones, verificaciones, granos, trazabilidad, entre otros). Se usó para identificar categorías y dependencias del ecosistema; no se copiaron pasajes largos ni ejemplos de código.
 
-La migración documenta las cinco familias objetivo y los límites conocidos. El
-manual contiene capítulos de numerosos módulos sin destino: se clasifican
-**manual upstream sin soporte**, no “adaptados”. Tampoco se tomaron como prueba
-actual sus direcciones de servicio, instrucciones para Python 2/Windows,
-normativa o declaraciones de producción: para endpoints, contratos y conducta
-vigente prevalecen los WSDL/manuales ARCA fechados en
-[proveniencia de contratos](Procedencia-de-contratos-SOAP) y las fuentes enlazadas allí.
+La migración documenta las cinco familias objetivo y los límites conocidos. El manual contiene capítulos de numerosos módulos sin destino: se clasifican **manual upstream sin soporte**, no “adaptados”. Tampoco se tomaron como prueba actual sus direcciones de servicio, instrucciones para Python 2/Windows, normativa o declaraciones de producción: para endpoints, contratos y conducta vigente prevalecen los WSDL/manuales ARCA fechados en [proveniencia de contratos](Procedencia-de-contratos-SOAP) y las fuentes enlazadas allí.
 
-El texto consultado identifica a Mariano Reingart como autor/mantenedor del
-proyecto y remite a Sistemas Ágiles. Para código, el upstream incluye avisos
-LGPLv3+ en varios módulos, `COPYING` (GPL), `COPYING.LESSER` (LGPL) y una
-declaración propia en `licencia.txt`; el README describe LGPLv3+ y menciona una
-excepción comercial. Los avisos del archivo y las dependencias deben comprobarse
-antes de reutilizar código; no se concluye una licencia uniforme. La licencia
-específica de las páginas de wiki y del manual no se pudo verificar. NetArcaWs
-resume, atribuye y enlaza: no republica el texto original.
+El texto consultado identifica a Mariano Reingart como autor/mantenedor del proyecto y remite a Sistemas Ágiles. Para código, el upstream incluye avisos LGPLv3+ en varios módulos, `COPYING` (GPL), `COPYING.LESSER` (LGPL) y una declaración propia en `licencia.txt`; el README describe LGPLv3+ y menciona una excepción comercial. Los avisos del archivo y las dependencias deben comprobarse antes de reutilizar código; no se concluye una licencia uniforme. La licencia específica de las páginas de wiki y del manual no se pudo verificar. NetArcaWs resume, atribuye y enlaza: no republica el texto original.
 
 ## Fuentes ARCA del alcance .NET
 
 - [Manuales de desarrollador de factura electrónica ARCA](https://www.arca.gob.ar/fe/ayuda/webservice.asp).
 - Contratos fechados, hashes y excepciones: [sources.md](Procedencia-de-contratos-SOAP).
-- Catálogo oficial de servicios y manuales de Padrón están referenciados en
-  [healthchecks-contracts.md](Contratos-de-health-checks).
+- Catálogo oficial de servicios y manuales de Padrón están referenciados en [healthchecks-contracts.md](Contratos-de-health-checks).

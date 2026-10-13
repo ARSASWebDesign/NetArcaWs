@@ -4,8 +4,7 @@ using NetArcaWs.HealthChecks;
 namespace NetArcaWs.Multitenancy;
 
 /// <summary>
-/// Explicit, immutable tenant identity and credentials for one ARCA operation.
-/// The application must resolve it from its authorized tenant, not from untrusted request values.
+/// Explicit, immutable tenant identity and credentials for one ARCA operation. The application must resolve it from its authorized tenant, not from untrusted request values.
 /// </summary>
 public sealed record ArcaTenantContext
 {

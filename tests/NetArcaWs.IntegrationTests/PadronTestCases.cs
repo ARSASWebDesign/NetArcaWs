@@ -9,9 +9,7 @@ internal sealed record PadronTestCase(long Id, string PersonType, string KeyType
 /// <summary>
 /// Public A4 QA identities, sampled from ARCA's three published categories on 2026-10-06.
 /// https://www.afip.gob.ar/ws/ws_sr_padron_a4/datos-prueba-padron-a4.txt
-/// Expected types verified against all four QA services on 2026-10-06.
-/// The published CUIL sample currently returns CUIT; this does not cover a live CUIL response.
-/// These are query fixtures, never the represented CUIT or authentication credentials.
+/// Expected types verified against all four QA services on 2026-10-06. The published CUIL sample currently returns CUIT; this does not cover a live CUIL response. These are query fixtures, never the represented CUIT or authentication credentials.
 /// </summary>
 internal static class PadronTestCases
 {
