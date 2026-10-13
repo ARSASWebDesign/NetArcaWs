@@ -5,6 +5,8 @@ using System.Xml.Serialization;
 using System.Net;
 using StbImageSharp;
 using NetArcaWs.Contracts.WsfeV1;
+using NetArcaWs.Contracts.WsfexV1;
+using NetArcaWs.Contracts.Wsmtxca;
 using NetArcaWs.Documents;
 using NetArcaWs.Rendering.Html;
 using QRCoder;
@@ -171,6 +173,69 @@ public sealed class HtmlRenderingTests
     }
 
     [Fact]
+    public void Fiscal_renderer_accepts_real_serialized_authorize_and_query_shapes_for_all_services()
+    {
+        foreach (string service in new[] { "wsfe", "wsfex", "wsmtxca" })
+        foreach (bool query in new[] { false, true })
+        {
+            ComprobanteGenerado document = ContractFiscal(service, query);
+            string html = new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(document);
+            Assert.Contains("Comprobante autorizado por ARCA", html);
+            using JsonDocument qr = JsonDocument.Parse(Convert.FromBase64String(ExtractQrPayload(html)));
+            Assert.Equal("E", qr.RootElement.GetProperty("tipoCodAut").GetString());
+        }
+    }
+
+    [Fact]
+    public void MtXca_consumer_final_allows_contract_omission_of_document_type_and_number()
+    {
+        ComprobanteGenerado basis = Fiscal("wsmtxca", 6, condition: 5, conditionText: "Consumidor final");
+        var receiver = new DatosReceptor(0, "Consumidor final", "Calle 2", "Consumidor final");
+        var request = new ComprobanteType
+        {
+            CodigoTipoComprobante = 6, NumeroPuntoVenta = 4, NumeroComprobante = 123,
+            FechaEmision = new DateTime(2026, 10, 13), ImporteTotal = 121, CodigoMoneda = "ARS", CotizacionMoneda = 1,
+            CondicionIvaReceptor = 5, ImporteGravado = 121, ImporteExento = 0, ImporteNoGravado = 0
+        };
+        string html = RenderWsmtxca(basis, receiver, request, query: false);
+        Assert.Contains("A CONSUMIDOR FINAL", html);
+    }
+
+    [Fact]
+    public void Wsfex_qr_uses_correlated_twenty_digit_foreign_tax_id_and_ignores_unrelated_foreign_id_for_domestic_services()
+    {
+        const string foreignTaxId = "12345678901234567890";
+        ComprobanteGenerado foreign = ContractFiscal("wsfex", query: false);
+        string foreignHtml = new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(foreign);
+        using JsonDocument foreignQr = JsonDocument.Parse(Convert.FromBase64String(ExtractQrPayload(foreignHtml)));
+        Assert.Equal(decimal.Parse(foreignTaxId, CultureInfo.InvariantCulture), foreignQr.RootElement.GetProperty("nroDocRec").GetDecimal());
+
+        const string oversizedForeignId = "123456789012345678901";
+        ComprobanteGenerado oversized = ContractFiscal("wsfex", query: false);
+        string oversizedRequest = oversized.SnapshotRequest!.Replace(foreignTaxId, oversizedForeignId, StringComparison.Ordinal);
+        DatosReceptor oversizedReceiver = oversized.Receptor with { IdentificacionFiscal = oversizedForeignId };
+        var oversizedDocument = new ComprobanteGenerado(oversized.Version, oversized.Tipo, oversized.Identidad, oversized.TenantId,
+            oversized.Estado, oversizedReceiver, oversized.Moneda, oversized.Total, oversized.Detalles, oversized.Impuestos, oversized.Leyendas,
+            oversizedRequest, oversized.SnapshotVersion, oversized.Resultado, fecha: oversized.Fecha, cotizacion: oversized.Cotizacion,
+            neto: oversized.Neto, exento: oversized.Exento, noGravado: oversized.NoGravado, iva: oversized.Iva,
+            snapshotResponse: oversized.SnapshotResponse, snapshotResponseVersion: oversized.SnapshotResponseVersion);
+        Assert.Throws<InvalidOperationException>(() => new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(oversizedDocument));
+
+        ComprobanteGenerado domestic = Fiscal();
+        DatosReceptor tamperedReceiver = new(domestic.Receptor.Identificacion, domestic.Receptor.Nombre, domestic.Receptor.Domicilio,
+            domestic.Receptor.CondicionTributaria, domestic.Receptor.CodigoTipoDocumento, foreignTaxId);
+        ComprobanteGenerado tampered = new(domestic.Version, domestic.Tipo, domestic.Identidad, domestic.TenantId, domestic.Estado,
+            tamperedReceiver, domestic.Moneda, domestic.Total, domestic.Detalles, domestic.Impuestos, domestic.Leyendas,
+            domestic.SnapshotRequest, domestic.SnapshotVersion, domestic.Resultado, fecha: domestic.Fecha,
+            cotizacion: domestic.Cotizacion, neto: domestic.Neto, exento: domestic.Exento, noGravado: domestic.NoGravado,
+            iva: domestic.Iva, snapshotResponse: domestic.SnapshotResponse, snapshotResponseVersion: domestic.SnapshotResponseVersion,
+            codigoCondicionIvaReceptor: domestic.CodigoCondicionIvaReceptor);
+        string domesticHtml = new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(tampered);
+        using JsonDocument domesticQr = JsonDocument.Parse(Convert.FromBase64String(ExtractQrPayload(domesticHtml)));
+        Assert.Equal(20304050607m, domesticQr.RootElement.GetProperty("nroDocRec").GetDecimal());
+    }
+
+    [Fact]
     public async Task Two_issuers_render_concurrently_without_cross_contamination()
     {
         var issuerA = Issuer();
@@ -216,6 +281,131 @@ public sealed class HtmlRenderingTests
             ImpTrib = 0, ImpIva = 0, MonId = "ARS", MonCotiz = 1, CondicionIvaReceptorId = condition
         });
         return Serialize(request);
+    }
+
+    private static ComprobanteGenerado ContractFiscal(string service, bool query)
+    {
+        const long cuit = 30123456789;
+        const string cae = "12345678901234";
+        const string foreignId = "12345678901234567890";
+        string requestXml;
+        string responseXml;
+        int type = service == "wsfex" ? 19 : service == "wsmtxca" ? 6 : 1;
+        DatosReceptor receiver;
+        decimal net = 121m;
+        int condition = 6;
+        if (service == "wsfe")
+        {
+            requestXml = WsfeRequestSnapshot(type, condition);
+            receiver = new(20304050607, "Cliente", "Calle 2", "Monotributista", 80);
+            if (query)
+            {
+                var result = new FeCompConsResponse
+                {
+                    Resultado = "A", EmisionTipo = "CAE", CodAutorizacion = cae, FchVto = "20261023",
+                    PtoVta = 4, CbteTipo = type, CbteDesde = 123, DocTipo = 80, DocNro = receiver.Identificacion
+                };
+                responseXml = Serialize(new FeCompConsultarResponse { FeCompConsultarResult = new FeCompConsultaResponse { ResultGet = result } });
+            }
+            else responseXml = WsfeResponseSnapshot(type);
+        }
+        else if (service == "wsfex")
+        {
+            var request = new ClsFexRequest
+            {
+                Id = 42, FechaCbte = "20261013", CbteTipo = 19, PuntoVta = 4, CbteNro = 123,
+                TipoExpo = 1, DstCmp = 840, Cliente = "Cliente exterior", CuitPaisCliente = 840,
+                DomicilioCliente = "Calle 2", IdImpositivo = foreignId, MonedaId = "ARS", MonedaCtz = 1, ImpTotal = 121
+            };
+            requestXml = Serialize(request);
+            receiver = new(840, "Cliente exterior", "Calle 2", "Cliente exterior", 80, foreignId);
+            if (query)
+            {
+                var result = new ClsFexGetCmpr
+                {
+                    Resultado = "A", Cae = cae, FchVencCae = "20261023", CbteTipo = 19, PuntoVta = 4,
+                    CbteNro = 123, CuitPaisCliente = 840, IdImpositivo = foreignId
+                };
+                responseXml = Serialize(new FexGetCmpResponse2 { FexGetCmpResult = new FexGetCmpResponse { FexResultGet = result } });
+            }
+            else
+            {
+                var result = new ClsFexOutAuthorize
+                {
+                    Id = 42, Cuit = cuit, CbteTipo = 19, PuntoVta = 4, CbteNro = 123,
+                    Cae = cae, FchVencCae = "20261023", FchCbte = "20261013", Resultado = "A"
+                };
+                responseXml = Serialize(new FexAuthorizeResponse { FexAuthorizeResult = new FexResponseAuthorize { FexResultAuth = result } });
+            }
+        }
+        else
+        {
+            type = 6;
+            condition = 5;
+            var request = new ComprobanteType
+            {
+                CodigoTipoComprobante = 6, NumeroPuntoVenta = 4, NumeroComprobante = 123,
+                FechaEmision = new DateTime(2026, 10, 13), ImporteTotal = 121, CodigoMoneda = "ARS", CotizacionMoneda = 1,
+                CodigoTipoDocumento = 80, NumeroDocumento = 20304050607, CondicionIvaReceptor = 5,
+                ImporteGravado = 121, ImporteExento = 0, ImporteNoGravado = 0
+            };
+            requestXml = Serialize(request);
+            receiver = new(20304050607, "Consumidor final", "Calle 2", "Consumidor final", 80);
+            if (query)
+            {
+                request.CodigoTipoAutorizacion = CodigoTipoAutorizacionSimpleType.E;
+                request.CodigoAutorizacion = long.Parse(cae, CultureInfo.InvariantCulture);
+                request.FechaVencimiento = new DateTime(2026, 10, 23);
+                responseXml = Serialize(new ConsultarComprobanteResponseType { Comprobante = request });
+            }
+            else
+            {
+                var result = new ComprobanteCaeResponseType
+                {
+                    Cuit = cuit, CodigoTipoComprobante = 6, NumeroPuntoVenta = 4, NumeroComprobante = 123,
+                    FechaEmision = new DateTime(2026, 10, 13), Cae = long.Parse(cae, CultureInfo.InvariantCulture),
+                    FechaVencimientoCae = new DateTime(2026, 10, 23)
+                };
+                responseXml = Serialize(new AutorizarComprobanteResponseType { Resultado = ResultadoSimpleType.A, ComprobanteResponse = result });
+            }
+        }
+        return new(1, TipoComprobanteGenerado.Fiscal, new(service, "Homologacion", cuit, 4, type, 123), "tenant",
+            "Authorized", receiver, "ARS", 121, [], [], [], requestXml, 1,
+            new ResultadoComprobante(cae, new DateOnly(2026, 10, 23), [], [], "A", "E"),
+            fecha: new DateOnly(2026, 10, 13), cotizacion: 1, snapshotResponse: responseXml,
+            snapshotResponseVersion: 1, neto: net, exento: 0, noGravado: 0, iva: 0,
+            codigoCondicionIvaReceptor: service == "wsfex" ? null : condition);
+    }
+
+    private static string RenderWsmtxca(ComprobanteGenerado basis, DatosReceptor receiver, ComprobanteType request, bool query)
+    {
+        const string cae = "12345678901234";
+        string response;
+        if (query)
+        {
+            request.CodigoTipoAutorizacion = CodigoTipoAutorizacionSimpleType.E;
+            request.CodigoAutorizacion = long.Parse(cae, CultureInfo.InvariantCulture);
+            request.FechaVencimiento = new DateTime(2026, 10, 23);
+            response = Serialize(new ConsultarComprobanteResponseType { Comprobante = request });
+        }
+        else
+        {
+            response = Serialize(new AutorizarComprobanteResponseType
+            {
+                Resultado = ResultadoSimpleType.A,
+                ComprobanteResponse = new ComprobanteCaeResponseType
+                {
+                    Cuit = 30123456789, CodigoTipoComprobante = 6, NumeroPuntoVenta = 4, NumeroComprobante = 123,
+                    FechaEmision = new DateTime(2026, 10, 13), Cae = long.Parse(cae, CultureInfo.InvariantCulture), FechaVencimientoCae = new DateTime(2026, 10, 23)
+                }
+            });
+        }
+        var doc = new ComprobanteGenerado(basis.Version, basis.Tipo, basis.Identidad, basis.TenantId, basis.Estado,
+            receiver, basis.Moneda, basis.Total, basis.Detalles, basis.Impuestos, basis.Leyendas, Serialize(request), 1,
+            basis.Resultado, fecha: basis.Fecha, cotizacion: basis.Cotizacion, neto: basis.Neto, exento: basis.Exento,
+            noGravado: basis.NoGravado, iva: basis.Iva, snapshotResponse: response, snapshotResponseVersion: 1,
+            codigoCondicionIvaReceptor: basis.CodigoCondicionIvaReceptor);
+        return new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(doc);
     }
 
     private static string WsfeResponseSnapshot(int type = 1)

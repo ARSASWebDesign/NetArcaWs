@@ -122,8 +122,6 @@ internal static class DocumentRenderValidator
             RequireEqualValue(request.IdImpositivo, document.Receptor.IdentificacionFiscal);
             VerifyWsfexItems(request, document);
             if (document.Impuestos.Count != 0) throw InvalidSnapshot("WSFEX no incluye impuestos en el snapshot de autorización; no se pueden representar impuestos añadidos al modelo.");
-            if (document.CodigoCondicionIvaReceptor is not null || document.CondicionIvaReceptor is not null || document.Receptor.CondicionTributaria is not null)
-                throw InvalidSnapshot("WSFEX no transmite la condición de IVA del receptor; no se renderiza ese dato sin correlación.");
         }
         else if (identity.Servicio.Equals("wsmtxca", StringComparison.OrdinalIgnoreCase))
         {
@@ -137,7 +135,12 @@ internal static class DocumentRenderValidator
             RequireDecimalValue(request.CotizacionMoneda ?? throw InvalidSnapshot("WSMTXCA no contiene cotización."), document.Cotizacion);
             RequireDecimalValue(request.ImporteTotal, document.Total);
             RequireOptionalEqual(request.CodigoTipoDocumento?.ToString(CultureInfo.InvariantCulture), document.Receptor.CodigoTipoDocumento?.ToString(CultureInfo.InvariantCulture), "tipo de documento del receptor");
-            RequireOptionalEqual(request.NumeroDocumento?.ToString(CultureInfo.InvariantCulture), document.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture), "identificación del receptor");
+            bool legalConsumerFinalOmission = request.CodigoTipoDocumento is null && request.NumeroDocumento is null &&
+                document.Receptor.CodigoTipoDocumento is null && document.Receptor.Identificacion == 0 &&
+                identity.Tipo is 6 or 7 or 8 && document.CodigoCondicionIvaReceptor == 5;
+            string? expectedDocumentNumber = legalConsumerFinalOmission
+                ? null : document.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture);
+            RequireOptionalEqual(request.NumeroDocumento?.ToString(CultureInfo.InvariantCulture), expectedDocumentNumber, "identificación del receptor");
             RequireOptionalEqual(request.CondicionIvaReceptor?.ToString(CultureInfo.InvariantCulture), document.CodigoCondicionIvaReceptor?.ToString(CultureInfo.InvariantCulture), "condición IVA del receptor");
             RequireOptionalDecimal(request.ImporteGravado, document.Neto, "neto");
             RequireOptionalDecimal(request.ImporteExento, document.Exento, "exento");
@@ -166,9 +169,9 @@ internal static class DocumentRenderValidator
         // returns null only for those official query shapes. Authorization responses and
         // WSFEX queries include identities and are checked where the contract provides them.
         if (facts.Cuit is long cuit && cuit != identity.Cuit) throw InvalidSnapshot("La CUIT de la respuesta no coincide con la identidad fiscal.");
-        RequireOptionalEqual(facts.ReceiverType, document.Receptor.CodigoTipoDocumento?.ToString(CultureInfo.InvariantCulture), "tipo de documento en respuesta");
-        RequireOptionalEqual(facts.ReceiverId, document.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture), "identificación del receptor en respuesta");
-        RequireOptionalEqual(facts.ReceiverFiscalId, document.Receptor.IdentificacionFiscal, "identificación fiscal del receptor en respuesta");
+        RequireResponseIfPresent(facts.ReceiverType, document.Receptor.CodigoTipoDocumento?.ToString(CultureInfo.InvariantCulture), "tipo de documento");
+        RequireResponseIfPresent(facts.ReceiverId, document.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture), "identificación del receptor");
+        RequireResponseIfPresent(facts.ReceiverFiscalId, document.Receptor.IdentificacionFiscal, "identificación fiscal del receptor");
     }
 
     private static void RequirePaths(XElement root, params string[][] paths)
@@ -350,6 +353,8 @@ internal static class DocumentRenderValidator
     { if (!EqualityComparer<T>.Default.Equals(actual, expected)) throw InvalidSnapshot("Un campo del modelo no coincide con el snapshot fiscal."); }
     private static void RequireOptionalEqual(string? actual, string? expected, string field)
     { if (!string.Equals(actual, expected, StringComparison.Ordinal)) throw InvalidSnapshot($"El campo {field} falta o no coincide con el snapshot fiscal."); }
+    private static void RequireResponseIfPresent(string? actual, string? expected, string field)
+    { if (actual is not null && !string.Equals(actual, expected, StringComparison.Ordinal)) throw InvalidSnapshot($"El campo {field} de la respuesta no coincide con el snapshot fiscal."); }
 
     private static DateOnly? ParseDate(string? value) => DateOnly.TryParseExact(value, ["yyyyMMdd", "yyyy-MM-dd", "yyyy-MM-dd'Z'", "yyyy-MM-ddzzz"], CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly date) ? date : null;
     private static InvalidOperationException InvalidSnapshot(string message) => new(message);

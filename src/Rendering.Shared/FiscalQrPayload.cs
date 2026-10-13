@@ -28,7 +28,9 @@ internal static class FiscalQrPayload
             ["codAut"] = long.Parse(document.Resultado!.CodigoAutorizacion!, CultureInfo.InvariantCulture)
         };
         int? docType = document.Receptor.CodigoTipoDocumento;
-        string? recipientNumber = document.Receptor.IdentificacionFiscal ?? document.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture);
+        string? recipientNumber = document.Identidad!.Servicio.Equals("wsfex", StringComparison.OrdinalIgnoreCase)
+            ? document.Receptor.IdentificacionFiscal
+            : document.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture);
         if (docType is not null)
         {
             if (string.IsNullOrEmpty(recipientNumber) || recipientNumber.Length > 20 ||
