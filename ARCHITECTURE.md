@@ -229,8 +229,7 @@ validación de contratos de esos flujos pasaron; el transporte común no reinten
 inciertos se reconcilian sin reenvío. Corregir un rechazo confirmado genera una
 revisión auditable que queda preparada hasta que la aplicación invoque
 explícitamente `ResumeAsync`. El paquete EF opcional agrega una cola y un worker
-opt-in para esa misma política; sus APIs son posteriores a 0.6.0 y esperan una
-publicación futura. Aplican las reglas del
+opt-in para esa misma política. Aplican las reglas del
 [ADR 0001](docs/adr/0001-safe-invoice-retries.md); una prueba de diario no prueba
 la garantía del ciclo fiscal completo.
 
@@ -278,7 +277,6 @@ El módulo `InvoiceRecovery` agrega `NetArcaInvoiceRecoveryJobs` y su historial
 `20261007000400_InitialInvoiceRecovery`. El contexto y el apply aislados crean
 solo la tabla de cola. Los artefactos actuales suman 25 DDL nativos y 20 IDs de
 migración: cinco selecciones y cuatro módulos para cada uno de cinco motores.
-Los paquetes publicados 0.6.0 no contienen esta API de recovery.
 
 El registro DI y el inicio normal de la API no conectan ni aplican migraciones.
 El actor de despliegue usa permisos de esquema; runtime usa permisos de datos
@@ -319,21 +317,17 @@ build Release con 0 warnings; MySQL 8.4.11 20/20, MariaDB 11.4.13 20/20,
 PostgreSQL 17.6 19/19 y SQL Server Developer 16.0.4295.3 19/19, sin skips de
 motor. La corrida validó también los 10 SQL de migración, 15 DDL, 11 paquetes y
 un consumer/CLI nuevo. Es evidencia limitada a estas versiones/escenarios; no
-hubo llamadas ARCA ni publicación de extras. El store de certificados está
-implementado en el código de desarrollo posterior a 0.6.0; su inclusión en
-NuGet queda pendiente de la siguiente publicación. Consultar
+hubo llamadas ARCA en esa corrida. Consultar
 [ADR 0005](docs/adr/0005-ef-core-invoice-journal.md), la
 [guía del diario](docs/wiki/Diario-fiscal.md) y el
 [modelo relacional](docs/wiki/Modelo-relacional.md).
 
-La cola/worker de recuperación fiscal también es posterior a 0.6.0 y todavía no
-está en los paquetes públicos. Las corridas locales reportadas para el issue #24
+Las corridas locales de la cola/worker de recuperación fiscal reportadas para el issue #24
 son sintéticas y están desglosadas en `PROGRESS.md`; el consumer smoke con feed
 local nuevo, la instalación de CLI y el pack local de once proyectos pasaron.
 La revisión completa aprobó restore locked, build Release (0 warnings/0 errors),
 630 pruebas (588 aprobadas, 42 skips opt-in, 0 fallos), 25 DDL y 20 scripts de
-migración. El pack se repetirá después de actualizar los README incluidos en los
-paquetes. No se hicieron llamadas a ARCA.
+migración. No se hicieron llamadas a ARCA en esas corridas.
 
 ## Herramienta de certificados
 

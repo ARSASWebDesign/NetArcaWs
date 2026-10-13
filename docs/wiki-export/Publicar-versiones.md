@@ -2,79 +2,50 @@
 
 # Releases y publicación en NuGet
 
-## Preparación 0.7.0
-
-La versión `0.7.0` está preparada en la rama de release; su publicación está
-pendiente. Los once proyectos empaquetables y sus lockfiles se actualizaron a
-esa versión. Hasta que la release se publique y cada paquete se indexe, `0.6.0`
-sigue siendo la versión pública documentada. El alcance y sus límites están en
-las [notas de versión 0.7.0](Documento-release-notes-0.7.0).
-
-La ejecución protegida [Homologación ARCA 38327713674](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/38327713674), CI [38327702696](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/38327702696) y Security [38327702694](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/38327702694) finalizaron correctamente sobre `960266563f15c43425bdca20ccdcabf68fb2f2e7`. La homologación ejecutó el modo `completa`: nueve selectores autenticados y 18 escenarios fiscales. Esta evidencia se limita a esos flujos y escenarios; no acredita homologación general de todas las operaciones o servicios.
+## Publicación y paquetes
 
 El workflow [Release](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/.github/workflows/release.yml) distribuye once paquetes
-con la misma versión: `NetArcaWs`, `NetArcaWs.Tool`, cuatro paquetes EF Core de
-persistencia/proveedores y cinco de migraciones. El evento `release: published`
-compila, prueba, verifica los snapshots de schemas y migraciones, empaqueta,
-prueba la instalación del tool y un consumidor aislado de persistencia, adjunta
-los once paquetes a la release y los publica en nuget.org. Ejecutarlo
+con la misma versión: `NetArcaWs`, `NetArcaWs.Tool`, `NetArcaWs.EntityFrameworkCore`,
+tres providers EF Core y cinco paquetes de migraciones. Incluye el store opt-in
+de certificados con rotación y la cola/worker optativa para recuperación durable.
+El evento `release: published` compila, prueba, verifica schemas y migraciones,
+empaqueta, prueba la instalación del tool y un consumidor aislado de persistencia,
+adjunta los once paquetes a la release y los publica en nuget.org. Ejecutarlo
 manualmente (`workflow_dispatch`) **solo valida y genera artefactos**, sin
 publicar ni solicitar credenciales NuGet.
 
-## Estado de activación
+NuGet usa Trusted Publishing mediante OIDC, configurado para el repositorio,
+workflow y environment `nuget`. Consultá el feed en tiempo real mediante estos
+badges y enlaces a las fichas de cada paquete:
 
-El usuario NuGet `arsas`, el environment GitHub `nuget` (`NUGET_USER=arsas`) y la
-política de Trusted Publishing están configurados. La primera publicación
-completó el intercambio OIDC y NuGet aceptó los dos paquetes 0.5.0. La
-[ejecución de publicación](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/37477043984)
-registró `Your package was pushed` para ambos; ambos aparecen en el índice v3 de
-NuGet. La [release v0.5.0](https://github.com/ARSASWebDesign/NetArcaWs/releases/tag/v0.5.0)
-está publicada. La instalación pública de `NetArcaWs.Tool` 0.5.0 desde
-`api.nuget.org` en una caché aislada y la ejecución de `--help` terminaron con
-código 0. Esa prueba no verifica la firma de autor del paquete. Una release en
-borrador no inicia la publicación.
-
-La versión 0.6.0 agrupa once paquetes: `NetArcaWs`, `NetArcaWs.Tool`,
-`NetArcaWs.EntityFrameworkCore`, sus providers `MySql`, `PostgreSql` y
-`SqlServer`, y los paquetes de migraciones `Sqlite`, `MySql`, `MariaDb`,
-`PostgreSql` y `SqlServer`. Consultá la disponibilidad actual de cada ID y
-versión en NuGet; estos enlaces y badges reflejan el feed, sin depender del
-estado de una release de GitHub:
-
-| Paquete | Última versión en NuGet; enlace a 0.6.0 |
+| Paquete | Feed NuGet |
 | --- | --- |
-| `NetArcaWs` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs)](https://www.nuget.org/packages/NetArcaWs) · [0.6.0](https://www.nuget.org/packages/NetArcaWs/0.6.0) |
-| `NetArcaWs.Tool` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.Tool)](https://www.nuget.org/packages/NetArcaWs.Tool) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.Tool/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore.MySql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.MySql)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.MySql) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.MySql/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore.PostgreSql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.PostgreSql)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.PostgreSql) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.PostgreSql/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore.SqlServer` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.SqlServer)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.SqlServer) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.SqlServer/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore.Migrations.Sqlite` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore.Migrations.MySql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.MySql)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.MySql) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.MySql/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore.Migrations.MariaDb` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql/0.6.0) |
-| `NetArcaWs.EntityFrameworkCore.Migrations.SqlServer` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer/0.6.0) |
+| `NetArcaWs` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs)](https://www.nuget.org/packages/NetArcaWs) |
+| `NetArcaWs.Tool` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.Tool)](https://www.nuget.org/packages/NetArcaWs.Tool) |
+| `NetArcaWs.EntityFrameworkCore` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore) |
+| `NetArcaWs.EntityFrameworkCore.MySql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.MySql)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.MySql) |
+| `NetArcaWs.EntityFrameworkCore.PostgreSql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.PostgreSql)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.PostgreSql) |
+| `NetArcaWs.EntityFrameworkCore.SqlServer` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.SqlServer)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.SqlServer) |
+| `NetArcaWs.EntityFrameworkCore.Migrations.Sqlite` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.Sqlite) |
+| `NetArcaWs.EntityFrameworkCore.Migrations.MySql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.MySql)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.MySql) |
+| `NetArcaWs.EntityFrameworkCore.Migrations.MariaDb` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb) |
+| `NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql) |
+| `NetArcaWs.EntityFrameworkCore.Migrations.SqlServer` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer) |
 
 La publicación se verifica por separado para cada paquete: el éxito de la
 release de GitHub no demuestra que los once IDs hayan sido aceptados e
 indexados. La publicación de once paquetes tampoco es una transacción; una
 falla parcial requiere verificar cada ID y versión.
 
-El alcance publicado de 0.6.0 incluye persistencia relacional optativa para
-diario fiscal y tickets WSAA, providers para MySQL/MariaDB, PostgreSQL y SQL
-Server, cinco paquetes de migraciones oficiales y ejemplos/documentación de
-consumo. Los paquetes públicos 0.6.0 no incluyen el store de certificados ni la
-cola/worker de recuperación que ahora se preparan en 0.7.0. El consumidor conserva la
-responsabilidad de autorizar tenants, proteger claves y aplicar migraciones
-explícitamente. Las migraciones no adoptan automáticamente tablas previas sin
-historial. Las pruebas locales y de motores relacionales no equivalen a
-homologación fiscal completa contra ARCA.
+El consumidor conserva la responsabilidad de autorizar tenants, proteger claves
+y aplicar migraciones explícitamente. Las migraciones no adoptan automáticamente
+tablas previas sin historial. Las pruebas locales y de motores relacionales no
+equivalen a homologación fiscal completa contra ARCA.
 
 ## Configuración inicial del mantenedor
 
 Los pasos siguientes describen la configuración inicial para un fork o una
-rotación/recreación de la integración. En el repositorio principal ya se
-completaron y verificaron en la ejecución enlazada arriba.
+rotación/recreación de la integración.
 
 1. Verificar el propietario elegido (cuenta u organización) y sus permisos de publicación. GitHub y NuGet administran cuentas y permisos independientes.
 2. En NuGet, crear una política de **Trusted Publishing** bajo el propietario
@@ -172,10 +143,9 @@ adjuntos a una release permiten conservar los paquetes con sus checksums. Los
 ## Consumir desde NuGet
 
 ```sh
-dotnet add package NetArcaWs --version 0.5.0
-dotnet tool install --global NetArcaWs.Tool --version 0.5.0
+dotnet add package NetArcaWs --version 0.7.0
+dotnet tool install --global NetArcaWs.Tool --version 0.7.0
 ```
 
-La publicación 0.5.0 ya está indexada en NuGet. También se pueden usar los
-paquetes locales con `--source`/`--add-source` como se describe en el README y en
-la guía de la CLI.
+También se pueden usar los paquetes locales con `--source`/`--add-source` como
+se describe en el README y en la guía de la CLI.

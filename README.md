@@ -4,8 +4,6 @@
 
 NetArcaWs es una biblioteca y herramienta .NET 10 para integrar servicios web de ARCA, basada en [PyAfipWs](https://github.com/reingart/pyafipws) de Mariano Reingart y distribuida bajo licencia LGPL-3.0-or-later.
 
-La versión 0.7.0 está preparada y su publicación está pendiente. La versión 0.6.0 sigue siendo la última versión pública disponible; consultá el [estado de releases y paquetes](docs/releases.md#estado-de-activación) antes de instalar extras nuevos.
-
 Ofrece clientes SOAP tipados, autenticación WSAA, selección explícita de identidad por operación, health checks opt-in y una CLI para preparar certificados y solicitudes CSR. La cobertura implementada y sus límites se describen en la [wiki publicada](https://github.com/ARSASWebDesign/NetArcaWs/wiki); el alcance del código no implica paridad completa con PyAfipWs ni homologación de todas las operaciones.
 
 ## Instalación
@@ -81,7 +79,7 @@ La [herramienta de certificados](https://github.com/ARSASWebDesign/NetArcaWs/wik
 
 ## Persistencia opcional
 
-El paquete principal no depende de EF Core; los paquetes opcionales agregan persistencia para SQLite, MySQL/MariaDB, PostgreSQL y SQL Server, con migraciones oficiales por motor y módulo cuando se seleccionan. El store versionado de certificados y la cola/worker de recuperación fiscal son opt-in; la aplicación autoriza los contextos, fija la referencia de credencial y aplica sus migraciones expresamente. SQLite admite procesos del mismo host sobre archivo local; para varios hosts se requiere una base transaccional compartida. Estas APIs se preparan en 0.7.0 y aún no están publicadas en NuGet.
+El paquete principal no depende de EF Core; los paquetes opcionales agregan persistencia para SQLite, MySQL/MariaDB, PostgreSQL y SQL Server, con migraciones oficiales por motor y módulo cuando se seleccionan. El store versionado de certificados y la cola/worker de recuperación fiscal son opt-in; la aplicación autoriza los contextos, fija la referencia de credencial y aplica sus migraciones expresamente. SQLite admite procesos del mismo host sobre archivo local; para varios hosts se requiere una base transaccional compartida.
 
 La guía [Diario fiscal](https://github.com/ARSASWebDesign/NetArcaWs/wiki/Diario-fiscal) explica configuración y recuperación, y [Modelo relacional](https://github.com/ARSASWebDesign/NetArcaWs/wiki/Modelo-relacional) documenta las tablas y las migraciones oficiales opcionales. El diario durable cubre autorizaciones unitarias WSFEv1, WSFEXv1 y WSMTXCA; una respuesta incierta requiere reconciliación y no se reenvía automáticamente.
 

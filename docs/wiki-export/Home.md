@@ -8,12 +8,11 @@
 [![CI](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/ci.yml/badge.svg)](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/ci.yml)
 [![Release](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/release.yml/badge.svg)](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/release.yml)
 
-Los indicadores de NuGet muestran las versiones aceptadas e indexadas por el
-feed. La versión 0.7.0 está preparada y su publicación está pendiente; 0.6.0
-sigue siendo la última versión pública documentada. Consultá [Inicio rápido](Inicio-rapido)
-para instalar la versión disponible y la [disponibilidad por paquete](Publicar-versiones#estado-de-activación).
-El [changelog 0.7.0](Documento-release-notes-0.7.0) resume el alcance preparado y
-la evidencia de validación.
+Los indicadores de NuGet muestran dinámicamente la versión disponible de cada
+paquete en el feed. Consultá [Inicio rápido](Inicio-rapido) para ver cómo
+referenciar los paquetes y [releases](Publicar-versiones) para el proceso de
+publicación. Las [notas de versión](Documento-release-notes-0.7.0) describen los
+cambios y su evidencia.
 
 NetArcaWs es una biblioteca .NET para integrar servicios web de ARCA desde
 aplicaciones C#. Consulta [los servicios implementados](Servicios-implementados)

@@ -90,10 +90,10 @@ explicita esta diferencia.
 
 ### ¿Por qué NuGet y la rama principal pueden mostrar versiones distintas?
 
-NuGet solo muestra paquetes que ya fueron aceptados e indexados. La release
-0.6.0 agrega paquetes opcionales de persistencia; usá los badges de [Inicio](Home.md)
-para comprobar las versiones disponibles. Las mejoras posteriores se
-distribuyen con otra versión, sin reemplazar assets de una release publicada.
+Consultá los badges de [Inicio](Home.md) para ver las versiones disponibles en
+NuGet. La tabla de [releases](../releases.md) enlaza cada paquete con su ficha
+en el feed. Los paquetes publicados son inmutables; las mejoras se distribuyen
+con una nueva versión.
 
 ## Glosario
 

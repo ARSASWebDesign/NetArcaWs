@@ -1,8 +1,5 @@
 # NetArcaWs 0.7.0
 
-**Estado:** versión preparada; publicación pendiente. La última versión pública
-documentada continúa siendo 0.6.0.
-
 ## Cambios
 
 - Store opt-in de certificados WSAA versionados y cifrados, con rotación
@@ -40,10 +37,3 @@ ejecutados; no representa homologación de toda la biblioteca ni de todas las
 operaciones ARCA. El listado de puntos de venta de WSFE puede ser parcial si
 ARCA devuelve el error 602; la ejecución de los escenarios no convierte esa
 respuesta en evidencia de catálogo completo.
-
-## Disponibilidad
-
-La publicación de 0.7.0 está pendiente. Hasta que los once paquetes se
-publiquen y se indexen, las aplicaciones deben seguir consultando la versión
-pública 0.6.0. Ver el [estado de publicación](releases.md#preparación-070) y la
-[disponibilidad por paquete](releases.md#estado-de-activación).
