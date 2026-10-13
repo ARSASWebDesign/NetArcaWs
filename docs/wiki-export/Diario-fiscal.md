@@ -242,10 +242,8 @@ Para MariaDB se usa `MariaDbServerVersion`. Los paquetes
 `AddNetArcaWsPostgreSqlStores(connectionString, modelOptions)` y
 `AddNetArcaWsSqlServerStores(connectionString, modelOptions)`. Cada helper
 configura el contexto dedicado y los stores, pero no conecta, migra, crea tablas
-ni agrega estrategia de reintentos EF o reintentos SOAP. Los paquetes
-opcionales de persistencia usan versión 0.6.0: el paquete EF Core, tres
-providers relacionales y cinco paquetes de migraciones oficiales por módulo y
-motor. Consultar el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19)
+ni agrega estrategia de reintentos EF o reintentos SOAP. Los paquetes opcionales incluyen EF Core, tres providers relacionales y cinco
+paquetes de migraciones oficiales por módulo y motor. Consultar el [issue #19](https://github.com/ARSASWebDesign/NetArcaWs/issues/19)
 para el estado de entrega. El [modelo relacional](Modelo-relacional) contiene
 el diccionario de columnas y los scripts DDL por proveedor. El cifrado de tickets requiere que la aplicación
 registre `IWsaaTicketProtector` con claves administradas fuera de la base de
@@ -423,7 +421,7 @@ La cola solo cubre CAE unitario WSFEv1, WSFEXv1 y WSMTXCA. No agrega batch,
 WSFECred, WSCPE, retry SOAP genérico, failover ni garantía exactly-once. SQLite
 solo admite archivo local y procesos del mismo host; para multi-host se necesita
 una base transaccional de servidor compartida por un provider soportado. Esta API
-no está en los paquetes públicos 0.6.0 y requiere una publicación posterior.
+forma parte del módulo opcional de recuperación durable.
 
 La evidencia de Task 3 reporta suites locales completas para estas revisiones:
 SQLite 131/131, MySQL 8.4.11 29/29, MariaDB 11.4.13 29/29, PostgreSQL 17.6
@@ -436,10 +434,9 @@ Son datos sintéticos y verifican las versiones indicadas; no son homologación
 ARCA ni compatibilidad universal. El consumer smoke usó un feed local y caché
 nueva, aplicó los cuatro módulos SQLite, verificó recovery sintético, generó
 scripts offline para los cinco providers e instaló el CLI; también se empaquetaron
-los once proyectos a 0.6.0. La revisión de solución completa aprobó restore
+los once proyectos empaquetables. La revisión de solución completa aprobó restore
 locked, build Release (0 warnings/0 errors), 630 pruebas (588 aprobadas, 42
-skips opt-in, 0 fallos), 25 DDL y 20 scripts de migración. El pack se repetirá
-después de actualizar los README incluidos en los paquetes.
+skips opt-in, 0 fallos), 25 DDL y 20 scripts de migración.
 
 La suite normal usa motores y datos sintéticos; los tests opt-in aprobaron 5/5
 con MySQL 8.4.11, 5/5 con MariaDB 11.4.13, 13/13 con PostgreSQL 17.6 y 13/13

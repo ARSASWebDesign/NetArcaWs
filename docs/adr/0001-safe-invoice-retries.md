@@ -282,8 +282,7 @@ Una instalación multi-host necesita almacenamiento transaccional compartido y u
 provider soportado con las restricciones únicas y fencing correspondientes; el
 worker no aporta coordinación distribuida ni un scheduler externo. La cola cubre
 solo CAE unitario WSFEv1, WSFEXv1 y WSMTXCA. No hay exactly-once, emisión batch,
-retry HTTP genérico ni failover de ambiente. El código de esta extensión es
-posterior a los paquetes públicos 0.6.0 y aún requiere una publicación posterior.
+retry HTTP genérico ni failover de ambiente.
 
 ## Límites de la política actual
 

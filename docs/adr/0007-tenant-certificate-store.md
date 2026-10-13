@@ -1,6 +1,6 @@
 # ADR 0007: Store opt-in de certificados multitenant
 
-- Estado: Aceptado e implementado en el código de desarrollo; pendiente de la siguiente publicación NuGet
+- Estado: Aceptado e implementado
 - Fecha: 2026-10-06
 - Complementa: [contexto multitenant](0002-arca-tenant-context.md), [certificados en memoria](0003-in-memory-certificates.md) y [persistencia EF](0005-ef-core-invoice-journal.md)
 
@@ -97,6 +97,4 @@ Las suites locales verifican SQLite (78/78) y motores reales MySQL, MariaDB,
 PostgreSQL y SQL Server (26/26 cada uno), incluidos flujos de rotación, lectura,
 concurrencia y migraciones correspondientes a esos entornos. Se generaron 20
 DDL y 15 scripts SQL para los cinco motores. Esta evidencia no prueba
-homologación ARCA ni compatibilidad con versiones no ejecutadas. La API se
-incorporó después de los paquetes publicados 0.6.0; queda pendiente de la
-siguiente publicación.
+homologación ARCA ni compatibilidad con versiones no ejecutadas.

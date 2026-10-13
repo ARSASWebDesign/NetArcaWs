@@ -1,6 +1,6 @@
 # Fuentes de la documentación
 
-Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 65 páginas de contenido y este manifiesto. GitHub muestra un único menú nativo; Home contiene la navegación por temas. Cada página incluye su fuente y reescribe enlaces relativos para navegación de wiki. Los contratos ARCA archivados en el repositorio tienen fecha de snapshot 2026-10-06. La salida refleja el árbol de trabajo. Al publicar, SOURCE_COMMIT en el repositorio wiki registra el SHA de origen. Revisar el mirror antes de publicar.
+Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 66 páginas de contenido y este manifiesto. GitHub muestra un único menú nativo; Home contiene la navegación por temas. Cada página incluye su fuente y reescribe enlaces relativos para navegación de wiki. Los contratos ARCA archivados en el repositorio tienen fecha de snapshot 2026-10-06. La salida refleja el árbol de trabajo. Al publicar, SOURCE_COMMIT en el repositorio wiki registra el SHA de origen. Revisar el mirror antes de publicar.
 
 - `.github/pull_request_template.md` → `Plantilla-de-pull-request`
 - `AGENTS.md` → `Documento-AGENTS`
@@ -34,6 +34,7 @@ Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 65 páginas d
 - `docs/reference/operations/wsfexv1.md` → `WSFEXv1-Referencia-de-operaciones`
 - `docs/reference/operations/wsmtxca.md` → `WSMTXCA-Referencia-de-operaciones`
 - `docs/reference/upstream-inventory.md` → `Inventario-del-proyecto-original`
+- `docs/release-notes-0.7.0.md` → `Documento-release-notes-0.7.0`
 - `docs/releases.md` → `Publicar-versiones`
 - `docs/wiki/Arquitectura-y-reintentos.md` → `Arquitectura-y-reintentos`
 - `docs/wiki/Calculos-decimales.md` → `Calculos-decimales`

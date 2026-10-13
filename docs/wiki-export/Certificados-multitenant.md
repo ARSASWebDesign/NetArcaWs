@@ -4,9 +4,9 @@
 
 `NetArcaWs.EntityFrameworkCore` ofrece un store opcional para conservar
 versiones inmutables de certificados WSAA cifradas en la base de la aplicación.
-El paquete base y los clientes ARCA no acceden al store automáticamente. Esta
-API se incorporó después de la publicación NuGet 0.6.0; estará disponible en la
-siguiente publicación de los paquetes EF.
+El paquete base y los clientes ARCA no acceden al store automáticamente. La
+aplicación administra la autorización, el keyring y la selección de versión
+por operación; el store no renueva certificados ni publica rotaciones.
 
 El store administra material y versiones. No autoriza usuarios, tenants o CUIT,
 no emite ni renueva certificados ante ARCA y no confirma que una CUIT tenga

@@ -20,9 +20,8 @@ La [corrida de CI de referencia](https://github.com/ARSASWebDesign/NetArcaWs/act
 registra build, suite local, motores de persistencia, migraciones, paquetes y
 consumer/CLI. Las pruebas usan datos sintéticos. CI no acredita autenticación ni
 homologación fiscal; los badges de [Inicio](Home.md) muestran las versiones
-publicadas y la [disponibilidad por paquete](../releases.md#estado-de-activación)
-permite comprobar cada ID de NuGet. La primera release 0.5.0 fue aceptada e
-indexada mediante OIDC.
+publicadas y la tabla de [paquetes en NuGet](../releases.md#publicación-y-paquetes)
+enlaza cada ID directamente con el feed.
 
 La CI realiza restore, build Release, suite completa, empaquetado y smoke tests
 de los paquetes NuGet y la herramienta desde el feed local. No publica paquetes

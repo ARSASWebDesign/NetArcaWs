@@ -32,4 +32,4 @@ Updating means installing the new package and applying its pending official migr
 
 El historial está en el schema `public`.
 
-This migrations package adds no ARCA calls, certificate storage, or worker. The companion EF runtime package in the repository source provides an opt-in recovery worker, but neither it nor these new migrations are present in the already published 0.6.0 package; a later package release is required. No exactly-once guarantee is made. Check current NuGet version and package availability: [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql).
+This migrations package adds no ARCA calls, certificate storage, or worker. The companion EF runtime package provides an opt-in recovery worker. No exactly-once guarantee is made. Check current NuGet version and package availability: [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql).

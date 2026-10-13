@@ -1,5 +1,11 @@
 # Homologación fiscal automática
 
+La ejecución protegida [38327713674](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/38327713674)
+finalizó correctamente sobre el commit `960266563f15c43425bdca20ccdcabf68fb2f2e7`.
+Ejecutó `completa`: los nueve selectores autenticados y los 18 escenarios
+fiscales tipados. Esta evidencia corresponde al alcance seleccionado y no
+declara homologación de todas las operaciones de la biblioteca.
+
 El workflow **Homologación ARCA** ofrece una sola selección pública: el modo de ejecución. La emisión se autoriza al iniciar manualmente `emision` o `completa` desde `main` del repositorio oficial y al aprobar el environment protegido `homologacion`.
 
 | Modo | Ejecución |
