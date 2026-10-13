@@ -27,6 +27,20 @@ public sealed class ReleaseAssetsTests
         validate.Should().Throw<InvalidOperationException>();
     }
 
+    [Theory]
+    [InlineData("NetArcaWs.Rendering.Html")]
+    [InlineData("NetArcaWs.Rendering.Pdf")]
+    public void ValidateArtifacts_rejects_missing_renderer_package(string package)
+    {
+        using var workspace = new BuildTestWorkspace();
+        WriteManifest(workspace, "0.6.0");
+        File.Delete(Path.Combine(workspace.Root, package + ".0.6.0.nupkg"));
+
+        Action validate = () => ReleaseAssets.ValidateArtifacts("0.6.0", workspace.Root);
+
+        validate.Should().Throw<InvalidOperationException>();
+    }
+
     [Fact]
     public void ValidateArtifacts_rejects_unallowlisted_package_assets()
     {
@@ -36,7 +50,7 @@ public sealed class ReleaseAssetsTests
 
         Action validate = () => ReleaseAssets.ValidateArtifacts("0.6.0", workspace.Root);
 
-        validate.Should().Throw<InvalidOperationException>().WithMessage("*exactly the eleven allowlisted packages*");
+        validate.Should().Throw<InvalidOperationException>().WithMessage("*exactly the 13 allowlisted packages*");
     }
 
     [Fact]

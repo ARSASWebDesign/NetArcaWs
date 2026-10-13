@@ -47,6 +47,14 @@ jobs:
       - run: dotnet pack src/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb.csproj --configuration Release --no-build --no-restore --output artifacts
       - run: dotnet pack src/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql.csproj --configuration Release --no-build --no-restore --output artifacts
       - run: dotnet pack src/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer.csproj --configuration Release --no-build --no-restore --output artifacts
+      - run: dotnet pack src/NetArcaWs.Rendering.Html/NetArcaWs.Rendering.Html.csproj --configuration Release --no-build --no-restore --output artifacts
+      - run: dotnet pack src/NetArcaWs.Rendering.Pdf/NetArcaWs.Rendering.Pdf.csproj --configuration Release --no-build --no-restore --output artifacts
+      - name: Verify core package has no renderer dependencies
+        run: |
+          if unzip -p artifacts/NetArcaWs.${{ steps.version.outputs.version }}.nupkg '*.nuspec' | grep -Eiq 'PDFsharp|QRCoder|StbImageSharp'; then
+            echo 'The core package must not depend on optional PDF or QR rendering packages.' >&2
+            exit 1
+          fi
       - name: Smoke test local tool package
         env:
           PACKAGE_VERSION: ${{ steps.version.outputs.version }}
@@ -60,6 +68,13 @@ jobs:
         run: |
           dotnet restore tests/NetArcaWs.Persistence.PackageSmoke/NetArcaWs.Persistence.PackageSmoke.csproj --configfile tests/NetArcaWs.Persistence.PackageSmoke/NuGet.config -p:PersistencePackageVersion="$PACKAGE_VERSION"
           dotnet run --project tests/NetArcaWs.Persistence.PackageSmoke/NetArcaWs.Persistence.PackageSmoke.csproj --configuration Release --no-restore -p:PersistencePackageVersion="$PACKAGE_VERSION"
+      - name: Smoke test optional rendering NuGet packages in a consumer
+        env:
+          NUGET_PACKAGES: ${{ runner.temp }}/netarcaws-rendering-smoke-packages
+          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          dotnet restore tests/NetArcaWs.Rendering.PackageSmoke/NetArcaWs.Rendering.PackageSmoke.csproj --configfile tests/NetArcaWs.Rendering.PackageSmoke/NuGet.config -p:RenderingPackageVersion="$PACKAGE_VERSION"
+          dotnet run --project tests/NetArcaWs.Rendering.PackageSmoke/NetArcaWs.Rendering.PackageSmoke.csproj --configuration Release --no-restore -p:RenderingPackageVersion="$PACKAGE_VERSION"
 
   persistence-server-engines:
     runs-on: ubuntu-24.04

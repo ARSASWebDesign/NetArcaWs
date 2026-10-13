@@ -1,6 +1,9 @@
 # Issue 33: emisión y representación de comprobantes
 
-Estado: diseño aprobado por el usuario el 13 de octubre de 2026; no implementado.
+Estado: diseño aprobado por el usuario el 13 de octubre de 2026; implementado en
+la rama local `codex/33-comprobantes-rendering`, con verificación sintética
+local reportada en Task 6. La implementación y el smoke test de paquetes no
+acreditan homologación ARCA ni disponibilidad pública de los nuevos IDs NuGet.
 
 ## Objetivo y decisiones acordadas
 

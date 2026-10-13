@@ -46,7 +46,7 @@ public static class ReleaseAssets
         var packages = ExpectedFiles(version, artifacts).Take(ReleaseVersion.PackageProjects.Count).ToArray();
         var actualPackages = Directory.GetFiles(artifacts, "*.nupkg").Order(StringComparer.Ordinal).ToArray();
         if (!actualPackages.SequenceEqual(packages.Order(StringComparer.Ordinal), StringComparer.Ordinal))
-            throw new InvalidOperationException("Release artifacts must contain exactly the eleven allowlisted packages for the release version.");
+            throw new InvalidOperationException($"Release artifacts must contain exactly the {ReleaseVersion.PackageProjects.Count} allowlisted packages for the release version.");
 
         string commitPath = Path.Combine(artifacts, "BUILD_COMMIT");
         string commit = File.ReadAllText(commitPath).Trim();
@@ -78,7 +78,7 @@ public static class ReleaseAssets
         string[] packages = ReleaseVersion.PackageProjects.Select(project => Path.Combine(artifacts, project + "." + version + ".nupkg")).ToArray();
         var files = packages.Concat(new[] { Path.Combine(artifacts, "SHA256SUMS"), Path.Combine(artifacts, "BUILD_COMMIT") }).ToArray();
         if (files.Any(file => !File.Exists(file)))
-            throw new InvalidOperationException("Expected eleven packages, SHA256SUMS and BUILD_COMMIT.");
+            throw new InvalidOperationException($"Expected {ReleaseVersion.PackageProjects.Count} packages, SHA256SUMS and BUILD_COMMIT.");
         return files;
     }
 

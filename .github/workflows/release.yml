@@ -48,7 +48,7 @@ jobs:
       - name: Pack all release projects
         run: |
           set -euo pipefail
-          projects=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer)
+          projects=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer NetArcaWs.Rendering.Html NetArcaWs.Rendering.Pdf)
           for project in "${projects[@]}"; do
             dotnet pack "src/$project/$project.csproj" --configuration Release --no-build --no-restore --output artifacts
           done
@@ -58,7 +58,7 @@ jobs:
           NUGET_PACKAGES: ${{ runner.temp }}/netarcaws-nuget-packages
         run: |
           set -euo pipefail
-          projects=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer)
+          projects=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer NetArcaWs.Rendering.Html NetArcaWs.Rendering.Pdf)
           expected=()
           for project in "${projects[@]}"; do
             filename="$project.$PACKAGE_VERSION.nupkg"
@@ -74,6 +74,12 @@ jobs:
           test "$(artifacts/tool-smoke/netarcaws --version)" = "netarcaws $PACKAGE_VERSION"
           dotnet restore tests/NetArcaWs.Persistence.PackageSmoke/NetArcaWs.Persistence.PackageSmoke.csproj --configfile tests/NetArcaWs.Persistence.PackageSmoke/NuGet.config -p:PersistencePackageVersion="$PACKAGE_VERSION"
           dotnet run --project tests/NetArcaWs.Persistence.PackageSmoke/NetArcaWs.Persistence.PackageSmoke.csproj --configuration Release --no-restore -p:PersistencePackageVersion="$PACKAGE_VERSION"
+          dotnet restore tests/NetArcaWs.Rendering.PackageSmoke/NetArcaWs.Rendering.PackageSmoke.csproj --configfile tests/NetArcaWs.Rendering.PackageSmoke/NuGet.config -p:RenderingPackageVersion="$PACKAGE_VERSION"
+          dotnet run --project tests/NetArcaWs.Rendering.PackageSmoke/NetArcaWs.Rendering.PackageSmoke.csproj --configuration Release --no-restore -p:RenderingPackageVersion="$PACKAGE_VERSION"
+          if unzip -p "artifacts/NetArcaWs.$PACKAGE_VERSION.nupkg" '*.nuspec' | grep -Eiq 'PDFsharp|QRCoder|StbImageSharp'; then
+            echo 'The core package must not depend on optional PDF or QR rendering packages.' >&2
+            exit 1
+          fi
           git rev-parse HEAD > artifacts/BUILD_COMMIT
           cd artifacts
           sha256sum -- "${expected[@]}" > SHA256SUMS
@@ -128,7 +134,7 @@ jobs:
           BUILD_COMMIT: ${{ steps.release.outputs.commit }}
         run: |
           set -euo pipefail
-          packages=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer)
+          packages=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer NetArcaWs.Rendering.Html NetArcaWs.Rendering.Pdf)
           expected=()
           for package in "${packages[@]}"; do
             filename="$package.$PACKAGE_VERSION.nupkg"
@@ -147,7 +153,7 @@ jobs:
           PACKAGE_VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          packages=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer)
+          packages=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer NetArcaWs.Rendering.Html NetArcaWs.Rendering.Pdf)
           expected=()
           for package in "${packages[@]}"; do expected+=("$package.$PACKAGE_VERSION.nupkg"); done
           expected+=(SHA256SUMS BUILD_COMMIT)
@@ -177,7 +183,7 @@ jobs:
           PACKAGE_VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          packages=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer)
+          packages=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer NetArcaWs.Rendering.Html NetArcaWs.Rendering.Pdf)
           temporary="$(mktemp -d)"
           trap 'rm -rf "$temporary"' EXIT
           verified_existing=()
@@ -246,7 +252,7 @@ jobs:
           VERIFIED_EXISTING: ${{ steps.nuget-preflight.outputs.verified_existing }}
         run: |
           set -euo pipefail
-          packages=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer)
+          packages=(NetArcaWs NetArcaWs.Tool NetArcaWs.EntityFrameworkCore NetArcaWs.EntityFrameworkCore.MySql NetArcaWs.EntityFrameworkCore.PostgreSql NetArcaWs.EntityFrameworkCore.SqlServer NetArcaWs.EntityFrameworkCore.Migrations.Sqlite NetArcaWs.EntityFrameworkCore.Migrations.MySql NetArcaWs.EntityFrameworkCore.Migrations.MariaDb NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql NetArcaWs.EntityFrameworkCore.Migrations.SqlServer NetArcaWs.Rendering.Html NetArcaWs.Rendering.Pdf)
           for package in "${packages[@]}"; do
             if [[ ",${VERIFIED_EXISTING:-}," == *",$package,"* ]]; then
               echo "Skipping previously verified identical package $package $PACKAGE_VERSION."

@@ -6,6 +6,7 @@
     <RepositoryUrl>https://github.com/ARSASWebDesign/NetArcaWs</RepositoryUrl>
     <Description>Optional PDF rendering for NetArcaWs fiscal documents.</Description>
     <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <IsPackable>true</IsPackable>
   </PropertyGroup>
   <ItemGroup>
@@ -23,5 +24,9 @@
     <EmbeddedResource Include="Resources/NotoSans-Regular.ttf" />
     <EmbeddedResource Include="Resources/NotoSans-Bold.ttf" />
     <None Include="Resources/OFL.txt" Pack="true" PackagePath="licenses/NotoSans-OFL.txt" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="/" />
+    <None Include="../../COPYING" Pack="true" PackagePath="/" />
+    <None Include="../../THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="/" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 </Project>

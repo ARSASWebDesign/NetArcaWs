@@ -6,6 +6,14 @@ namespace NetArcaWs.Build.Tests;
 public sealed class ReleaseVersionTests
 {
     [Fact]
+    public void Package_allowlist_includes_both_optional_document_renderers()
+    {
+        ReleaseVersion.PackageProjects.Should().HaveCount(13)
+            .And.Contain("NetArcaWs.Rendering.Html")
+            .And.Contain("NetArcaWs.Rendering.Pdf");
+    }
+
+    [Fact]
     public void Validate_returns_the_shared_version_when_both_projects_match()
     {
         using var workspace = new BuildTestWorkspace();

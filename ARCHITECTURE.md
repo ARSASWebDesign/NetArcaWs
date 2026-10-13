@@ -303,6 +303,34 @@ selecciones × cinco motores) y 20 scripts de migración inicial versionados
 (cuatro módulos × cinco motores). El DDL representa el modelo actual y los scripts
 el upgrade real `0`→`latest`; no son intercambiables ni baselines automáticos.
 
+### Emisión y representación de comprobantes
+
+`ArcaWsComprobantes` es una fachada aditiva sobre `SafeInvoiceService` para CAE
+unitario WSFEv1, WSFEXv1 y WSMTXCA, además de recibos X locales. La emisión
+persiste y devuelve un `ComprobanteGenerado` serializable; los paquetes
+opcionales `NetArcaWs.Rendering.Html` y `NetArcaWs.Rendering.Pdf` sólo consumen
+ese snapshot. Repetir una representación no vuelve a llamar a ARCA. Las salidas
+fiscales requieren un estado autorizado y una correlación completa; una
+respuesta rechazada, incierta o conflictiva no se imprime como autorización.
+
+El receptor se conserva en el snapshot. `DatosEmisor`, incluidos logo y nombres
+comerciales, pertenece a la aplicación y debe persistirse junto al comprobante
+cuando se requiera reproducir una representación histórica. WSFE no incluye
+detalle de ítems, por lo que su vista muestra resumen y totales fiscales; WSFEX
+y WSMTXCA representan los ítems disponibles en sus snapshots. Cada adaptador
+limita los tipos de comprobante que valida. WSFECred, CAEA, lotes durables y el
+PDF de WSCPE quedan fuera de esta fachada.
+
+El core no referencia PDFsharp, QRCoder ni StbImageSharp. Los extras comparten
+reglas fuente internas, pero no dependen uno del otro. El PDF requiere un
+resolver global de fuentes de PDFsharp: instala de forma inmutable Noto Sans en
+su primer uso y falla si otro componente ya instaló un resolver diferente.
+Esto no guarda la identidad ni el logo del emisor en estado global. La
+implementación está verificada localmente con datos sintéticos; no equivale a
+homologación ni prueba autorizaciones reales en ARCA. Ver
+[`ADR 0008`](docs/adr/0008-comprobantes-y-representacion.md) y la
+[guía de representación](docs/wiki/Representacion-de-comprobantes.md).
+
 El módulo opcional `TenantCertificates` almacena versiones inmutables cifradas y
 un puntero activo por tenant/CUIT/ambiente. La aplicación autoriza ese alcance
 antes de leer o escribir; el store no otorga permisos ni solicita, renueva o

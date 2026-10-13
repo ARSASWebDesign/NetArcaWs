@@ -6,6 +6,7 @@
     <RepositoryUrl>https://github.com/ARSASWebDesign/NetArcaWs</RepositoryUrl>
     <Description>Optional self-contained HTML rendering for NetArcaWs fiscal documents.</Description>
     <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <IsPackable>true</IsPackable>
   </PropertyGroup>
   <ItemGroup>
@@ -18,5 +19,11 @@
     <Compile Include="../Rendering.Shared/FiscalQrPayload.cs" Link="Shared/FiscalQrPayload.cs" />
     <Compile Include="../Rendering.Shared/DocumentRenderValidator.cs" Link="Shared/DocumentRenderValidator.cs" />
     <Compile Include="../Rendering.Shared/FiscalAssociatedDocuments.cs" Link="Shared/FiscalAssociatedDocuments.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../LICENSE" Pack="true" PackagePath="/" />
+    <None Include="../../COPYING" Pack="true" PackagePath="/" />
+    <None Include="../../THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="/" />
+    <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 </Project>

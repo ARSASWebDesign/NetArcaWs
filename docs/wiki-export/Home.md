@@ -29,6 +29,7 @@ PyAfipWs ni homologación fiscal de una instalación.
 - [Carta de Porte Electrónica](WSCPE) — traslados de granos y derivados, destinos, contingencias y catálogos.
 - [Seguimiento de servicios PyAfipWs pendientes](https://github.com/ARSASWebDesign/NetArcaWs/issues/10) — prioridades y comprobaciones de vigencia por organismo.
 - [Funcionalidades adicionales](Funcionalidades-adicionales) — multitenancy, certificados, health checks, CLI, emisión durable, cálculos, herramientas y publicación.
+- [Representación de comprobantes](Representacion-de-comprobantes) — snapshots persistibles y paquetes opcionales HTML/PDF.
 - [Diagnóstico y glosario](Diagnostico-y-glosario) — errores, límites y términos habituales.
 - [Migración desde PyAfipWs](Migracion-desde-PyAfipWs) — equivalencias parciales y funciones que requieren una solución propia.
 

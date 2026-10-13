@@ -1,11 +1,14 @@
 # Releases y publicación en NuGet
 
-El workflow [Release](../.github/workflows/release.yml) distribuye once paquetes
-con la misma versión: `NetArcaWs`, `NetArcaWs.Tool`, cuatro paquetes EF Core de
-persistencia/proveedores y cinco de migraciones. El evento `release: published`
-compila, prueba, verifica los snapshots de schemas y migraciones, empaqueta,
-prueba la instalación del tool y un consumidor aislado de persistencia, adjunta
-los once paquetes a la release y los publica en nuget.org. Ejecutarlo
+El workflow [Release](../.github/workflows/release.yml) de esta rama valida una
+allowlist de trece paquetes con versión común: `NetArcaWs`, `NetArcaWs.Tool`,
+cuatro paquetes EF Core de persistencia/proveedores, cinco de migraciones y los
+extras opcionales `NetArcaWs.Rendering.Html` y `NetArcaWs.Rendering.Pdf`. El
+evento `release: published` compila, prueba, verifica los snapshots de schemas y
+migraciones, empaqueta los trece, prueba la instalación del tool y consumidores
+aislados de persistencia y renderizado, adjunta checksums y publica en nuget.org.
+El paquete core se comprueba aparte para que no incorpore dependencias PDF/QR.
+Ejecutarlo
 manualmente (`workflow_dispatch`) **solo valida y genera artefactos**, sin
 publicar ni solicitar credenciales NuGet.
 
@@ -22,7 +25,7 @@ está publicada. La instalación pública de `NetArcaWs.Tool` 0.5.0 desde
 código 0. Esa prueba no verifica la firma de autor del paquete. Una release en
 borrador no inicia la publicación.
 
-La versión 0.6.0 agrupa once paquetes: `NetArcaWs`, `NetArcaWs.Tool`,
+La publicación 0.6.0 agrupó once paquetes: `NetArcaWs`, `NetArcaWs.Tool`,
 `NetArcaWs.EntityFrameworkCore`, sus providers `MySql`, `PostgreSql` y
 `SqlServer`, y los paquetes de migraciones `Sqlite`, `MySql`, `MariaDb`,
 `PostgreSql` y `SqlServer`. Consultá la disponibilidad actual de cada ID y
@@ -43,9 +46,11 @@ estado de una release de GitHub:
 | `NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql/0.6.0) |
 | `NetArcaWs.EntityFrameworkCore.Migrations.SqlServer` | [![NuGet](https://img.shields.io/nuget/v/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer)](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer) · [0.6.0](https://www.nuget.org/packages/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer/0.6.0) |
 
-La publicación se verifica por separado para cada paquete: el éxito de la
-release de GitHub no demuestra que los once IDs hayan sido aceptados e
-indexados. La publicación de once paquetes tampoco es una transacción; una
+La tabla anterior documenta los once IDs de la publicación 0.6.0. Los dos IDs
+de renderizado son nuevos en el inventario de esta rama y no se agregan a esa
+release ya creada. Cada paquete futuro se verificará por separado: el éxito de
+la release de GitHub no demuestra que los trece IDs hayan sido aceptados e
+indexados. La publicación de trece paquetes tampoco es una transacción; una
 falla parcial requiere verificar cada ID y versión.
 
 El alcance de la release 0.6.0 incluye persistencia relacional optativa para
@@ -59,6 +64,12 @@ explícitamente. Las migraciones no adoptan automáticamente tablas previas sin
 historial. Las pruebas locales y de motores relacionales no equivalen a
 homologación fiscal completa contra ARCA.
 
+Esta rama incorpora dos IDs nuevos, `NetArcaWs.Rendering.Html` y
+`NetArcaWs.Rendering.Pdf`, y amplía la allowlist de la próxima release a trece.
+No modifica la publicación o los assets históricos 0.6.0. Los proyectos fuente
+conservan `0.6.0` durante esta implementación local; la disponibilidad pública
+de los IDs nuevos no se afirma aquí.
+
 ## Configuración inicial del mantenedor
 
 Los pasos siguientes describen la configuración inicial para un fork o una
@@ -69,7 +80,7 @@ completaron y verificaron en la ejecución enlazada arriba.
 2. En NuGet, crear una política de **Trusted Publishing** bajo el propietario
    elegido. Configurar Repository Owner `ARSASWebDesign`, Repository `NetArcaWs`,
    Workflow File `release.yml` (solo el nombre) y Environment `nuget`.
-3. Autorizar creación de paquetes y nuevas versiones para los once IDs de esta
+3. Autorizar creación de paquetes y nuevas versiones para los trece IDs de esta
    release (por ejemplo, patrón `NetArcaWs*`). Confirmar disponibilidad de cada
    ID y la propiedad deseada antes del primer envío.
 4. En el environment GitHub `nuget`, definir la variable `NUGET_USER` con el
@@ -104,7 +115,7 @@ y [requisitos de firma de autor](https://learn.microsoft.com/en-us/nuget/create-
 ## Preparar una versión
 
 1. Integrar las PR en `main` con CI aprobada.
-2. Actualizar `<Version>` en los once proyectos empaquetables a un único SemVer.
+2. Actualizar `<Version>` en los trece proyectos empaquetables a un único SemVer.
    Ajustar la expectativa del test de `--version` del tool. El workflow usa
    `NetArcaWs.Build release-version`, con allowlist explícita, para detectar
    versiones distintas o proyectos de paquete faltantes/inesperados.
@@ -113,12 +124,12 @@ y [requisitos de firma de autor](https://learn.microsoft.com/en-us/nuget/create-
 4. Ejecutar el workflow Release manualmente desde `main`. Revisar los tests,
    instalación del tool y artefactos descargables, antes de publicar.
 5. Crear una release GitHub en borrador con tag `vX.Y.Z` exactamente coincidente
-   con los once proyectos y apuntando al commit validado de `main`. Para una versión
+   con los trece proyectos y apuntando al commit validado de `main`. Para una versión
    previa, marcar también la release como prerelease.
 6. Escribir notas con alcance, cambios, compatibilidad y límites reales. No
    presentar el estado actual del port como facturación o homologación completa.
 7. Con la cuenta y política NuGet configuradas, publicar el borrador. Esto activa
-   el workflow; comprobar por separado que **los once** paquetes fueron aceptados e
+   el workflow; comprobar por separado que **los trece** paquetes fueron aceptados e
    indexados en NuGet. El éxito de GitHub Release no demuestra éxito en NuGet.
 
 Los paquetes de la release se construyen una sola vez en el job `build`; el job
@@ -141,7 +152,7 @@ comparar de nuevo el contenido antes de omitirlo.
 
 ## Fallos y recuperación
 
-La publicación de once paquetes no es una transacción: algunos pueden subirse
+La publicación de trece paquetes no es una transacción: algunos pueden subirse
 aunque después falle otro. Corregir el problema y reejecutar el mismo workflow
 con el mismo tag para que vuelva a comparar cada versión existente antes de
 continuar. Si una reconstrucción difiere de los assets ya adjuntos o de un

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
+    <RenderingPackageVersion Condition="'$(RenderingPackageVersion)' == ''">0.6.0</RenderingPackageVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NetArcaWs.Rendering.Html" Version="$(RenderingPackageVersion)" />
+    <PackageReference Include="NetArcaWs.Rendering.Pdf" Version="$(RenderingPackageVersion)" />
+  </ItemGroup>
+</Project>

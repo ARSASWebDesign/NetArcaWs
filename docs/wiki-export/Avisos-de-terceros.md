@@ -27,6 +27,24 @@ These NuGet dependencies are referenced, not embedded into this library's DLL.
 | Microsoft.Extensions.Diagnostics.HealthChecks | 10.0.12 | MIT |
 | System.Security.Cryptography.Pkcs | 10.0.12 | MIT |
 | Microsoft.Data.Sqlite | 10.0.12 | MIT |
+| PDFsharp-MigraDoc | 6.2.4 | MIT |
+| QRCoder | 1.8.0 | MIT |
+| StbImageSharp | 2.30.15 | MIT |
+
+The three rendering dependencies are isolated in optional projects: HTML
+references QRCoder; PDF references PDFsharp-MigraDoc, QRCoder, and StbImageSharp.
+The core `NetArcaWs` package references none of these. PDF uses PDFsharp's
+process-wide font resolver only to serve its embedded Noto Sans resources. The
+renderer installs its immutable resolver on first use and does not replace an
+already configured resolver. PNG normalization uses StbImageSharp in memory;
+the renderer does not call System.Drawing APIs. QRCoder's transitive metadata
+may include System.Drawing.Common and Microsoft.Win32.SystemEvents; those
+remain transitive dependencies of the optional package graph.
+
+QRCoder 1.8.0 also declares System.Drawing.Common 6.0.0 and
+Microsoft.Win32.SystemEvents 6.0.0 (both MIT) as transitive NuGet dependencies.
+Both optional renderers use QRCoder's platform-neutral PNG implementation and
+do not call System.Drawing, GDI+, or WPF APIs.
 
 ### Transitive library dependencies added by SQLite
 
@@ -111,6 +129,22 @@ Terms as stated above, not MIT.
 | xunit.runner.visualstudio | 4.0.0 | Apache-2.0 |
 | AwesomeAssertions | 9.6.0 | Apache-2.0 |
 | Microsoft.EntityFrameworkCore.Sqlite | 10.0.12 | MIT |
+| PdfPig | 0.1.13 | Apache-2.0 |
+| ZXing.Net | 0.16.11 | Apache-2.0 |
+| StbImageSharp | 2.30.15 | MIT |
+
+### Bundled font resources
+
+The optional `NetArcaWs.Rendering.Pdf` package embeds static Noto Sans Regular
+and Bold TrueType fonts from the Noto Sans 2.015 release (hinted Latin-Greek-
+Cyrillic subset). Noto Sans is Copyright 2012-2024 Google LLC and licensed under
+the SIL Open Font License 1.1; the complete license is included at
+`src/NetArcaWs.Rendering.Pdf/Resources/OFL.txt` and in the NuGet package under
+`licenses/NotoSans-OFL.txt`. Source release:
+https://github.com/notofonts/latin-greek-cyrillic/releases/download/NotoSans-v2.015/NotoSans-v2.015.zip
+
+SHA-256: Regular `478c558ea716033cd60c03438f628dfa75694dcf6b5f6d505a2f05fd2b4f3823`,
+Bold `1df075a380fc7cb898acf64c1f7b3b4dd780de3caa860178bf929de35817a913`.
 
 AwesomeAssertions is a community-maintained fork with an Apache-2.0 license,
 which permits commercial use subject to its license conditions. See the

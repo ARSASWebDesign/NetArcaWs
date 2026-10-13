@@ -48,8 +48,8 @@ registro de auditoría de la organización.
   NuGet mediante Trusted Publishing. No se guarda una API key permanente.
 - El environment `nuget` permite únicamente tags `v*`. Por decisión del
   proyecto no exige aprobación manual adicional; las releases válidas publican
-  automáticamente los once paquetes NuGet de biblioteca, herramienta y extras
-  de persistencia.
+  automáticamente los trece paquetes NuGet de biblioteca, herramienta, extras
+  de persistencia y renderizado opcional.
 - Los assets existentes de la release se comparan antes de publicar; una
   diferencia cancela el trabajo. No se usa `--clobber` ni se reemplazan paquetes.
 

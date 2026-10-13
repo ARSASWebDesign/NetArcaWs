@@ -71,6 +71,21 @@ public sealed class WikiMirrorTests
     }
 
     [Fact]
+    public void Run_assigns_distinct_pages_to_optional_renderer_readmes()
+    {
+        using var workspace = new BuildTestWorkspace();
+        workspace.Write("README.md", "# Project\n");
+        workspace.Write("docs/wiki/Home.md", "# Home\n");
+        workspace.Write("src/NetArcaWs.Rendering.Html/README.md", "# HTML renderer\n");
+        workspace.Write("src/NetArcaWs.Rendering.Pdf/README.md", "# PDF renderer\n");
+
+        WikiMirror.Run(workspace.Root);
+
+        workspace.Read("docs/wiki-export/Representacion-HTML-opcional.md").Should().Contain("# HTML renderer");
+        workspace.Read("docs/wiki-export/Representacion-PDF-opcional.md").Should().Contain("# PDF renderer");
+    }
+
+    [Fact]
     public void Run_uses_curated_home_navigation_and_ignores_legacy_sidebar_template()
     {
         using var workspace = new BuildTestWorkspace();

@@ -29,10 +29,20 @@ These NuGet dependencies are referenced, not embedded into this library's DLL.
 | QRCoder | 1.8.0 | MIT |
 | StbImageSharp | 2.30.15 | MIT |
 
+The three rendering dependencies are isolated in optional projects: HTML
+references QRCoder; PDF references PDFsharp-MigraDoc, QRCoder, and StbImageSharp.
+The core `NetArcaWs` package references none of these. PDF uses PDFsharp's
+process-wide font resolver only to serve its embedded Noto Sans resources. The
+renderer installs its immutable resolver on first use and does not replace an
+already configured resolver. PNG normalization uses StbImageSharp in memory;
+the renderer does not call System.Drawing APIs. QRCoder's transitive metadata
+may include System.Drawing.Common and Microsoft.Win32.SystemEvents; those
+remain transitive dependencies of the optional package graph.
+
 QRCoder 1.8.0 also declares System.Drawing.Common 6.0.0 and
 Microsoft.Win32.SystemEvents 6.0.0 (both MIT) as transitive NuGet dependencies.
-The PDF renderer uses QRCoder's platform-neutral PNG implementation and does
-not call System.Drawing, GDI+, or WPF APIs.
+Both optional renderers use QRCoder's platform-neutral PNG implementation and
+do not call System.Drawing, GDI+, or WPF APIs.
 
 ### Transitive library dependencies added by SQLite
 

@@ -179,6 +179,8 @@ public static class WikiMirror
         "src/NetArcaWs.EntityFrameworkCore.Migrations.MariaDb/README.md" => "Migraciones-MariaDb-EF-Core",
         "src/NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql/README.md" => "Migraciones-PostgreSql-EF-Core",
         "src/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer/README.md" => "Migraciones-SqlServer-EF-Core",
+        "src/NetArcaWs.Rendering.Html/README.md" => "Representacion-HTML-opcional",
+        "src/NetArcaWs.Rendering.Pdf/README.md" => "Representacion-PDF-opcional",
         _ => LegacyPageName(root, source)
     };
 

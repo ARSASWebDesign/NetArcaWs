@@ -18,6 +18,8 @@ public static partial class ReleaseVersion
         "NetArcaWs.EntityFrameworkCore.Migrations.MariaDb",
         "NetArcaWs.EntityFrameworkCore.Migrations.PostgreSql",
         "NetArcaWs.EntityFrameworkCore.Migrations.SqlServer",
+        "NetArcaWs.Rendering.Html",
+        "NetArcaWs.Rendering.Pdf",
     ];
 
     public static string Validate(string root, string? releaseTag = null, bool? prerelease = null)
@@ -39,9 +41,9 @@ public static partial class ReleaseVersion
         var match = SemVer().Match(version);
         if (!match.Success || versions.Any(candidate => candidate != version) ||
             match.Groups[4].Value.Split('.').Any(part => part.Length > 1 && part[0] == '0' && part.All(char.IsAsciiDigit)))
-            throw new InvalidOperationException("All eleven release projects must declare the same SemVer version (lowercase prerelease, no build metadata or numeric leading zeroes).");
+            throw new InvalidOperationException($"All {PackageProjects.Count} release projects must declare the same SemVer version (lowercase prerelease, no build metadata or numeric leading zeroes).");
         if (releaseTag is not null && releaseTag != "v" + version)
-            throw new InvalidOperationException("Release tag must equal v followed by the version in all eleven projects.");
+            throw new InvalidOperationException($"Release tag must equal v followed by the version in all {PackageProjects.Count} projects.");
         if (prerelease is not null && prerelease != match.Groups[4].Success)
             throw new InvalidOperationException("GitHub prerelease flag must match the NuGet version suffix.");
         return version;

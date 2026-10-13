@@ -1,6 +1,6 @@
 # Fuentes de la documentación
 
-Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 65 páginas de contenido y este manifiesto. GitHub muestra un único menú nativo; Home contiene la navegación por temas. Cada página incluye su fuente y reescribe enlaces relativos para navegación de wiki. Los contratos ARCA archivados en el repositorio tienen fecha de snapshot 2026-10-06. La salida refleja el árbol de trabajo. Al publicar, SOURCE_COMMIT en el repositorio wiki registra el SHA de origen. Revisar el mirror antes de publicar.
+Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 69 páginas de contenido y este manifiesto. GitHub muestra un único menú nativo; Home contiene la navegación por temas. Cada página incluye su fuente y reescribe enlaces relativos para navegación de wiki. Los contratos ARCA archivados en el repositorio tienen fecha de snapshot 2026-10-06. La salida refleja el árbol de trabajo. Al publicar, SOURCE_COMMIT en el repositorio wiki registra el SHA de origen. Revisar el mirror antes de publicar.
 
 - `.github/pull_request_template.md` → `Plantilla-de-pull-request`
 - `AGENTS.md` → `Documento-AGENTS`
@@ -17,6 +17,7 @@ Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 65 páginas d
 - `docs/adr/0005-ef-core-invoice-journal.md` → `ADR-0005-ef-core-invoice-journal`
 - `docs/adr/0006-shared-wsaa-tickets.md` → `ADR-0006-shared-wsaa-tickets`
 - `docs/adr/0007-tenant-certificate-store.md` → `ADR-0007-tenant-certificate-store`
+- `docs/adr/0008-comprobantes-y-representacion.md` → `ADR-0008-comprobantes-y-representacion`
 - `docs/certificates-cli.md` → `CLI-certificados`
 - `docs/plans/hito-1.md` → `Plan-de-autenticación-WSAA`
 - `docs/plans/hito-7-wiki.md` → `Plan-de-documentación-y-wiki`
@@ -51,6 +52,7 @@ Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 65 páginas d
 - `docs/wiki/Inicio-rapido.md` → `Inicio-rapido`
 - `docs/wiki/Migracion-desde-PyAfipWs.md` → `Migracion-desde-PyAfipWs`
 - `docs/wiki/Modelo-relacional.md` → `Modelo-relacional`
+- `docs/wiki/Representacion-de-comprobantes.md` → `Representacion-de-comprobantes`
 - `docs/wiki/Seguridad-y-publicacion.md` → `Seguridad-y-publicacion`
 - `docs/wiki/Servicios-implementados.md` → `Servicios-implementados`
 - `docs/wiki/Servicios-y-cobertura.md` → `Servicios-y-cobertura`
@@ -67,3 +69,5 @@ Generado por `dotnet run --project tools/NetArcaWs.Build -- wiki`: 65 páginas d
 - `src/NetArcaWs.EntityFrameworkCore.MySql/README.md` → `MySQL-MariaDB-EF-Core`
 - `src/NetArcaWs.EntityFrameworkCore.PostgreSql/README.md` → `PostgreSQL-EF-Core`
 - `src/NetArcaWs.EntityFrameworkCore.SqlServer/README.md` → `SQL-Server-EF-Core`
+- `src/NetArcaWs.Rendering.Html/README.md` → `Representacion-HTML-opcional`
+- `src/NetArcaWs.Rendering.Pdf/README.md` → `Representacion-PDF-opcional`

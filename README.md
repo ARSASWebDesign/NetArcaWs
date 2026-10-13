@@ -83,6 +83,19 @@ El paquete principal no depende de EF Core; los paquetes opcionales agregan pers
 
 La guía [Diario fiscal](https://github.com/ARSASWebDesign/NetArcaWs/wiki/Diario-fiscal) explica configuración y recuperación, y [Modelo relacional](https://github.com/ARSASWebDesign/NetArcaWs/wiki/Modelo-relacional) documenta las tablas y las migraciones oficiales opcionales. El diario durable cubre autorizaciones unitarias WSFEv1, WSFEXv1 y WSMTXCA; una respuesta incierta requiere reconciliación y no se reenvía automáticamente.
 
+## Representación de comprobantes
+
+La rama incorpora `NetArcaWs.Rendering.Html` y `NetArcaWs.Rendering.Pdf` como paquetes opcionales para representar un `ComprobanteGenerado` ya persistido; los renderizadores no emiten ni consultan comprobantes. El receptor se conserva en el snapshot y el consumidor debe guardar también el perfil histórico de emisor y logo para reproducir la misma marca. WSFE aporta resumen fiscal sin ítems inventados; los adaptadores de WSFEX y WSMTXCA conservan el detalle disponible. El alcance local incluye CAE unitario para tipos explícitamente soportados y recibos X. La implementación fue probada localmente con muestras sintéticas; esta rama aún no acredita homologación ni disponibilidad pública de estos paquetes.
+
+```csharp
+var html = new ArcaWsGeneradorHTML(perfilEmisorPersistido)
+    .GenerarHTMLComprobante(comprobantePersistido);
+byte[] pdf = new ArcaWsGeneradorPDF(perfilEmisorPersistido)
+    .GenerarPDFComprobante(comprobantePersistido);
+```
+
+Instalá los extras sólo si la aplicación necesita esos formatos; el paquete core no incorpora dependencias de PDF ni QR. Consultá la [guía de representación](https://github.com/ARSASWebDesign/NetArcaWs/wiki/Representacion-de-comprobantes) para estados imprimibles, datos del receptor, perfiles históricos, servicios y limitaciones.
+
 ## Documentación
 
 La [wiki del proyecto](https://github.com/ARSASWebDesign/NetArcaWs/wiki) contiene guías de uso, catálogo de servicios, operaciones, arquitectura, seguridad, homologación y contribución. El inventario de fuentes upstream se mantiene en [referencias del repositorio](docs/reference/upstream-inventory.md).
