@@ -30,6 +30,7 @@ internal static class WsfexDocumentAdapter
         if (request.Items.Count > 0 && request.Items.Sum(item => item.ProTotalItem) != request.ImpTotal)
             throw new ArgumentException("La suma de conceptos WSFEX no coincide con el total fiscal.", nameof(request));
         ArcaWsComprobantes.ValidateSupplemental(presentation, request.MonedaId, request.ImpTotal);
+        _ = ArcaWsComprobantes.MergeSupplementalTaxes([], presentation, request.MonedaId);
         _ = ArcaWsComprobantes.ApplyPresentationDescriptions(request.Items.Select(item => new LineaComprobante(
             item.ProDs ?? item.ProCodigo ?? string.Empty, item.ProTotalItem, request.MonedaId, item.ProCodigo,
             item.ProQty, item.ProUmed, item.ProPrecioUni)).ToArray(), presentation, request.MonedaId);
@@ -48,7 +49,7 @@ internal static class WsfexDocumentAdapter
         DatosPresentacion persistedPresentation = ArcaWsComprobantes.WithReceptor(presentation, persistedRecipient);
         return ArcaWsComprobantes.Build(operation, operation.Submission.Identity, persistedPresentation, currency,
             request.ImpTotal, lines, ArcaWsComprobantes.ParseDate(request.FechaCbte, "WSFEX issue date"), request.MonedaCtz!.Value,
-            taxes: ArcaWsComprobantes.AddSupplementalTaxes([], presentation),
+            taxes: ArcaWsComprobantes.MergeSupplementalTaxes([], presentation, currency),
             expires: ArcaWsComprobantes.ResponseExpiry(operation.ResponseXml),
             paymentDate: string.IsNullOrWhiteSpace(request.FechaPago) ? null : ArcaWsComprobantes.ParseDate(request.FechaPago, "WSFEX payment date"));
     }

@@ -27,6 +27,7 @@ internal static class WsmtxcaDocumentAdapter
                 item.ImporteIva is < 0 || item.ImporteBonificacion is < 0)
                 throw new ArgumentException("Los conceptos WSMTXCA contienen cantidades o importes inválidos.", nameof(request));
         ArcaWsComprobantes.ValidateSupplemental(presentation, request.CodigoMoneda, request.ImporteTotal);
+        _ = ArcaWsComprobantes.MergeSupplementalTaxes(FiscalTaxes(request, request.CodigoMoneda), presentation, request.CodigoMoneda);
         _ = ArcaWsComprobantes.ApplyPresentationDescriptions(request.ArrayItems.Select(item => new LineaComprobante(
             item.Descripcion, item.ImporteItem, request.CodigoMoneda, item.Codigo ?? item.CodigoMtx,
             item.Cantidad, item.CodigoUnidadMedida, item.PrecioUnitario)).ToArray(), presentation, request.CodigoMoneda);
@@ -40,8 +41,7 @@ internal static class WsmtxcaDocumentAdapter
             item.ImporteItem, currency, item.Codigo ?? item.CodigoMtx, item.Cantidad, item.CodigoUnidadMedida,
             item.PrecioUnitario)).ToArray();
         lines = ArcaWsComprobantes.ApplyPresentationDescriptions(lines, presentation, currency).ToArray();
-        var taxes = ArcaWsComprobantes.AddSupplementalTaxes(request.ArrayOtrosTributos.Select(tax =>
-            new ImpuestoComprobante(tax.Descripcion ?? tax.Codigo.ToString(), tax.Importe, currency, tax.Codigo.ToString())), presentation);
+        var taxes = ArcaWsComprobantes.MergeSupplementalTaxes(FiscalTaxes(request, currency), presentation, currency);
         decimal? rate = request.CotizacionMoneda;
         if (rate is null) throw new InvalidOperationException("The frozen WSMTXCA snapshot does not contain its exchange rate.");
         int? documentType = request.CodigoTipoDocumento;
@@ -55,4 +55,10 @@ internal static class WsmtxcaDocumentAdapter
             request.FechaVencimientoPago is null ? null : DateOnly.FromDateTime(request.FechaVencimientoPago.Value),
             request.CondicionIvaReceptor);
     }
+
+    private static IReadOnlyList<ImpuestoComprobante> FiscalTaxes(ComprobanteType request, string currency) =>
+        request.ArraySubtotalesIva.Select(vat => new ImpuestoComprobante("IVA", vat.Importe, currency,
+            vat.Codigo.ToString(), Tipo: TipoImpuestoComprobante.Iva)).Concat(request.ArrayOtrosTributos.Select(tax => new ImpuestoComprobante(
+                tax.Descripcion ?? tax.Codigo.ToString(), tax.Importe, currency, tax.Codigo.ToString(),
+                tax.BaseImponible))).ToArray();
 }

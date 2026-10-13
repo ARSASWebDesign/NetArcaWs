@@ -165,9 +165,36 @@ public sealed class ArcaWsComprobantes(SafeInvoiceService invoices)
             throw new ArgumentException("El receptor debe tener nombre e identificación válidos.", nameof(presentation));
     }
 
-    internal static IReadOnlyList<ImpuestoComprobante> AddSupplementalTaxes(
-        IEnumerable<ImpuestoComprobante> fiscalTaxes, DatosPresentacion presentation) =>
-        fiscalTaxes.Concat(presentation.OtrosImpuestos).Select(tax => tax with { }).ToArray();
+    internal static IReadOnlyList<ImpuestoComprobante> MergeSupplementalTaxes(
+        IEnumerable<ImpuestoComprobante> sourceTaxes, DatosPresentacion presentation, string currency)
+    {
+        ImpuestoComprobante[] taxes = sourceTaxes.Select(tax => tax with { }).ToArray();
+        var matched = new HashSet<int>();
+        foreach (ImpuestoComprobante supplemental in presentation.OtrosImpuestos)
+        {
+            if (!ComprobanteValidator.SameCurrency(supplemental.Moneda, currency) || supplemental.Importe < 0 ||
+                string.IsNullOrWhiteSpace(supplemental.Codigo))
+                throw new ArgumentException("Los impuestos suplementarios deben identificar un impuesto fiscal de igual código, moneda e importe.", nameof(presentation));
+            int[] candidates = taxes.Select((tax, index) => (tax, index))
+                .Where(pair => !matched.Contains(pair.index) && pair.tax.Codigo == supplemental.Codigo &&
+                    pair.tax.Importe == supplemental.Importe &&
+                    (supplemental.BaseImponible is null || pair.tax.BaseImponible == supplemental.BaseImponible) &&
+                    (supplemental.Alicuota is null || pair.tax.Alicuota == supplemental.Alicuota))
+                .Select(pair => pair.index).ToArray();
+            if (candidates.Length != 1)
+                throw new ArgumentException(candidates.Length == 0
+                    ? "El impuesto suplementario no coincide con un impuesto del snapshot fiscal."
+                    : "El impuesto suplementario coincide ambiguamente con varios impuestos fiscales.", nameof(presentation));
+            int index = candidates[0];
+            matched.Add(index);
+            taxes[index] = taxes[index] with
+            {
+                Nombre = string.IsNullOrWhiteSpace(supplemental.Nombre) ? taxes[index].Nombre : supplemental.Nombre,
+                Clasificacion = supplemental.Clasificacion ?? taxes[index].Clasificacion
+            };
+        }
+        return taxes;
+    }
 
     internal static IReadOnlyList<LineaComprobante> ApplyPresentationDescriptions(
         IReadOnlyList<LineaComprobante> fiscalLines, DatosPresentacion presentation, string currency)

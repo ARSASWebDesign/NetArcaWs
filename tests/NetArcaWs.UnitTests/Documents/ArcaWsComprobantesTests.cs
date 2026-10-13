@@ -86,6 +86,61 @@ public sealed class ArcaWsComprobantesTests
         mtx.Resultado!.Vencimiento.Should().Be(new DateOnly(2026, 10, 16));
         mtx.Detalles.Should().ContainSingle().Which.Cantidad.Should().Be(2m);
         mtx.Detalles.Single().Descripcion.Should().Be("Item MTXCA");
+        mtx.Impuestos.Should().ContainSingle(x => x.Codigo == "4" && x.Importe == 10m && x.Tipo == TipoImpuestoComprobante.Iva);
+        mtx.Impuestos.Should().ContainSingle(x => x.Codigo == "5" && x.Importe == 11m && x.Tipo == TipoImpuestoComprobante.Iva);
+    }
+
+    [Fact]
+    public async Task Matched_supplemental_tax_enriches_the_fiscal_entry_without_duplication()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        var transport = new RecordingSoapTransport(_ => WsmtxcaResponse());
+        ArcaWsComprobantes facade = CreateFacade(database, transport);
+        ComprobanteType request = WsmtxcaRequest();
+        request.ImporteTotal = 123;
+        request.ImporteOtrosTributos = 2;
+        request.ArrayOtrosTributos.Add(new OtroTributoType { Codigo = 20, Descripcion = "Impuesto provincial", BaseImponible = 100, Importe = 2 });
+        var supplemental = new ImpuestoComprobante("Clasificación mostrada", 2, "PES", "20", 100, Clasificacion: "provincial");
+
+        ComprobanteGenerado result = await facade.GenerarComprobanteAsync(Tenant(), "matched-tax", request,
+            Presentation(taxes: [supplemental]), cancellationToken);
+
+        result.Impuestos.Should().ContainSingle(x => x.Codigo == "20" && x.Importe == 2m)
+            .Which.Should().Match<ImpuestoComprobante>(x => x.Nombre == "Clasificación mostrada" && x.Clasificacion == "provincial" && x.Tipo == TipoImpuestoComprobante.OtroTributo);
+        result.Impuestos.Should().Contain(x => x.Codigo == "4" && x.Tipo == TipoImpuestoComprobante.Iva);
+    }
+
+    [Fact]
+    public async Task Unmatched_supplemental_tax_is_rejected_before_fiscal_write()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        var transport = new RecordingSoapTransport();
+        ArcaWsComprobantes facade = CreateFacade(database, transport);
+        var supplemental = new ImpuestoComprobante("Tributo inventado", 2, "PES", "99");
+
+        Func<Task> act = () => facade.GenerarComprobanteAsync(Tenant(), "unmatched-tax", WsmtxcaRequest(),
+            Presentation(taxes: [supplemental]), cancellationToken);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        transport.CallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Wsfex_rejects_supplemental_tax_without_fiscal_tax_source()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        var transport = new RecordingSoapTransport();
+        ArcaWsComprobantes facade = CreateFacade(database, transport);
+        var supplemental = new ImpuestoComprobante("Impuesto", 1, "DOL", "1");
+
+        Func<Task> act = () => facade.GenerarComprobanteAsync(Tenant(), "fex-tax", WsfexRequest(),
+            Presentation(taxes: [supplemental]), cancellationToken);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        transport.CallCount.Should().Be(0);
     }
 
     [Fact]
@@ -243,9 +298,9 @@ public sealed class ArcaWsComprobantesTests
         return new ArcaTenantContext("tenant-test", Cuit, ArcaEnvironment.Homologation, content);
     }
 
-    private static DatosPresentacion Presentation(LineaComprobante? line = null) => new(
+    private static DatosPresentacion Presentation(LineaComprobante? line = null, IReadOnlyList<ImpuestoComprobante>? taxes = null) => new(
         new DatosReceptor(20304050607, "Cliente de prueba", null, "IVA Responsable Inscripto", 80),
-        line is null ? [] : [line]);
+        line is null ? [] : [line], taxes);
 
     private static FecaeRequest WsfeRequest()
     {
@@ -274,7 +329,8 @@ public sealed class ArcaWsComprobantesTests
             FechaVencimientoPago = new DateTime(2026, 10, 20) };
         request.ArrayItems.Add(new ItemType { Codigo = "MTX-1", Descripcion = "Item MTXCA", Cantidad = 2,
             CodigoUnidadMedida = 7, PrecioUnitario = 50, CodigoCondicionIva = 1, ImporteIva = 21, ImporteItem = 121 });
-        request.ArraySubtotalesIva.Add(new SubtotalIvaType { Codigo = 5, Importe = 21 });
+        request.ArraySubtotalesIva.Add(new SubtotalIvaType { Codigo = 4, Importe = 10 });
+        request.ArraySubtotalesIva.Add(new SubtotalIvaType { Codigo = 5, Importe = 11 });
         return request;
     }
 

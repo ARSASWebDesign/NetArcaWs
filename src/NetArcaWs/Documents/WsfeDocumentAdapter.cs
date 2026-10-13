@@ -42,6 +42,7 @@ internal static class WsfeDocumentAdapter
         if (presentation.Detalles.Count > 0)
             throw new ArgumentException("WSFE se representa como resumen y no admite conceptos suplementarios que no estén en el snapshot fiscal.", nameof(presentation));
         ArcaWsComprobantes.ValidateSupplemental(presentation, detail.MonId, total);
+        _ = ArcaWsComprobantes.MergeSupplementalTaxes(FiscalTaxes(detail, currency: detail.MonId), presentation, detail.MonId);
     }
 
     internal static ComprobanteGenerado Map(InvoiceOperation operation, DatosPresentacion presentation)
@@ -51,23 +52,26 @@ internal static class WsfeDocumentAdapter
         string currency = detail.MonId;
         decimal total = ArcaWsComprobantes.FromDouble(detail.ImpTotal, "total");
         decimal rate = ArcaWsComprobantes.FromDouble(detail.MonCotiz!.Value, "exchange rate");
-        var fiscalTaxes = detail.Tributos.Select(tax => new ImpuestoComprobante(tax.Desc ?? $"Tributo {tax.Id}",
-            ArcaWsComprobantes.FromDouble(tax.Importe, "tax amount"), currency, tax.Id.ToString(),
-            ArcaWsComprobantes.FromDouble(tax.BaseImp, "tax base"), ArcaWsComprobantes.FromDouble(tax.Alic, "tax rate")))
-            .Concat(detail.Iva.Select(vat => new ImpuestoComprobante("IVA",
-                ArcaWsComprobantes.FromDouble(vat.Importe, "VAT amount"), currency, vat.Id.ToString(),
-                ArcaWsComprobantes.FromDouble(vat.BaseImp, "VAT base"))));
+        var fiscalTaxes = FiscalTaxes(detail, currency);
         return ArcaWsComprobantes.Build(operation, operation.Submission.Identity, presentation, currency, total, [],
             ArcaWsComprobantes.ParseDate(detail.CbteFch, "WSFE issue date"), rate,
             ArcaWsComprobantes.FromDouble(detail.ImpNeto, "net amount"),
             ArcaWsComprobantes.FromDouble(detail.ImpOpEx, "exempt amount"),
             ArcaWsComprobantes.FromDouble(detail.ImpTotConc, "non-taxable amount"),
             ArcaWsComprobantes.FromDouble(detail.ImpIva, "VAT amount"),
-            taxes: ArcaWsComprobantes.AddSupplementalTaxes(fiscalTaxes, presentation),
+            taxes: ArcaWsComprobantes.MergeSupplementalTaxes(fiscalTaxes, presentation, currency),
             expires: ArcaWsComprobantes.ResponseExpiry(operation.ResponseXml), documentType: detail.DocTipo,
             dateFrom: detail.FchServDesde is null ? null : ArcaWsComprobantes.ParseDate(detail.FchServDesde, "WSFE service start date"),
             dateTo: detail.FchServHasta is null ? null : ArcaWsComprobantes.ParseDate(detail.FchServHasta, "WSFE service end date"),
             paymentDate: detail.FchVtoPago is null ? null : ArcaWsComprobantes.ParseDate(detail.FchVtoPago, "WSFE payment due date"),
             ivaConditionCode: detail.CondicionIvaReceptorId);
     }
+
+    private static IReadOnlyList<ImpuestoComprobante> FiscalTaxes(FecaeDetRequest detail, string currency) =>
+        detail.Tributos.Select(tax => new ImpuestoComprobante(tax.Desc ?? $"Tributo {tax.Id}",
+            ArcaWsComprobantes.FromDouble(tax.Importe, "tax amount"), currency, tax.Id.ToString(),
+            ArcaWsComprobantes.FromDouble(tax.BaseImp, "tax base"), ArcaWsComprobantes.FromDouble(tax.Alic, "tax rate")))
+        .Concat(detail.Iva.Select(vat => new ImpuestoComprobante("IVA",
+            ArcaWsComprobantes.FromDouble(vat.Importe, "VAT amount"), currency, vat.Id.ToString(),
+            ArcaWsComprobantes.FromDouble(vat.BaseImp, "VAT base"), Tipo: TipoImpuestoComprobante.Iva))).ToArray();
 }

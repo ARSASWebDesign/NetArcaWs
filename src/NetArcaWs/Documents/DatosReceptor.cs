@@ -10,8 +10,11 @@ public sealed record LineaComprobante(string Descripcion, decimal Importe, strin
     decimal? Cantidad = null, int? CodigoUnidadMedida = null, decimal? PrecioUnitario = null,
     string? DescripcionPresentacion = null);
 
+public enum TipoImpuestoComprobante { OtroTributo, Iva }
+
 public sealed record ImpuestoComprobante(string Nombre, decimal Importe, string Moneda, string? Codigo = null,
-    decimal? BaseImponible = null, decimal? Alicuota = null, string? Clasificacion = null);
+    decimal? BaseImponible = null, decimal? Alicuota = null, string? Clasificacion = null,
+    TipoImpuestoComprobante Tipo = TipoImpuestoComprobante.OtroTributo);
 
 public sealed record PagoReciboX(string Medio, decimal Importe, string Moneda);
 
