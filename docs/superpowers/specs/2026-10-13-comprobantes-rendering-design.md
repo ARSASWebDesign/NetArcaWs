@@ -1,6 +1,6 @@
 # Issue 33: emisión y representación de comprobantes
 
-Estado: diseño para revisión del usuario; no implementado.
+Estado: diseño aprobado por el usuario el 13 de octubre de 2026; no implementado.
 
 ## Objetivo y decisiones acordadas
 
