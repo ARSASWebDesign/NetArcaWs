@@ -130,12 +130,22 @@ public sealed class ArcaTenantContextTests
             Options.Create(new WsaaOptions()),
             new AdjustableTimeProvider(now));
         var tenant = new ArcaTenantContext("tenant-concurrent", TenantCuit, ArcaEnvironment.Homologation, CreateContent("concurrent"));
+        using var callTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        callTimeout.CancelAfter(TimeSpan.FromSeconds(30));
         Task<WsaaTicket>[] calls = Enumerable.Range(0, 10)
-            .Select(_ => Task.Run(() => service.AuthenticateForTenantAsync("wsfe", tenant, cancellationToken), cancellationToken))
+            .Select(_ => Task.Run(() => service.AuthenticateForTenantAsync("wsfe", tenant, callTimeout.Token), callTimeout.Token))
             .ToArray();
 
-        await enteredHandler.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
-        releaseHandler.TrySetResult();
+        try
+        {
+            // The first request signs a CMS login ticket before reaching the handler. Allow
+            // headroom for parallel crypto work, but always open the gate if the test fails.
+            await enteredHandler.Task.WaitAsync(callTimeout.Token);
+        }
+        finally
+        {
+            releaseHandler.TrySetResult();
+        }
         WsaaTicket[] tickets = await Task.WhenAll(calls);
 
         tickets.Should().OnlyContain(ticket => ticket.Token == "test-token");

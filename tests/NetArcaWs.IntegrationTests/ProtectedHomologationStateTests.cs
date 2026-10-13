@@ -355,6 +355,80 @@ public sealed class ProtectedHomologationStateTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Adjudication_snapshot_preserves_evidence_on_restart_or_fails_closed(bool failSnapshot)
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"netarcaws-adjudication-state-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var clock = new MutableTimeProvider(InitialTime);
+        var store = new MemoryStateStore(clock);
+        try
+        {
+            ProtectedHomologationStateSession state = await ProtectedHomologationStateSession.OpenAsync(store, Ct, clock);
+            ProtectedSqliteInvoiceJournal journal = await OpenJournalAsync(root, "original", state, clock, Ct);
+            var request = new NetArcaWs.Contracts.WsfexV1.ClsFexRequest
+            {
+                Id = 123, PuntoVta = 1, CbteTipo = 19, CbteNro = 1, TipoExpo = 2,
+                FechaCbte = "20261012", MonedaCtz = 1m
+            };
+            var tenant = new ArcaTenantContext("synthetic-adjudication", 20000000001,
+                ArcaEnvironment.Homologation, WsaaCertificateContent.FromPem("synthetic cert", "synthetic key"));
+            InvoiceSubmission submission = SafeInvoiceService.CreateWsfexSubmission(tenant, "adjudication", request);
+            await journal.PrepareAsync(submission, Ct);
+            InvoiceLease lease = (await journal.TryAcquireAsync(tenant.TenantId, submission.IdempotencyKey,
+                TimeSpan.FromMinutes(2), reconciliation: false, cancellationToken: Ct))!;
+            var negativeQuery = new NetArcaWs.Contracts.WsfexV1.FexGetCmpResponse2
+            {
+                FexGetCmpResult = new()
+                {
+                    FexResultGet = new(), FexErr = new() { ErrCode = 1020, ErrMsg = "Comprobante inexistente" }
+                }
+            };
+            using var queryWriter = new StringWriter(System.Globalization.CultureInfo.InvariantCulture);
+            new System.Xml.Serialization.XmlSerializer(negativeQuery.GetType()).Serialize(queryWriter, negativeQuery);
+            InvoiceOperation unknown = await journal.CompleteAsync(lease, new(InvoiceState.Unknown, ResponseXml: queryWriter.ToString()), Ct);
+            var response = new NetArcaWs.Contracts.WsfexV1.FexAuthorizeResponse
+            {
+                FexAuthorizeResult = new()
+                {
+                    FexErr = new() { ErrCode = 1550, ErrMsg = "Campo Permiso_existente madatorio: Debe ser S, N o vacio (debe enviarse tag)" }
+                }
+            };
+            using var writer = new StringWriter(System.Globalization.CultureInfo.InvariantCulture);
+            new System.Xml.Serialization.XmlSerializer(response.GetType()).Serialize(writer, response);
+            var evidence = new InvoiceRejectionEvidence(submission, writer.ToString(), "synthetic-operator", "protected-backup", "confirmed-missing-tag");
+            if (failSnapshot)
+            {
+                store.FailOnSave = store.SaveCount + 1;
+                await Assert.ThrowsAsync<InvalidOperationException>(() => journal.AdjudicateWsfexValidationRejectionAsync(
+                    tenant.TenantId, submission.IdempotencyKey, unknown.Version, evidence, Ct));
+            }
+            else
+            {
+                InvoiceOperation adjudicated = await journal.AdjudicateWsfexValidationRejectionAsync(
+                    tenant.TenantId, submission.IdempotencyKey, unknown.Version, evidence, Ct);
+                Assert.Equal(InvoiceState.Rejected, adjudicated.State);
+                Assert.Equal(submission, adjudicated.Submission);
+            }
+            ProtectedHomologationStateSession reopenedState = await ProtectedHomologationStateSession.OpenAsync(store, Ct, clock);
+            ProtectedSqliteInvoiceJournal reopened = await OpenJournalAsync(root, "reopened", reopenedState, clock, Ct);
+            InvoiceOperation restored = (await reopened.FindAsync(tenant.TenantId, submission.IdempotencyKey, Ct))!;
+            Assert.Equal(failSnapshot ? InvoiceState.Unknown : InvoiceState.Rejected, restored.State);
+            Assert.Equal(submission, restored.Submission);
+            Assert.Equal(failSnapshot ? 0 : 1,
+                (await reopened.ListRejectionAdjudicationsAsync(tenant.TenantId, submission.IdempotencyKey, cancellationToken: Ct)).Count);
+            Assert.Equal(failSnapshot ? 0 : 1,
+                (await reopened.ListRevisionsAsync(tenant.TenantId, submission.IdempotencyKey, Ct)).Count);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static async Task<ProtectedSqliteInvoiceJournal> OpenJournalAsync(
         string root, string name, ProtectedHomologationStateSession state, TimeProvider clock, CancellationToken cancellationToken)
         => await ProtectedSqliteInvoiceJournal.CreateAsync(state, Path.Combine(root, name), clock, cancellationToken);

@@ -12,6 +12,20 @@ public sealed class InvoiceCoordinator(IInvoiceJournal journal, TimeSpan? leaseD
         CancellationToken cancellationToken = default)
         => journal.ReviseRejectedAsync(replacement, expectedVersion, cancellationToken);
 
+    public Task<InvoiceOperation> AdjudicateWsfexValidationRejectionAsync(string tenantId, string idempotencyKey,
+        long expectedVersion, InvoiceRejectionEvidence evidence, CancellationToken cancellationToken = default)
+        => journal is IInvoiceRejectionAdjudicationJournal adjudicationJournal
+            ? adjudicationJournal.AdjudicateWsfexValidationRejectionAsync(tenantId, idempotencyKey, expectedVersion, evidence, cancellationToken)
+            : Task.FromException<InvoiceOperation>(new NotSupportedException(
+                "The configured invoice journal does not support audited WSFEX rejection adjudication."));
+
+    public Task<IReadOnlyList<InvoiceRejectionAdjudication>> ListRejectionAdjudicationsAsync(string tenantId,
+        string idempotencyKey, int limit = 100, CancellationToken cancellationToken = default)
+        => journal is IInvoiceRejectionAdjudicationJournal adjudicationJournal
+            ? adjudicationJournal.ListRejectionAdjudicationsAsync(tenantId, idempotencyKey, limit, cancellationToken)
+            : Task.FromException<IReadOnlyList<InvoiceRejectionAdjudication>>(new NotSupportedException(
+                "The configured invoice journal does not support audited WSFEX rejection history."));
+
     public async Task<InvoiceOperation> SubmitAsync(InvoiceSubmission submission,
         Func<CancellationToken, Task<InvoiceDecision>> submit, CancellationToken cancellationToken = default)
     {

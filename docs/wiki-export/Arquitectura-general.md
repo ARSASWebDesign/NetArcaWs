@@ -75,6 +75,13 @@ de FCE MiPyME y cuentas corrientes, pero no está integrado con el diario ni
 `SafeInvoiceService`. Ver el [ADR de contratos](Decisi%C3%B3n-4-Contratos-SOAP-p%C3%BAblicos)
 y la [matriz de operaciones](Servicios-y-cobertura).
 
+En WSMTXCA, `codigoTipoAutorizacion=E` identifica un CAE; `A` corresponde a
+CAEA, según los ejemplos del [manual oficial](https://arca.gob.ar/fe/ayuda/documentos/wsmtxca-RG-2904.pdf).
+Para detalle, `unidadesMtx` debe informarse salvo unidades 99/97; los fixtures
+con unidad 7 envían 1. Si no hay otros tributos, el fixture omite
+`ImporteOtrosTributos` junto con el array vacío, consistente con su
+opcionalidad en el contrato y el cálculo requerido por el manual.
+
 `SoapTransport` limita la serialización del request y la lectura de response a
 4 MiB por defecto cada una, configurable entre 1 KiB y 32 MiB. El tope de
 request actúa durante la serialización, antes de que se envíe HTTP; ambos límites
@@ -228,6 +235,21 @@ opt-in para esa misma política; sus APIs son posteriores a 0.6.0 y esperan una
 publicación futura. Aplican las reglas del
 [ADR 0001](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros); una prueba de diario no prueba
 la garantía del ciclo fiscal completo.
+
+La adjudicación explícita de las validaciones WSFEX 1550 por tag omitido y
+1673 por fecha de pago prohibida usa la
+capacidad opcional `IInvoiceRejectionAdjudicationJournal`. El diario SQLite core
+conserva atómicamente la evidencia original en un ledger inmutable, archiva la
+operación previa y cambia únicamente el estado de la versión esperada a
+`Rejected`. No envía SOAP, no cambia la identidad ni corrige el payload. Una
+revisión posterior explícita mantiene número e Id remoto. El wrapper de
+homologación respalda también este ledger en el estado protegido. Los providers
+sin esta capacidad, incluido EF Core en esta etapa, fallan explícitamente; no
+se agregan tablas EF ni migraciones de sus motores por esta API. Las consultas
+negativas o incompletas permanecen inciertas y no habilitan reenvíos. La regla
+1673 exige el mensaje literal confirmado, una nota tipo 20/21 de exportación
+de servicios (`TipoExpo=2`) y una fecha válida en el request original. La
+revisión aprobada omite únicamente `Fecha_pago`; el ADR detalla los límites.
 
 ### Persistencia opcional con Entity Framework Core
 

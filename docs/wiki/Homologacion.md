@@ -34,10 +34,11 @@ Las pruebas autenticadas y los escenarios de emisión continúan en la
 
 ## Ejecución autenticada
 
-El flujo ofrece `consultas`, `emision` y `completa`. La selección de servicios, el
-descubrimiento de puntos de venta, la numeración explícita y las condiciones del
-ensayo están detallados en [Pruebas fiscales en homologación](Homologacion-fiscal.md).
-El modo predeterminado continúa siendo de solo lectura.
+El flujo ofrece `consultas`, `emision` y `completa`. El formulario solo solicita el modo. `consultas` ejecuta las consultas autenticadas;
+`emision` selecciona explícitamente la matriz de 18 casos fiscales y `completa`
+combina ambas. Los detalles de fixtures y reintentos están en
+[Homologación fiscal automática](Homologacion-fiscal.md). El modo predeterminado
+continúa siendo de solo lectura.
 
 El workflow **Homologación ARCA** se inicia manualmente desde **Actions →
 Homologación ARCA → Run workflow**, seleccionando `main`. No se ejecuta al abrir
@@ -70,16 +71,14 @@ PAT limitado al repositorio `ARSASWebDesign/NetArcaWs` con permiso de escritura 
 environments. El token solo se entrega al proceso `gh` que persiste el estado cifrado;
 no se imprime ni se publica. La primera ejecución crea automáticamente
 `HOMOLOGATION_STATE` antes de contactar SOAP. No borrar ni modificar manualmente ese
-secreto: contiene el TA y el diario fiscal. Su límite es 48 KiB comprimidos; si se
-alcanza, el ensayo falla cerrado para preservar el estado.
+secreto: contiene el TA y el diario fiscal. El valor Base64 codificado tiene límite de 48 KiB y el contenido descomprimido
+4 MiB; si se alcanza cualquiera, el ensayo falla cerrado para preservar el estado.
 
-La selección `services` del formulario reemplaza la variable de entorno
-`ARCA_HOMOLOGY_SERVICES`. Padrón consulta los fixtures públicos versionados descritos
-en [Pruebas fiscales](Homologacion-fiscal.md); no requiere `ARCA_QUERY_CUIT`.
-La CUIT representada y sus credenciales siguen siendo secretos independientes.
-Autorizar el alias/certificado para cada servicio en
-WSASS antes de la ejecución. Un certificado emitido no implica habilitación
-para todos los servicios.
+No se solicitan CUIT de receptores, compradores, POS ni números. Padrón conserva
+sus fixtures públicos versionados y no requiere `ARCA_QUERY_CUIT`. La CUIT
+representada y sus credenciales siguen siendo secretos. Autorizar el certificado
+para cada servicio aplicable en WSASS; su emisión no habilita automáticamente
+todos los servicios.
 
 ## Qué ejecuta
 
@@ -89,11 +88,11 @@ con permisos privados y ejecuta el escenario seleccionado. El cliente obtiene
 el ticket WSAA necesario dentro de ese mismo proceso y lo reutiliza en sus
 consultas. Los catálogos y respuestas se comprueban con validaciones funcionales.
 
-El modo `consultas` no autoriza comprobantes. El modo `emision` autoriza una
-factura de prueba B o C exclusivamente en homologación y la consulta después. El
-modo `completa` ejecuta nueve selectores de consulta autenticada y comprueba una
-factura B y otra C con números explícitos. Ningún modo realiza operaciones
-productivas ni acredita todas las reglas fiscales.
+El modo `consultas` no autoriza comprobantes. `emision` ejecuta la matriz de 18
+casos A/B/C, E y MTXCA A/B; `completa` ejecuta además los nueve selectores de
+consulta autenticada. POS, numeración y fechas se restauran desde operaciones
+congeladas del mismo run o se obtienen de catálogos y series en vivo. Ningún modo
+realiza operaciones productivas ni acredita todas las reglas fiscales.
 
 Se exige `ARCA_REQUIRE_HOMOLOGY=1`: si faltan selección o credenciales, el trabajo
 falla en lugar de omitir la prueba. La CI normal continúa usando pruebas locales

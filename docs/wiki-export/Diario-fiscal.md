@@ -65,10 +65,11 @@ Restricciones del orquestador actual:
 La respuesta de autorización se compara con el tenant/identidad y con los campos
 fiscales correlacionables del request. Solo una respuesta completa y correlacionada
 con CAE válido se registra como `Authorized`. `Rejected` requiere el detalle de
-rechazo correlacionado y sin CAE. XML ausente, campos incompletos, diferencia de
-payload o resultado contradictorio no se tratan como rechazo: el resultado queda
-`Unknown` o `Conflict`. Un error de transporte se persiste como `Unknown` y se
-propaga al caller.
+rechazo correlacionado y sin CAE, salvo las dos validaciones terminales WSFEX
+allowlisted de forma exacta más abajo. XML ausente, campos incompletos, diferencia
+de payload o resultado contradictorio no se tratan como rechazo: el resultado
+queda `Unknown` o `Conflict`. Un error de transporte se persiste como `Unknown`
+y se propaga al caller.
 
 WSMTXCA tiene una forma de rechazo propia: resultado `R`, errores no vacíos y
 ausencia de `ComprobanteResponse` es un rechazo de negocio documentado. Los
@@ -147,6 +148,40 @@ la anterior queda `Authorized` o `Rejected`; `Unknown`, `Conflict` y
 global por `(ambiente, CUIT, punto de venta, tipo, número)`, sin `tenantId` ni
 servicio. Los tenants limitan acceso y visibilidad; no habilitan duplicar un
 comprobante para la misma CUIT.
+
+## Excepciones WSFEX de rechazo de validación
+
+Dos errores de validación documentados pueden cerrar un intento WSFEX cuando la
+respuesta directa de `FEXAuthorize` y el request congelado satisfacen predicados
+separados y estrictos. No se extiende la regla al resto de `FEXErr`:
+
+- **1550 — `Permiso_existente` omitido:** solo si el tag no estaba en el request,
+  el mensaje confirma el tag omitido y `FEXResultAuth` está ausente.
+- **1673 — `Fecha_pago` no permitida:** solo para tipo 20/21, `TipoExpo == 2`, un
+  único `Fecha_pago` válido (`yyyyMMdd`) en el snapshot y este mensaje literal,
+  comparado ordinalmente sin trim ni normalización: `Para facturas de exportacion
+  de productos y para las notas de debito y credito no informar fecha de pago`.
+  La respuesta debe tener un único error 1673 y no incluir `FEXResultAuth`.
+
+Ambas reglas verifican el QName/estructura XML, snapshot, identidad e Id remoto;
+duplicados, namespaces inesperados, mensaje/código diferente, fecha ausente,
+vacía o inválida y datos de autorización contradictorios fallan cerrados. Para
+una operación incierta existente, la adjudicación además requiere la respuesta
+original íntegra, versión esperada, ausencia de lease activa y evidencia
+append-only de operador/origen/motivo. La respuesta actual debe ser la misma
+validación admitida o una consulta exacta 1020 sin evidencia positiva; 1020 no
+es motivo de rechazo.
+
+La capability de adjudicación es explícita y hoy la ofrece SQLite y su wrapper
+protegido; otros providers sin ella fallan cerrados. Adjudicar solo cambia el
+estado y agrega auditoría inmutable, sin alterar el payload, la identidad, el
+número o el Id y sin SOAP. Una revisión posterior también es explícita y no
+envía. Para la nota 1673 observada, la revisión permitida elimina únicamente
+`Fecha_pago` y conserva el resto del snapshot y la misma identidad/Id. La
+operación histórica sigue `Unknown` hasta una adjudicación explícita; no hay
+reclasificación automática ni envío de esa revisión acreditado en vivo. Ver el
+[ADR de emisión durable](Decisi%C3%B3n-1-Emisi%C3%B3n-y-reintentos-seguros) para las condiciones
+completas.
 
 ## Almacenamiento y garantías
 
