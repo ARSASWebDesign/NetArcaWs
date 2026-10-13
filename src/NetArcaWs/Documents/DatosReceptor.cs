@@ -1,13 +1,17 @@
 namespace NetArcaWs.Documents;
 
-public sealed record DatosReceptor(long Identificacion, string Nombre, string? Domicilio, string? CondicionTributaria)
+public sealed record DatosReceptor(long Identificacion, string Nombre, string? Domicilio, string? CondicionTributaria,
+    int? CodigoTipoDocumento = null, string? IdentificacionFiscal = null)
 {
     public override string ToString() => nameof(DatosReceptor);
 }
 
-public sealed record LineaComprobante(string Descripcion, decimal Importe, string Moneda);
+public sealed record LineaComprobante(string Descripcion, decimal Importe, string Moneda, string? Codigo = null,
+    decimal? Cantidad = null, int? CodigoUnidadMedida = null, decimal? PrecioUnitario = null,
+    string? DescripcionPresentacion = null);
 
-public sealed record ImpuestoComprobante(string Nombre, decimal Importe, string Moneda);
+public sealed record ImpuestoComprobante(string Nombre, decimal Importe, string Moneda, string? Codigo = null,
+    decimal? BaseImponible = null, decimal? Alicuota = null, string? Clasificacion = null);
 
 public sealed record PagoReciboX(string Medio, decimal Importe, string Moneda);
 

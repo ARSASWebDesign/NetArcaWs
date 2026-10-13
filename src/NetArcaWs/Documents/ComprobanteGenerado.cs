@@ -7,19 +7,22 @@ public sealed record IdentidadComprobante(string Servicio, string Ambiente, long
 public sealed class ResultadoComprobante
 {
     public ResultadoComprobante(string? codigoAutorizacion, DateOnly? vencimiento,
-        IReadOnlyList<string> observaciones, IReadOnlyList<string> errores, string? codigoResultado = null)
+        IReadOnlyList<string> observaciones, IReadOnlyList<string> errores, string? codigoResultado = null,
+        string? tipoAutorizacion = null)
     {
         CodigoAutorizacion = codigoAutorizacion;
         Vencimiento = vencimiento;
         Observaciones = Array.AsReadOnly(observaciones?.ToArray() ?? []);
         Errores = Array.AsReadOnly(errores?.ToArray() ?? []);
         CodigoResultado = codigoResultado;
+        TipoAutorizacion = tipoAutorizacion;
     }
     public string? CodigoAutorizacion { get; }
     public DateOnly? Vencimiento { get; }
     public IReadOnlyList<string> Observaciones { get; }
     public IReadOnlyList<string> Errores { get; }
     public string? CodigoResultado { get; }
+    public string? TipoAutorizacion { get; }
     public override string ToString() => nameof(ResultadoComprobante);
 }
 
@@ -33,7 +36,9 @@ public sealed class ComprobanteGenerado
         IReadOnlyList<PagoReciboX>? pagos = null, IReadOnlyList<ImputacionReciboX>? imputaciones = null,
         decimal cotizacion = 1m, decimal? neto = null, decimal? exento = null,
         decimal? noGravado = null, decimal? iva = null, DateOnly? fechaDesde = null,
-        DateOnly? fechaHasta = null, DateOnly? fechaPago = null)
+        DateOnly? fechaHasta = null, DateOnly? fechaPago = null, string? snapshotResponse = null,
+        int? snapshotResponseVersion = null, string? condicionIvaReceptor = null,
+        int? codigoCondicionIvaReceptor = null)
     {
         Version = version;
         Tipo = tipo;
@@ -61,6 +66,10 @@ public sealed class ComprobanteGenerado
         FechaDesde = fechaDesde;
         FechaHasta = fechaHasta;
         FechaPago = fechaPago;
+        SnapshotResponse = snapshotResponse;
+        SnapshotResponseVersion = snapshotResponseVersion;
+        CondicionIvaReceptor = condicionIvaReceptor;
+        CodigoCondicionIvaReceptor = codigoCondicionIvaReceptor;
     }
 
     public int Version { get; }
@@ -89,6 +98,10 @@ public sealed class ComprobanteGenerado
     public DateOnly? FechaDesde { get; }
     public DateOnly? FechaHasta { get; }
     public DateOnly? FechaPago { get; }
+    public string? SnapshotResponse { get; }
+    public int? SnapshotResponseVersion { get; }
+    public string? CondicionIvaReceptor { get; }
+    public int? CodigoCondicionIvaReceptor { get; }
 
     public override string ToString() => $"ComprobanteGenerado {{ Version = {Version}, Tipo = {Tipo}, Estado = {Estado} }}";
 }
