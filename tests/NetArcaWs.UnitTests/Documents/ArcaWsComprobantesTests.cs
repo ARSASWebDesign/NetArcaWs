@@ -102,13 +102,14 @@ public sealed class ArcaWsComprobantesTests
         request.ImporteOtrosTributos = 2;
         request.ArrayOtrosTributos.Add(new OtroTributoType { Codigo = 20, Descripcion = "Impuesto provincial", BaseImponible = 100, Importe = 2 });
         var supplemental = new ImpuestoComprobante("Clasificación mostrada", 2, "PES", "20", 100, Clasificacion: "provincial");
+        var ivaSupplemental = new ImpuestoComprobante("IVA discriminado", 11, "PES", "5", Tipo: TipoImpuestoComprobante.Iva);
 
         ComprobanteGenerado result = await facade.GenerarComprobanteAsync(Tenant(), "matched-tax", request,
-            Presentation(taxes: [supplemental]), cancellationToken);
+            Presentation(taxes: [supplemental, ivaSupplemental]), cancellationToken);
 
         result.Impuestos.Should().ContainSingle(x => x.Codigo == "20" && x.Importe == 2m)
             .Which.Should().Match<ImpuestoComprobante>(x => x.Nombre == "Clasificación mostrada" && x.Clasificacion == "provincial" && x.Tipo == TipoImpuestoComprobante.OtroTributo);
-        result.Impuestos.Should().Contain(x => x.Codigo == "4" && x.Tipo == TipoImpuestoComprobante.Iva);
+        result.Impuestos.Should().ContainSingle(x => x.Codigo == "5" && x.Nombre == "IVA discriminado" && x.Tipo == TipoImpuestoComprobante.Iva);
     }
 
     [Fact]
@@ -138,6 +139,22 @@ public sealed class ArcaWsComprobantesTests
 
         Func<Task> act = () => facade.GenerarComprobanteAsync(Tenant(), "fex-tax", WsfexRequest(),
             Presentation(taxes: [supplemental]), cancellationToken);
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        transport.CallCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Supplemental_tax_with_opposite_tax_type_is_rejected_before_fiscal_write()
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        var transport = new RecordingSoapTransport();
+        ArcaWsComprobantes facade = CreateFacade(database, transport);
+        var tax = new ImpuestoComprobante("No es IVA", 11, "PES", "5", Tipo: TipoImpuestoComprobante.OtroTributo);
+
+        Func<Task> act = () => facade.GenerarComprobanteAsync(Tenant(), "wrong-tax-type", WsmtxcaRequest(),
+            Presentation(taxes: [tax]), cancellationToken);
 
         await act.Should().ThrowAsync<ArgumentException>();
         transport.CallCount.Should().Be(0);

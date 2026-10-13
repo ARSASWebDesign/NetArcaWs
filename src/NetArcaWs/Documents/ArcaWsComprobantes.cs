@@ -176,7 +176,8 @@ public sealed class ArcaWsComprobantes(SafeInvoiceService invoices)
                 string.IsNullOrWhiteSpace(supplemental.Codigo))
                 throw new ArgumentException("Los impuestos suplementarios deben identificar un impuesto fiscal de igual código, moneda e importe.", nameof(presentation));
             int[] candidates = taxes.Select((tax, index) => (tax, index))
-                .Where(pair => !matched.Contains(pair.index) && pair.tax.Codigo == supplemental.Codigo &&
+                .Where(pair => !matched.Contains(pair.index) && pair.tax.Tipo == supplemental.Tipo &&
+                    pair.tax.Codigo == supplemental.Codigo &&
                     pair.tax.Importe == supplemental.Importe &&
                     (supplemental.BaseImponible is null || pair.tax.BaseImponible == supplemental.BaseImponible) &&
                     (supplemental.Alicuota is null || pair.tax.Alicuota == supplemental.Alicuota))
