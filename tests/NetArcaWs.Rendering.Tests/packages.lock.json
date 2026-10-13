@@ -18,6 +18,12 @@
           "Microsoft.TestPlatform.TestHost": "18.10.1"
         }
       },
+      "PdfPig": {
+        "type": "Direct",
+        "requested": "[0.1.13, )",
+        "resolved": "0.1.13",
+        "contentHash": "2AUWNKHbkDr2Ofgi2vVPN/Ya++jhsuHd54xeKveqKOwDiAy2E2QhczOUKyU29ADRHoEJgQUhwHFgtbD6nCZ2WA=="
+      },
       "StbImageSharp": {
         "type": "Direct",
         "requested": "[2.30.15, )",
@@ -302,6 +308,25 @@
         "resolved": "6.0.0",
         "contentHash": "hqTM5628jSsQiv+HGpiq3WKBl2c8v1KZfby2J6Pr7pEPlK9waPdgEO6b8A/+/xn/yZ9ulv8HuqK71ONy2tg67A=="
       },
+      "PDFsharp": {
+        "type": "Transitive",
+        "resolved": "6.2.4",
+        "contentHash": "GhTr9F1uOYXHCIEOB5PXIgqn5a8WLsJL2m0eewTA0IvY1j6N4HGXHKKmEyB90/N6vrjmYamf41V9zbmdW2HY3g==",
+        "dependencies": {
+          "Microsoft.Extensions.Logging.Abstractions": "8.0.3",
+          "System.Security.Cryptography.Pkcs": "8.0.1"
+        }
+      },
+      "PDFsharp-MigraDoc": {
+        "type": "Transitive",
+        "resolved": "6.2.4",
+        "contentHash": "ZlRUJaAAo4K2oMt1v02GTeGOHIOoOvcH1e1WYMpunCG1MK8jd4EBrbzSHoYSN7yOfKWFtOIUfzvmKhRGPsyWQQ==",
+        "dependencies": {
+          "Microsoft.Extensions.Logging.Abstractions": "8.0.3",
+          "PDFsharp": "6.2.4",
+          "System.Security.Cryptography.Pkcs": "8.0.1"
+        }
+      },
       "QRCoder": {
         "type": "Transitive",
         "resolved": "1.8.0",
@@ -439,6 +464,15 @@
         "dependencies": {
           "NetArcaWs": "[0.6.0, )",
           "QRCoder": "[1.8.0, )"
+        }
+      },
+      "netarcaws.rendering.pdf": {
+        "type": "Project",
+        "dependencies": {
+          "NetArcaWs": "[0.6.0, )",
+          "PDFsharp-MigraDoc": "[6.2.4, )",
+          "QRCoder": "[1.8.0, )",
+          "StbImageSharp": "[2.30.15, )"
         }
       }
     }

@@ -15,7 +15,7 @@ using Xunit;
 
 namespace NetArcaWs.Rendering.Tests;
 
-public sealed class HtmlRenderingTests
+public sealed partial class HtmlRenderingTests
 {
     private static DatosEmisor Issuer(byte[]? logo = null) => new(30123456789, "Emisor <&>", "Comercial", "Calle 1",
         "Responsable Inscripto", logo, "123-456", new DateOnly(2010, 1, 2));

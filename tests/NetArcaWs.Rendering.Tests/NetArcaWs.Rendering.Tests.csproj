@@ -10,10 +10,12 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" />
     <PackageReference Include="AwesomeAssertions" Version="9.6.0" PrivateAssets="all" />
     <PackageReference Include="ZXing.Net" Version="0.16.11" />
+    <PackageReference Include="PdfPig" Version="0.1.13" />
     <PackageReference Include="StbImageSharp" Version="2.30.15" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/NetArcaWs/NetArcaWs.csproj" />
     <ProjectReference Include="../../src/NetArcaWs.Rendering.Html/NetArcaWs.Rendering.Html.csproj" />
+    <ProjectReference Include="../../src/NetArcaWs.Rendering.Pdf/NetArcaWs.Rendering.Pdf.csproj" />
   </ItemGroup>
 </Project>
