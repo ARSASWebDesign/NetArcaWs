@@ -79,10 +79,11 @@ core conserva la recuperación explícita con `ResumeAsync`; el paquete EF opcio
 agrega una cola durable, processor y worker alojado con backoff acotado. El host
 los activa de forma explícita y registra `IInvoiceRecoveryContextResolver` para
 volver a autorizar tenant, CUIT, ambiente y la referencia de credencial fijada.
-No existe scheduler distribuido. La extensión es posterior a los paquetes
-públicos 0.6.0 y sus pruebas locales sintéticas no acreditan homologación. No
-aplicar retries de transporte como sustituto. La homologación de negocio
-autenticada sigue pendiente de certificados autorizados.
+No existe scheduler distribuido. La extensión no está en los paquetes públicos
+0.6.0; forma parte de 0.7.0, preparada para publicación. Las pruebas locales
+sintéticas no acreditan homologación. No aplicar retries de transporte como
+sustituto. El run protegido `38327713674` completó el modo `completa` con nueve
+selectores y 18 escenarios; esta evidencia no cubre toda la biblioteca.
 
 ## Decisiones relacionadas
 

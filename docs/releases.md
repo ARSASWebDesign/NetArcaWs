@@ -1,5 +1,15 @@
 # Releases y publicación en NuGet
 
+## Preparación 0.7.0
+
+La versión `0.7.0` está preparada en la rama de release; su publicación está
+pendiente. Los once proyectos empaquetables y sus lockfiles se actualizaron a
+esa versión. Hasta que la release se publique y cada paquete se indexe, `0.6.0`
+sigue siendo la versión pública documentada. El alcance y sus límites están en
+las [notas de versión 0.7.0](release-notes-0.7.0.md).
+
+La ejecución protegida [Homologación ARCA 38327713674](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/38327713674), CI [38327702696](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/38327702696) y Security [38327702694](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/38327702694) finalizaron correctamente sobre `960266563f15c43425bdca20ccdcabf68fb2f2e7`. La homologación ejecutó el modo `completa`: nueve selectores autenticados y 18 escenarios fiscales. Esta evidencia se limita a esos flujos y escenarios; no acredita homologación general de todas las operaciones o servicios.
+
 El workflow [Release](../.github/workflows/release.yml) distribuye once paquetes
 con la misma versión: `NetArcaWs`, `NetArcaWs.Tool`, cuatro paquetes EF Core de
 persistencia/proveedores y cinco de migraciones. El evento `release: published`
@@ -48,12 +58,11 @@ release de GitHub no demuestra que los once IDs hayan sido aceptados e
 indexados. La publicación de once paquetes tampoco es una transacción; una
 falla parcial requiere verificar cada ID y versión.
 
-El alcance de la release 0.6.0 incluye persistencia relacional optativa para
+El alcance publicado de 0.6.0 incluye persistencia relacional optativa para
 diario fiscal y tickets WSAA, providers para MySQL/MariaDB, PostgreSQL y SQL
 Server, cinco paquetes de migraciones oficiales y ejemplos/documentación de
 consumo. Los paquetes públicos 0.6.0 no incluyen el store de certificados ni la
-cola/worker de recuperación que ahora están en el código posterior de esta rama;
-ambas APIs esperan una publicación futura. El consumidor conserva la
+cola/worker de recuperación que ahora se preparan en 0.7.0. El consumidor conserva la
 responsabilidad de autorizar tenants, proteger claves y aplicar migraciones
 explícitamente. Las migraciones no adoptan automáticamente tablas previas sin
 historial. Las pruebas locales y de motores relacionales no equivalen a

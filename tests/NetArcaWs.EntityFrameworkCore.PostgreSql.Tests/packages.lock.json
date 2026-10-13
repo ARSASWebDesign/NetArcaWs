@@ -458,13 +458,13 @@
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.12, )",
           "Microsoft.Extensions.Hosting.Abstractions": "[10.0.12, )",
-          "NetArcaWs": "[0.6.0, )"
+          "NetArcaWs": "[0.7.0, )"
         }
       },
       "netarcaws.entityframeworkcore.migrations.postgresql": {
         "type": "Project",
         "dependencies": {
-          "NetArcaWs.EntityFrameworkCore": "[0.6.0, )",
+          "NetArcaWs.EntityFrameworkCore": "[0.7.0, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )"
         }
       },
@@ -474,7 +474,7 @@
           "Microsoft.EntityFrameworkCore": "[10.0.12, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.12, )",
           "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.0.12, )",
-          "NetArcaWs.EntityFrameworkCore": "[0.6.0, )",
+          "NetArcaWs.EntityFrameworkCore": "[0.7.0, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )"
         }
       }
