@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using AwesomeAssertions;
 using Xunit;
 
@@ -6,6 +7,16 @@ namespace NetArcaWs.Build.Tests;
 
 public sealed class RenderingReleaseWorkflowTests
 {
+    [Fact]
+    public void Rendering_gallery_is_not_packable_as_a_release_package()
+    {
+        XDocument project = XDocument.Load(RepositoryFile("examples/NetArcaWs.Rendering.Examples/NetArcaWs.Rendering.Examples.csproj"));
+
+        string? isPackable = project.Root!.Elements("PropertyGroup").Elements("IsPackable").SingleOrDefault()?.Value;
+        isPackable.Should().NotBeNull();
+        isPackable.Should().Be("false");
+    }
+
     [Theory]
     [InlineData("NetArcaWs.Rendering.Html")]
     [InlineData("NetArcaWs.Rendering.Pdf")]

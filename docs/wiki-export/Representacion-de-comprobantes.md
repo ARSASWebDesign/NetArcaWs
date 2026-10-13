@@ -13,21 +13,52 @@ snapshot. El receptor se toma exclusivamente del snapshot; el emisor no se
 deduce del certificado. Para volver a producir una representación histórica,
 guardá el perfil de emisor y el logo usados junto al comprobante.
 
-```csharp
-ComprobanteGenerado comprobante = await emision.GenerarComprobanteAsync(
-    tenantAutorizado, claveIdempotencia, solicitud, presentacion, cancellationToken);
-await repositorio.GuardarAsync(comprobante, cancellationToken);
-await repositorio.GuardarPerfilEmisorAsync(perfilEmisorActual, cancellationToken);
+Para obtener un snapshot fiscal, la aplicación construye un `ArcaTenantContext`
+autorizado y llama la sobrecarga tipada de `ArcaWsComprobantes` para WSFEv1,
+WSFEXv1 o WSMTXCA. La emisión requiere el `SafeInvoiceService` configurado y
+persistido por la aplicación; conserva la clave de idempotencia y las reglas de
+reconciliación del [diario fiscal](Diario-fiscal). `ReciboX` es una creación
+local. El [ejemplo ejecutable de galería](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/examples/NetArcaWs.Rendering.Examples/Program.cs)
+usa únicamente snapshots sintéticos y no llama a ARCA.
 
-string html = new ArcaWsGeneradorHTML(perfilEmisorActual)
-    .GenerarHTMLComprobante(comprobante);
-byte[] pdf = new ArcaWsGeneradorPDF(perfilEmisorActual)
-    .GenerarPDFComprobante(comprobante);
+Conservá el snapshot y el perfil de emisor que se usó con el comprobante. Este
+ejemplo muestra un round-trip JSON básico; en producción guardá estos valores
+en el almacenamiento protegido que administre tu aplicación:
+
+```csharp
+using System.Text.Json;
+using NetArcaWs.Documents;
+using NetArcaWs.Rendering.Html;
+using NetArcaWs.Rendering.Pdf;
+
+var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+{
+    WriteIndented = true
+};
+Directory.CreateDirectory(dataDirectory);
+string documentPath = Path.Combine(dataDirectory, "comprobante.json");
+string issuerPath = Path.Combine(dataDirectory, "emisor.json");
+await File.WriteAllTextAsync(documentPath, JsonSerializer.Serialize(comprobante, jsonOptions));
+await File.WriteAllTextAsync(issuerPath, JsonSerializer.Serialize(perfilEmisor, jsonOptions));
+
+ComprobanteGenerado comprobanteCargado = JsonSerializer.Deserialize<ComprobanteGenerado>(
+    await File.ReadAllTextAsync(documentPath), jsonOptions)
+    ?? throw new InvalidDataException("No se pudo leer el snapshot del comprobante.");
+DatosEmisor emisorCargado = JsonSerializer.Deserialize<DatosEmisor>(
+    await File.ReadAllTextAsync(issuerPath), jsonOptions)
+    ?? throw new InvalidDataException("No se pudo leer el perfil histórico del emisor.");
+
+string html = new ArcaWsGeneradorHTML(emisorCargado)
+    .GenerarHTMLComprobante(comprobanteCargado);
+byte[] pdf = new ArcaWsGeneradorPDF(emisorCargado)
+    .GenerarPDFComprobante(comprobanteCargado);
 ```
 
-El ejemplo representa el snapshot ya obtenido; llamar a los renderizadores no
-autoriza, consulta, persiste ni reenvía un comprobante. La aplicación controla
-el almacenamiento y acceso a información fiscal y personal.
+En el proyecto consumidor agregá sólo los paquetes que vas a usar:
+`NetArcaWs.Rendering.Html` y/o `NetArcaWs.Rendering.Pdf`, además de `NetArcaWs`
+para obtener y conservar el modelo. Los renderizadores no autorizan, consultan,
+persisten ni reenvían comprobantes; la aplicación controla el almacenamiento y
+el acceso a información fiscal y personal.
 
 ## Alcance y datos disponibles
 
