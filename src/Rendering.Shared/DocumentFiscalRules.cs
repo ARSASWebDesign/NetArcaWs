@@ -30,6 +30,12 @@ internal static class DocumentFiscalRules
     internal static string ReceiverCondition(ComprobanteGenerado document) => DocumentLayout.CanonicalReceiverCondition(document.CodigoCondicionIvaReceptor)
         ?? document.CondicionIvaReceptor ?? document.Receptor.CondicionTributaria ?? string.Empty;
 
+    internal static string ReceiverConditionLabel(ComprobanteGenerado document) =>
+        document.Identidad?.Servicio.Equals("wsfex", StringComparison.OrdinalIgnoreCase) == true &&
+        document.CodigoCondicionIvaReceptor is null
+            ? "Información complementaria:"
+            : "Condición frente al IVA:";
+
     private static bool ConditionMatches(int? code, string condition) => code switch
     {
         1 => condition.Contains("responsable inscripto", StringComparison.OrdinalIgnoreCase) || condition.Contains("responsable inscrito", StringComparison.OrdinalIgnoreCase),

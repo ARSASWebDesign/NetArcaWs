@@ -187,6 +187,17 @@ public sealed class HtmlRenderingTests
     }
 
     [Fact]
+    public void Wsfex_displays_foreign_receiver_text_as_complementary_information()
+    {
+        string html = new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(ContractFiscal("wsfex", query: false));
+        int start = html.IndexOf("<section class=\"receiver\">", StringComparison.Ordinal);
+        int end = html.IndexOf("</section>", start, StringComparison.Ordinal);
+        string receiverSection = WebUtility.HtmlDecode(html[start..(end + "</section>".Length)]);
+        Assert.True(receiverSection.Contains("Información complementaria:", StringComparison.Ordinal), receiverSection);
+        Assert.DoesNotContain("Condición frente al IVA:", receiverSection);
+    }
+
+    [Fact]
     public void MtXca_consumer_final_allows_contract_omission_of_document_type_and_number()
     {
         ComprobanteGenerado basis = Fiscal("wsmtxca", 6, condition: 5, conditionText: "Consumidor final");

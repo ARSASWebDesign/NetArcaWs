@@ -44,7 +44,7 @@ public sealed class ArcaWsGeneradorHTML(DatosEmisor emisor)
         html.Append("</div></header>");
         html.Append("<section class=\"receiver\"><h3>Datos del receptor</h3><div><b>Nombre / razón social:</b> ").Append(E(datos.Receptor.Nombre)).Append("</div>");
         if (!string.IsNullOrWhiteSpace(datos.Receptor.Domicilio)) html.Append("<div><b>Domicilio:</b> ").Append(E(datos.Receptor.Domicilio)).Append("</div>");
-        if (!string.IsNullOrWhiteSpace(datos.Receptor.CondicionTributaria) || datos.CodigoCondicionIvaReceptor is not null) html.Append("<div><b>Condición frente al IVA:</b> ").Append(E(DocumentFiscalRules.ReceiverCondition(datos))).Append("</div>");
+        if (!string.IsNullOrWhiteSpace(datos.Receptor.CondicionTributaria) || datos.CodigoCondicionIvaReceptor is not null) html.Append("<div><b>").Append(E(DocumentFiscalRules.ReceiverConditionLabel(datos))).Append("</b> ").Append(E(DocumentFiscalRules.ReceiverCondition(datos))).Append("</div>");
         string receiverId = datos.Receptor.IdentificacionFiscal ?? datos.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture);
         if (!string.IsNullOrWhiteSpace(receiverId)) html.Append("<div><b>Identificación:</b> ").Append(E(receiverId)).Append("</div>");
         html.Append("</section>");
