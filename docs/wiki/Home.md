@@ -1,24 +1,10 @@
 # NetArcaWs
 
-[![Última release](https://img.shields.io/github/v/release/ARSASWebDesign/NetArcaWs?label=GitHub%20release)](https://github.com/ARSASWebDesign/NetArcaWs/releases)
-[![NetArcaWs en NuGet](https://img.shields.io/nuget/v/NetArcaWs?label=NuGet%20biblioteca)](https://www.nuget.org/packages/NetArcaWs)
-[![NetArcaWs.Tool en NuGet](https://img.shields.io/nuget/v/NetArcaWs.Tool?label=NuGet%20tool)](https://www.nuget.org/packages/NetArcaWs.Tool)
-[![CI](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/ci.yml/badge.svg)](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/ci.yml)
-[![Release](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/release.yml/badge.svg)](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/release.yml)
+[![Última release](https://img.shields.io/github/v/release/ARSASWebDesign/NetArcaWs?label=GitHub%20release)](https://github.com/ARSASWebDesign/NetArcaWs/releases) [![NetArcaWs en NuGet](https://img.shields.io/nuget/v/NetArcaWs?label=NuGet%20biblioteca)](https://www.nuget.org/packages/NetArcaWs) [![NetArcaWs.Tool en NuGet](https://img.shields.io/nuget/v/NetArcaWs.Tool?label=NuGet%20tool)](https://www.nuget.org/packages/NetArcaWs.Tool) [![CI](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/ci.yml/badge.svg)](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/ci.yml) [![Release](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/release.yml/badge.svg)](https://github.com/ARSASWebDesign/NetArcaWs/actions/workflows/release.yml)
 
-Los indicadores de NuGet muestran dinámicamente la versión disponible de cada
-paquete en el feed. Consultá [Inicio rápido](Inicio-rapido.md) para ver cómo
-referenciar los paquetes y [releases](../releases.md) para el proceso de
-publicación. Las [notas de versión](../release-notes-0.7.0.md) describen los
-cambios y su evidencia.
+Los indicadores de NuGet muestran dinámicamente la versión disponible de cada paquete en el feed. Consultá [Inicio rápido](Inicio-rapido.md) para ver cómo referenciar los paquetes y [releases](../releases.md) para el proceso de publicación. Las [notas de versión](../release-notes-0.7.0.md) describen los cambios y su evidencia.
 
-NetArcaWs es una biblioteca .NET para integrar servicios web de ARCA desde
-aplicaciones C#. Consulta [los servicios implementados](Servicios-implementados.md)
-para conocer el alcance de esta biblioteca y el
-[catálogo oficial de servicios web ARCA](https://ftp.afip.gob.ar/ws/documentacion/catalogo.asp)
-para verificar los servicios publicados por el organismo. Esta wiki describe
-el uso y los límites del código disponible; no implica paridad completa con
-PyAfipWs ni homologación fiscal de una instalación.
+NetArcaWs es una biblioteca .NET para integrar servicios web de ARCA desde aplicaciones C#. Consulta [los servicios implementados](Servicios-implementados.md) para conocer el alcance de esta biblioteca y el [catálogo oficial de servicios web ARCA](https://ftp.afip.gob.ar/ws/documentacion/catalogo.asp) para verificar los servicios publicados por el organismo. Esta wiki describe el uso y los límites del código disponible; no implica paridad completa con PyAfipWs ni homologación fiscal de una instalación.
 
 ## Empezar
 
@@ -57,9 +43,7 @@ PyAfipWs ni homologación fiscal de una instalación.
 - [Ejemplos compilables de integración](../../examples/NetArcaWs.Examples/GuideExamples.cs) — snippets de las guías, sin llamadas de red al construirlos.
 - [Arquitectura](../../ARCHITECTURE.md) y [progreso del proyecto](../../PROGRESS.md) — decisiones técnicas y estado del trabajo.
 
-La homologación autenticada requiere certificados autorizados por ARCA. Un
-build, un test local, un health check o la publicación de un paquete no prueban
-por sí solos que una factura real será aceptada.
+La homologación autenticada requiere certificados autorizados por ARCA. Un build, un test local, un health check o la publicación de un paquete no prueban por sí solos que una factura real será aceptada.
 
 ## Homologación
 

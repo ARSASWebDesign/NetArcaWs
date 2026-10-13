@@ -191,8 +191,7 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
     }
 
     /// <summary>
-    /// Explicitly adjudicates a retained allowlisted WSFEX validation rejection using the exact frozen request that produced it.
-    /// This updates only the journal and never sends or reconciles a SOAP request.
+    /// Explicitly adjudicates a retained allowlisted WSFEX validation rejection using the exact frozen request that produced it. This updates only the journal and never sends or reconciles a SOAP request.
     /// </summary>
     public async Task<InvoiceOperation> AdjudicateWsfexValidationRejectionAsync(ArcaTenantContext tenant, string key,
         long expectedVersion, InvoiceRejectionEvidence evidence, CancellationToken cancellationToken = default)

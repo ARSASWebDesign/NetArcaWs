@@ -7,8 +7,7 @@ using NetArcaWs.HealthChecks;
 namespace NetArcaWs.Invoicing;
 
 /// <summary>
-/// Durable journal for processes sharing one local SQLite database. Do not use on network filesystems.
-/// For replicas on different hosts implement IInvoiceJournal with a transactional shared database.
+/// Durable journal for processes sharing one local SQLite database. Do not use on network filesystems. For replicas on different hosts implement IInvoiceJournal with a transactional shared database.
 /// </summary>
 public sealed class SqliteInvoiceJournal : IInvoiceJournal, IInvoiceRejectionAdjudicationJournal
 {

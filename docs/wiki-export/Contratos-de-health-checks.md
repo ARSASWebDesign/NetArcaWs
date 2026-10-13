@@ -33,18 +33,7 @@ El endpoint real conserva el sufijo `personaServiceA5`, pero el catálogo y manu
 
 ### WSCPE: Carta de Porte Electrónica
 
-El health check opt-in `AddWscpeHealthCheck` usa el `dummy` del WSDL fijado,
-sin ticket WSAA. Homologación:
-`https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap`; producción:
-`https://cpea-ws.afip.gob.ar/wscpe/services/soap`.
-El cuerpo SOAP está vacío y `SOAPAction` es
-`https://serviciosjava.afip.gob.ar/wscpe/dummy`. El wrapper de respuesta
-es `DummyResp`, namespace `https://serviciosjava.afip.gob.ar/wscpe/`.
-Dentro, `respuesta` contiene `appserver`, `authserver` y `dbserver`; estos
-cuatro elementos locales no tienen namespace. Se exige `OK` en todos los
-componentes. El resultado no prueba habilitación de una CUIT para emitir CPE.
-Fuentes: [WSDL de homologación](https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap?wsdl)
-y [procedencia de contratos](Procedencia-de-contratos-SOAP).
+El health check opt-in `AddWscpeHealthCheck` usa el `dummy` del WSDL fijado, sin ticket WSAA. Homologación: `https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap`; producción: `https://cpea-ws.afip.gob.ar/wscpe/services/soap`. El cuerpo SOAP está vacío y `SOAPAction` es `https://serviciosjava.afip.gob.ar/wscpe/dummy`. El wrapper de respuesta es `DummyResp`, namespace `https://serviciosjava.afip.gob.ar/wscpe/`. Dentro, `respuesta` contiene `appserver`, `authserver` y `dbserver`; estos cuatro elementos locales no tienen namespace. Se exige `OK` en todos los componentes. El resultado no prueba habilitación de una CUIT para emitir CPE. Fuentes: [WSDL de homologación](https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap?wsdl) y [procedencia de contratos](Procedencia-de-contratos-SOAP).
 
 ## WSAA no ofrece un método `dummy`
 

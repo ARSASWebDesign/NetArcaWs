@@ -2,9 +2,7 @@
 
 # Diagnóstico, preguntas frecuentes y glosario
 
-Esta guía describe el comportamiento de NetArcaWs. Los códigos de validación
-fiscal dependen del servicio, la operación y la versión del manual ARCA; no son
-una enumeración estable común a todos los web services.
+Esta guía describe el comportamiento de NetArcaWs. Los códigos de validación fiscal dependen del servicio, la operación y la versión del manual ARCA; no son una enumeración estable común a todos los web services.
 
 ## Diagnosticar una llamada
 
@@ -18,84 +16,49 @@ una enumeración estable común a todos los web services.
 | `InvoiceConflictException` | El diario detectó incompatibilidad de identidad, payload, versión o serie; revisar el registro antes de modificar la operación |
 | Health check saludable | El probe respondió; no demuestra que el certificado esté autorizado ni que una factura será aceptada |
 
-Registrar el servicio, ambiente, método, duración y un identificador interno de
-correlación. Token, Sign, claves privadas y XML fiscal completo no deben aparecer
-en logs ordinarios. `Detail` de una excepción puede incluir datos del servicio;
-revisarlo antes de compartirlo en un issue público.
+Registrar el servicio, ambiente, método, duración y un identificador interno de correlación. Token, Sign, claves privadas y XML fiscal completo no deben aparecer en logs ordinarios. `Detail` de una excepción puede incluir datos del servicio; revisarlo antes de compartirlo en un issue público.
 
 ## Preguntas frecuentes
 
 ### ¿El CLI crea un certificado aceptado por ARCA?
 
-Genera una clave privada y un CSR. La emisión y asociación al servicio se hacen
-en ARCA: WSASS para homologación; Administrador de Certificados Digitales y
-Administrador de Relaciones para producción. Un CSR no es un certificado
-habilitado. [Procedimiento oficial de WSAA](https://www.afip.gob.ar/ws/documentacion/wsaa.asp).
+Genera una clave privada y un CSR. La emisión y asociación al servicio se hacen en ARCA: WSASS para homologación; Administrador de Certificados Digitales y Administrador de Relaciones para producción. Un CSR no es un certificado habilitado. [Procedimiento oficial de WSAA](https://www.afip.gob.ar/ws/documentacion/wsaa.asp).
 
 ### ¿Puedo guardar el certificado en un vault o una base de datos?
 
-Sí. `WsaaCertificateContent` admite PEM o PFX en memoria. Mantener el certificado
-y la clave correspondientes, proteger la contraseña y definir la rotación en
-la aplicación. No es necesario escribir un archivo binario intermedio. Ver
-[certificados en memoria](Decisi%C3%B3n-3-Certificados-en-memoria).
+Sí. `WsaaCertificateContent` admite PEM o PFX en memoria. Mantener el certificado y la clave correspondientes, proteger la contraseña y definir la rotación en la aplicación. No es necesario escribir un archivo binario intermedio. Ver [certificados en memoria](Decisi%C3%B3n-3-Certificados-en-memoria).
 
 ### ¿Compartir el certificado comparte la caché de tickets?
 
-No. La caché incluida es local al proceso y separa tenant, CUIT, ambiente,
-servicio y certificado. Dos procesos pueden pedir tickets para la misma
-identidad remota. La aplicación debe coordinar esa situación si despliega
-réplicas; no hay un proveedor de caché distribuida incorporado.
+No. La caché incluida es local al proceso y separa tenant, CUIT, ambiente, servicio y certificado. Dos procesos pueden pedir tickets para la misma identidad remota. La aplicación debe coordinar esa situación si despliega réplicas; no hay un proveedor de caché distribuida incorporado.
 
 ### ¿El ticket siempre se reutiliza durante doce horas?
 
-La expiración efectiva viene del TA recibido. El cliente debe respetarla en
-lugar de asumir que cualquier respuesta dura doce horas. El tiempo solicitado
-en el TRA y el margen de reloj no sustituyen la expiración concedida por WSAA.
-Ver [WSAA y certificados](WSAA-y-certificados).
+La expiración efectiva viene del TA recibido. El cliente debe respetarla en lugar de asumir que cualquier respuesta dura doce horas. El tiempo solicitado en el TRA y el margen de reloj no sustituyen la expiración concedida por WSAA. Ver [WSAA y certificados](WSAA-y-certificados).
 
 ### ¿Puedo cambiar de tenant modificando opciones globales?
 
-Usar un `ArcaTenantContext` por operación. El host debe resolver y autorizar
-tenant, CUIT y material criptográfico desde un origen confiable. Los wrappers
-inyectan Token, Sign y CUIT a partir de ese contexto, sin modificar el DTO del
-llamador. Ver [multitenancy](Contexto-multitenant).
+Usar un `ArcaTenantContext` por operación. El host debe resolver y autorizar tenant, CUIT y material criptográfico desde un origen confiable. Los wrappers inyectan Token, Sign y CUIT a partir de ese contexto, sin modificar el DTO del llamador. Ver [multitenancy](Contexto-multitenant).
 
 ### ¿Por qué una propiedad opcional en XSD es obligatoria para mi factura?
 
-`minOccurs=0` expresa una regla de serialización del contrato, no todas las
-condiciones fiscales. Concepto, moneda, tipo de comprobante y operación pueden
-imponer requisitos adicionales. Consultar los catálogos del servicio y su manual;
-no fijar tasas o identificadores tomando valores de otro servicio.
+`minOccurs=0` expresa una regla de serialización del contrato, no todas las condiciones fiscales. Concepto, moneda, tipo de comprobante y operación pueden imponer requisitos adicionales. Consultar los catálogos del servicio y su manual; no fijar tasas o identificadores tomando valores de otro servicio.
 
 ### ¿Una factura rechazada se puede corregir?
 
-Una operación durable en estado `Rejected` admite una revisión explícita con
-`ReviseRejectedAsync`, control de versión e historial. La revisión conserva la
-identidad fiscal y queda `Prepared`; `ResumeAsync` efectúa el envío explícito.
-`Unknown` y `Conflict` requieren reconciliación o revisión, no una nueva factura.
-Ver [diario fiscal](Diario-fiscal).
+Una operación durable en estado `Rejected` admite una revisión explícita con `ReviseRejectedAsync`, control de versión e historial. La revisión conserva la identidad fiscal y queda `Prepared`; `ResumeAsync` efectúa el envío explícito. `Unknown` y `Conflict` requieren reconciliación o revisión, no una nueva factura. Ver [diario fiscal](Diario-fiscal).
 
 ### ¿El diario SQLite sirve para varias réplicas en hosts distintos?
 
-El proveedor incluido admite procesos del mismo host usando un archivo local.
-No compartirlo mediante NFS. Para varios hosts, implementar `IInvoiceJournal`
-sobre una base transaccional común, preservando unicidad fiscal, comparación de
-versiones, leases y snapshots. Compartir únicamente el certificado no resuelve
-la coordinación de emisiones.
+El proveedor incluido admite procesos del mismo host usando un archivo local. No compartirlo mediante NFS. Para varios hosts, implementar `IInvoiceJournal` sobre una base transaccional común, preservando unicidad fiscal, comparación de versiones, leases y snapshots. Compartir únicamente el certificado no resuelve la coordinación de emisiones.
 
 ### ¿WSMTXCA cubre todo el circuito MiPyME?
 
-No. El cliente cubre las operaciones del contrato WSMTXCA de factura con detalle.
-El circuito completo de Factura de Crédito Electrónica MiPyME incluye servicios
-y eventos distintos. La matriz de [servicios y cobertura](Servicios-y-cobertura)
-explicita esta diferencia.
+No. El cliente cubre las operaciones del contrato WSMTXCA de factura con detalle. El circuito completo de Factura de Crédito Electrónica MiPyME incluye servicios y eventos distintos. La matriz de [servicios y cobertura](Servicios-y-cobertura) explicita esta diferencia.
 
 ### ¿Por qué NuGet y la rama principal pueden mostrar versiones distintas?
 
-Consultá los badges de [Inicio](Home) para ver las versiones disponibles en
-NuGet. La tabla de [releases](Publicar-versiones) enlaza cada paquete con su ficha
-en el feed. Los paquetes publicados son inmutables; las mejoras se distribuyen
-con una nueva versión.
+Consultá los badges de [Inicio](Home) para ver las versiones disponibles en NuGet. La tabla de [releases](Publicar-versiones) enlaza cada paquete con su ficha en el feed. Los paquetes publicados son inmutables; las mejoras se distribuyen con una nueva versión.
 
 ## Glosario
 
@@ -119,6 +82,4 @@ con una nueva versión.
 | SOAP fault | Error del protocolo SOAP, distinto de los errores fiscales incluidos en una respuesta válida |
 | WSDL / XSD | Contratos del servicio y esquemas de datos; no reemplazan las reglas condicionales del manual |
 
-Fecha de revisión: 2026-10-06. Los nombres de API y límites se contrastaron con
-el código versionado; las gestiones de certificados con la página oficial
-enlazada. Esta guía no declara homologación fiscal autenticada.
+Fecha de revisión: 2026-10-06. Los nombres de API y límites se contrastaron con el código versionado; las gestiones de certificados con la página oficial enlazada. Esta guía no declara homologación fiscal autenticada.

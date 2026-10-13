@@ -70,8 +70,7 @@ public sealed partial class WsaaService
     }
 
     /// <summary>
-    /// Authenticates with content supplied by a vault or database, without certificate files.
-    /// Imports and disposes its own certificate per call. For tenant isolation, use AuthenticateForTenantAsync.
+    /// Authenticates with content supplied by a vault or database, without certificate files. Imports and disposes its own certificate per call. For tenant isolation, use AuthenticateForTenantAsync.
     /// </summary>
     public async Task<WsaaTicket> AuthenticateWithContentAsync(string service, WsaaCertificateContent content,
         CancellationToken cancellationToken = default)
@@ -84,8 +83,7 @@ public sealed partial class WsaaService
     }
 
     /// <summary>
-    /// Authenticates for an explicitly authorized tenant. Selects its environment and isolates its ticket cache.
-    /// WSAA does not validate the represented CUIT; authorization is enforced by each business service.
+    /// Authenticates for an explicitly authorized tenant. Selects its environment and isolates its ticket cache. WSAA does not validate the represented CUIT; authorization is enforced by each business service.
     /// </summary>
     public async Task<WsaaTicket> AuthenticateForTenantAsync(string service, ArcaTenantContext tenant,
         CancellationToken cancellationToken = default)

@@ -16,10 +16,7 @@ dotnet tool install --local NetArcaWs.Tool --add-source ./artifacts --version 0.
 dotnet tool run netarcaws --help
 ```
 
-Omitir el primer comando si ya existe un manifiesto. En otro checkout, usar
-`dotnet tool restore --add-source /ruta/a/artifacts`. No guardar claves ni
-contraseñas en el manifiesto. Los ejemplos siguientes muestran `netarcaws`
-para instalación global; con instalación local usar `dotnet tool run netarcaws`.
+Omitir el primer comando si ya existe un manifiesto. En otro checkout, usar `dotnet tool restore --add-source /ruta/a/artifacts`. No guardar claves ni contraseñas en el manifiesto. Los ejemplos siguientes muestran `netarcaws` para instalación global; con instalación local usar `dotnet tool run netarcaws`.
 
 Instalación global:
 
@@ -35,9 +32,7 @@ dotnet tool install NetArcaWs.Tool --tool-path ./.tools --add-source ./artifacts
 ./.tools/netarcaws --help
 ```
 
-La herramienta requiere el runtime .NET 10. Si .NET está instalado en una ruta
-personalizada y el ejecutable informa que no encuentra el runtime, configurar
-`DOTNET_ROOT` con la carpeta de esa instalación (la que contiene `dotnet`).
+La herramienta requiere el runtime .NET 10. Si .NET está instalado en una ruta personalizada y el ejecutable informa que no encuentra el runtime, configurar `DOTNET_ROOT` con la carpeta de esa instalación (la que contiene `dotnet`).
 
 ## Crear una solicitud de desarrollo
 
@@ -93,9 +88,4 @@ Conservá la clave privada en un lugar protegido y no la compartas. La CSR conti
 
 ## Resultados y cancelación
 
-Código 0: éxito; 1: error de archivos, criptografía o certificado fuera de vigencia;
-2: argumentos inválidos; 130: cancelación por Ctrl+C. Certificados y claves de
-entrada tienen un límite de 1 MiB. La generación escribe en una carpeta temporal
-privada y la mueve al destino al completar los cuatro archivos; ante una falla
-intenta eliminar solamente su propia carpeta temporal. No reemplaza destinos
-existentes, incluso ante dos generaciones concurrentes.
+Código 0: éxito; 1: error de archivos, criptografía o certificado fuera de vigencia; 2: argumentos inválidos; 130: cancelación por Ctrl+C. Certificados y claves de entrada tienen un límite de 1 MiB. La generación escribe en una carpeta temporal privada y la mueve al destino al completar los cuatro archivos; ante una falla intenta eliminar solamente su propia carpeta temporal. No reemplaza destinos existentes, incluso ante dos generaciones concurrentes.

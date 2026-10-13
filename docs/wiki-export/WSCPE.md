@@ -2,10 +2,7 @@
 
 # WSCPE: Carta de Porte Electrónica
 
-WSCPE gestiona documentación electrónica para el traslado de granos y derivados
-granarios. El cliente `WscpeService` expone las **75 operaciones** del WSDL
-publicado por ARCA y fijado el 2026-10-06, incluidas las variantes automotor,
-ferroviaria, derivados granarios, emisión en destino y ductos.
+WSCPE gestiona documentación electrónica para el traslado de granos y derivados granarios. El cliente `WscpeService` expone las **75 operaciones** del WSDL publicado por ARCA y fijado el 2026-10-06, incluidas las variantes automotor, ferroviaria, derivados granarios, emisión en destino y ductos.
 
 ## Funcionalidades
 
@@ -19,17 +16,11 @@ ferroviaria, derivados granarios, emisión en destino y ductos.
 | Catálogos | Provincias, localidades, domicilios, plantas, granos, semillas, variedades, embalajes, unidades de medida, derivados granarios y RENSPA |
 | Disponibilidad | `dummy`, sin autenticación ni emisión |
 
-La [referencia completa](WSCPE-Referencia-de-operaciones) detalla cada método,
-request, response, SOAPAction, cardinalidad y tipo XML. La aplicabilidad de cada
-operación depende del circuito y de la habilitación del contribuyente; los DTO
-no sustituyen las validaciones de negocio del manual oficial.
+La [referencia completa](WSCPE-Referencia-de-operaciones) detalla cada método, request, response, SOAPAction, cardinalidad y tipo XML. La aplicabilidad de cada operación depende del circuito y de la habilitación del contribuyente; los DTO no sustituyen las validaciones de negocio del manual oficial.
 
 ## Registro y consulta por tenant
 
-Registrar los clientes mediante `services.AddNetArcaWs()`. Resolver el contexto
-confiable de la aplicación, con su CUIT, ambiente y certificado propio; ver
-[contexto multitenant](Contexto-multitenant). No construirlo directamente con
-valores enviados por un usuario sin verificar su autorización.
+Registrar los clientes mediante `services.AddNetArcaWs()`. Resolver el contexto confiable de la aplicación, con su CUIT, ambiente y certificado propio; ver [contexto multitenant](Contexto-multitenant). No construirlo directamente con valores enviados por un usuario sin verificar su autorización.
 
 ```csharp
 using NetArcaWs.Contracts.Wscpe;
@@ -46,28 +37,13 @@ foreach (var province in response.Respuesta.Provincia)
     Console.WriteLine($"{province.Codigo}: {province.Descripcion}");
 ```
 
-El ejemplo compilable `GuideExamples.ReadCpeProvincesAsync` está en
-[GuideExamples.cs](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/examples/NetArcaWs.Examples/GuideExamples.cs).
-Los adaptadores de las 75 operaciones están en
-[OperationExamples.g.cs](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/examples/NetArcaWs.Examples/OperationExamples.g.cs).
-El cliente obtiene un ticket WSAA para `wscpe` e inyecta token, sign y
-`cuitRepresentada` en una copia del request. No modifica el DTO del consumidor.
-El namespace de los wrappers es `https://serviciosjava.afip.gob.ar/wscpe/`;
-los hijos locales `auth`, `solicitud` y `respuesta` no tienen namespace.
+El ejemplo compilable `GuideExamples.ReadCpeProvincesAsync` está en [GuideExamples.cs](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/examples/NetArcaWs.Examples/GuideExamples.cs). Los adaptadores de las 75 operaciones están en [OperationExamples.g.cs](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/examples/NetArcaWs.Examples/OperationExamples.g.cs). El cliente obtiene un ticket WSAA para `wscpe` e inyecta token, sign y `cuitRepresentada` en una copia del request. No modifica el DTO del consumidor. El namespace de los wrappers es `https://serviciosjava.afip.gob.ar/wscpe/`; los hijos locales `auth`, `solicitud` y `respuesta` no tienen namespace.
 
 ## Resultados y escrituras seguras
 
-Un HTTP 200 no confirma autorización. Interpretar `respuesta`, `errores`,
-`metadata` y los campos específicos de cada operación antes de avanzar el
-estado local. Los faults SOAP se exponen como `SoapFaultException`.
+Un HTTP 200 no confirma autorización. Interpretar `respuesta`, `errores`, `metadata` y los campos específicos de cada operación antes de avanzar el estado local. Los faults SOAP se exponen como `SoapFaultException`.
 
-WSCPE no está integrado con `SafeInvoiceService` ni con su diario de facturas.
-Sus escrituras no se reintentan automáticamente. La aplicación debe guardar
-la intención y sus identificadores antes del envío y conservar la respuesta.
-Ante timeout, desconexión o fallo local posterior, consultar el documento
-mediante la operación correspondiente antes de decidir otro envío. No reutilizar
-la estrategia de numeración o reconciliación de facturas sin adaptarla al
-circuito de cartas de porte.
+WSCPE no está integrado con `SafeInvoiceService` ni con su diario de facturas. Sus escrituras no se reintentan automáticamente. La aplicación debe guardar la intención y sus identificadores antes del envío y conservar la respuesta. Ante timeout, desconexión o fallo local posterior, consultar el documento mediante la operación correspondiente antes de decidir otro envío. No reutilizar la estrategia de numeración o reconciliación de facturas sin adaptarla al circuito de cartas de porte.
 
 ## Health check opcional
 
@@ -77,9 +53,7 @@ services.AddHealthChecks()
         timeout: TimeSpan.FromSeconds(5));
 ```
 
-El check envía el cuerpo SOAP vacío de `dummy` y exige `OK` en `appserver`,
-`authserver` y `dbserver`. No requiere certificado ni ticket y no acredita
-autorización para emitir cartas de porte. Ver [health checks](Health-checks).
+El check envía el cuerpo SOAP vacío de `dummy` y exige `OK` en `appserver`, `authserver` y `dbserver`. No requiere certificado ni ticket y no acredita autorización para emitir cartas de porte. Ver [health checks](Health-checks).
 
 ## Endpoints y documentación oficial
 
@@ -93,5 +67,4 @@ autorización para emitir cartas de porte. Ver [health checks](Health-checks).
 - [Fuentes, hashes y diferencias de contrato](Procedencia-de-contratos-SOAP).
 - [Homologación autenticada pendiente: issue #12](https://github.com/ARSASWebDesign/NetArcaWs/issues/12).
 
-La cobertura del contrato y las pruebas SOAP locales no equivalen a
-homologación fiscal autenticada ni a validar todos los circuitos de negocio.
+La cobertura del contrato y las pruebas SOAP locales no equivalen a homologación fiscal autenticada ni a validar todos los circuitos de negocio.

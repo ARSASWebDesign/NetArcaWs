@@ -33,8 +33,7 @@ internal interface IFiscalHomologationChannel
 }
 
 /// <summary>
-/// Explicitly selected offline/opt-in invoice matrix. No service request is made until a typed channel has
-/// validated catalogue availability and the frozen submission is durable in the journal.
+/// Explicitly selected offline/opt-in invoice matrix. No service request is made until a typed channel has validated catalogue availability and the frozen submission is durable in the journal.
 /// </summary>
 internal static class FiscalHomologationMatrix
 {

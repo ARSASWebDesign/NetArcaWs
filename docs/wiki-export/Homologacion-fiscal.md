@@ -2,11 +2,7 @@
 
 # Homologación fiscal automática
 
-La ejecución protegida [38327713674](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/38327713674)
-finalizó correctamente sobre el commit `960266563f15c43425bdca20ccdcabf68fb2f2e7`.
-Ejecutó `completa`: los nueve selectores autenticados y los 18 escenarios
-fiscales tipados. Esta evidencia corresponde al alcance seleccionado y no
-declara homologación de todas las operaciones de la biblioteca.
+La ejecución protegida [38327713674](https://github.com/ARSASWebDesign/NetArcaWs/actions/runs/38327713674) finalizó correctamente sobre el commit `960266563f15c43425bdca20ccdcabf68fb2f2e7`. Ejecutó `completa`: los nueve selectores autenticados y los 18 escenarios fiscales tipados. Esta evidencia corresponde al alcance seleccionado y no declara homologación de todas las operaciones de la biblioteca.
 
 El workflow **Homologación ARCA** ofrece una sola selección pública: el modo de ejecución. La emisión se autoriza al iniciar manualmente `emision` o `completa` desde `main` del repositorio oficial y al aprobar el environment protegido `homologacion`.
 
@@ -58,24 +54,11 @@ Todas las modalidades comparten un grupo de concurrencia. El estado y el diario 
 
 ## Recuperación explícita del rechazo WSFEX 1550
 
-La respuesta original de homologación confirmó que `Permiso_existente` debe
-enviarse como elemento XML, incluso vacío. El fixture lo serializa de esa forma.
-La excepción aprobada permite reconocer únicamente ese rechazo de validación
-documentado; no interpreta cualquier error WSFEX como rechazo terminal.
+La respuesta original de homologación confirmó que `Permiso_existente` debe enviarse como elemento XML, incluso vacío. El fixture lo serializa de esa forma. La excepción aprobada permite reconocer únicamente ese rechazo de validación documentado; no interpreta cualquier error WSFEX como rechazo terminal.
 
-Si una operación anterior quedó incierta, `AdjudicateWsfexValidationRejectionAsync`
-requiere la respuesta original íntegra, su snapshot exacto, versión esperada y
-metadatos de operador, origen y motivo. Conserva evidencia inmutable y la
-operación previa y no llama a ARCA. La aplicación debe autorizar al operador y
-verificar el origen de la evidencia. Luego una revisión explícita puede preparar
-el tag vacío conservando número e Id; preparar no envía.
+Si una operación anterior quedó incierta, `AdjudicateWsfexValidationRejectionAsync` requiere la respuesta original íntegra, su snapshot exacto, versión esperada y metadatos de operador, origen y motivo. Conserva evidencia inmutable y la operación previa y no llama a ARCA. La aplicación debe autorizar al operador y verificar el origen de la evidencia. Luego una revisión explícita puede preparar el tag vacío conservando número e Id; preparar no envía.
 
-Esta capacidad opcional está implementada en el diario SQLite core y su wrapper
-protegido. EF Core y los providers personalizados sin la capacidad la rechazan
-explícitamente. El ledger SQLite es aditivo y se incluye en el estado protegido.
-Ver el [ADR de emisión durable](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/adr/0001-safe-invoice-retries.md)
-para las condiciones exactas. El error 1020 de una consulta no permite resolver
-el rechazo, liberar la reserva ni cambiar el número.
+Esta capacidad opcional está implementada en el diario SQLite core y su wrapper protegido. EF Core y los providers personalizados sin la capacidad la rechazan explícitamente. El ledger SQLite es aditivo y se incluye en el estado protegido. Ver el [ADR de emisión durable](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/docs/adr/0001-safe-invoice-retries.md) para las condiciones exactas. El error 1020 de una consulta no permite resolver el rechazo, liberar la reserva ni cambiar el número.
 
 ## Lectura de resultados
 

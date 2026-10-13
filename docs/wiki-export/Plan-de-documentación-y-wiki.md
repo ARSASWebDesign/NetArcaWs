@@ -2,62 +2,29 @@
 
 # Hito 7 final: wiki integral de NetArcaWs
 
-Estado: documentación del alcance implementado completada el 2026-10-06,
-con inventario upstream trazable y ejemplos tipados para las 81 operaciones.
-La publicación no implica que todo el repositorio Python esté portado.
+Estado: documentación del alcance implementado completada el 2026-10-06, con inventario upstream trazable y ejemplos tipados para las 81 operaciones. La publicación no implica que todo el repositorio Python esté portado.
 
 ## Objetivo y publicación
 
-Consolidar **toda la documentación** del proyecto en el wiki de este repositorio
-GitHub, con navegación por tarea y por servicio. Usar la documentación de PyAfipWs
-como base temática y agregar las características propias de NetArcaWs, ejemplos
-C# y sus diferencias de comportamiento.
+Consolidar **toda la documentación** del proyecto en el wiki de este repositorio GitHub, con navegación por tarea y por servicio. Usar la documentación de PyAfipWs como base temática y agregar las características propias de NetArcaWs, ejemplos C# y sus diferencias de comportamiento.
 
-Mantener las fuentes Markdown del wiki en `docs/wiki/` dentro del repositorio
-principal, revisadas junto al código. Se publica una copia en la
-pestaña Wiki de `ARSASWebDesign/NetArcaWs`, con portada, menú nativo de GitHub y enlaces
-entre páginas. Los ADR y contratos técnicos existentes conservarán su historial:
-el wiki incluirá su contenido y procedencia, sin crear dos versiones editadas
-independientemente. Definir y verificar un mecanismo reproducible de publicación
-para que fuentes y wiki correspondan al mismo commit.
+Mantener las fuentes Markdown del wiki en `docs/wiki/` dentro del repositorio principal, revisadas junto al código. Se publica una copia en la pestaña Wiki de `ARSASWebDesign/NetArcaWs`, con portada, menú nativo de GitHub y enlaces entre páginas. Los ADR y contratos técnicos existentes conservarán su historial: el wiki incluirá su contenido y procedencia, sin crear dos versiones editadas independientemente. Definir y verificar un mecanismo reproducible de publicación para que fuentes y wiki correspondan al mismo commit.
 
-El espejo plano local se genera con `dotnet run --project tools/NetArcaWs.Build -- wiki` en
-`docs/wiki-export/`; contiene todas las páginas de contenido y un manifiesto.
-No se genera `_Sidebar.md`: evita duplicar el menú Pages de GitHub. Incluye las páginas temáticas y copia README, arquitectura, progreso,
-ADR, guía de contribución, releases, CLI y referencias, convirtiendo enlaces
-relativos a navegación entre páginas. El manifiesto declara las fuentes, la fecha
-de snapshots de contratos (2026-10-06) y la revisión de origen se registra en `SOURCE_COMMIT` del repositorio wiki.
-Se revisa junto a las fuentes antes de cada publicación. El mantenedor inicializó
-la wiki; la publicación utiliza su repositorio Git dedicado.
+El espejo plano local se genera con `dotnet run --project tools/NetArcaWs.Build -- wiki` en `docs/wiki-export/`; contiene todas las páginas de contenido y un manifiesto. No se genera `_Sidebar.md`: evita duplicar el menú Pages de GitHub. Incluye las páginas temáticas y copia README, arquitectura, progreso, ADR, guía de contribución, releases, CLI y referencias, convirtiendo enlaces relativos a navegación entre páginas. El manifiesto declara las fuentes, la fecha de snapshots de contratos (2026-10-06) y la revisión de origen se registra en `SOURCE_COMMIT` del repositorio wiki. Se revisa junto a las fuentes antes de cada publicación. El mantenedor inicializó la wiki; la publicación utiliza su repositorio Git dedicado.
 
 ## Fuentes de base e inventario
 
 - [Repositorio y README de PyAfipWs](https://github.com/reingart/pyafipws).
 - [Wiki original](https://github.com/reingart/pyafipws/wiki).
-- [Manual PyAfipWs](https://www.sistemasagiles.com.ar/trac/wiki/ManualPyAfipWs),
-  enlazado por el README original. El inventario registra las limitaciones del
-  endpoint Trac y la consulta del [manual HTML original](https://www.sistemasagiles.com.ar/site/websites/documentacion_herramientas/manualpyafipws.html).
-- Documentación, WSDL y manuales vigentes de ARCA enlazados desde los contratos
-  de cada módulo, para revisar información histórica del proyecto original.
-- Todos los Markdown, ADR, contratos XML, ejemplos, configuración y guías de
-  contribución que existan en NetArcaWs al ejecutar el hito.
+- [Manual PyAfipWs](https://www.sistemasagiles.com.ar/trac/wiki/ManualPyAfipWs), enlazado por el README original. El inventario registra las limitaciones del endpoint Trac y la consulta del [manual HTML original](https://www.sistemasagiles.com.ar/site/websites/documentacion_herramientas/manualpyafipws.html).
+- Documentación, WSDL y manuales vigentes de ARCA enlazados desde los contratos de cada módulo, para revisar información histórica del proyecto original.
+- Todos los Markdown, ADR, contratos XML, ejemplos, configuración y guías de contribución que existan en NetArcaWs al ejecutar el hito.
 
-El [inventario completado](Inventario-del-proyecto-original) registra:
-URL/ruta original, revisión o fecha consultada, tema, página destino NetArcaWs,
-estado de adaptación, diferencias y atribución. Revisar también los enlaces a
-manuales de cada servicio. La revisión de 2026-10-06 cubre las 16 páginas wiki, las 14 rutas documentales
-o de texto y los 48 módulos Python de raíz identificados en las revisiones fijadas.
+El [inventario completado](Inventario-del-proyecto-original) registra: URL/ruta original, revisión o fecha consultada, tema, página destino NetArcaWs, estado de adaptación, diferencias y atribución. Revisar también los enlaces a manuales de cada servicio. La revisión de 2026-10-06 cubre las 16 páginas wiki, las 14 rutas documentales o de texto y los 48 módulos Python de raíz identificados en las revisiones fijadas.
 
-El upstream cubre más servicios y herramientas que los hitos 1 a 5. El inventario
-no debe excluirlos silenciosamente: identificar todos los temas encontrados y
-registrar cuáles tienen equivalente, cuáles son específicos de Python/COM y
-cuáles siguen pendientes de portar. Cobertura documental no equivale a paridad
-funcional; no presentar ejemplos como ejecutables si su API todavía no existe.
+El upstream cubre más servicios y herramientas que los hitos 1 a 5. El inventario no debe excluirlos silenciosamente: identificar todos los temas encontrados y registrar cuáles tienen equivalente, cuáles son específicos de Python/COM y cuáles siguen pendientes de portar. Cobertura documental no equivale a paridad funcional; no presentar ejemplos como ejecutables si su API todavía no existe.
 
-El catálogo también debe revisar las herramientas de PDF, formatos TXT/CSV/DBF/
-XML/JSON, ejemplos de integración, interfaces COM/DLL, aplicaciones y módulos de
-ERP que aparecen en el ecosistema upstream. Documentar su correspondencia o
-situación pendiente no significa incorporarlos automáticamente a la entrega actual.
+El catálogo también debe revisar las herramientas de PDF, formatos TXT/CSV/DBF/ XML/JSON, ejemplos de integración, interfaces COM/DLL, aplicaciones y módulos de ERP que aparecen en el ecosistema upstream. Documentar su correspondencia o situación pendiente no significa incorporarlos automáticamente a la entrega actual.
 
 ## Contenido obligatorio
 
@@ -79,12 +46,9 @@ situación pendiente no significa incorporarlos automáticamente a la entrega ac
 | Desarrollo | Compilar, probar, fixtures, homologación, CI, empaquetado/publicación y contribuciones |
 | Referencia y soporte | API pública completa, configuración, diagnóstico, FAQ, glosario, fuentes, licencia y atribuciones |
 
-Para WSMTXCA, verificar el alcance contra los manuales oficiales: no equiparar
-el servicio de facturación con detalle con todo el circuito de Factura de Crédito
-Electrónica MiPyME. Mantener las diferencias en la matriz de equivalencias.
+Para WSMTXCA, verificar el alcance contra los manuales oficiales: no equiparar el servicio de facturación con detalle con todo el circuito de Factura de Crédito Electrónica MiPyME. Mantener las diferencias en la matriz de equivalencias.
 
-La organización toma el alcance del [wiki upstream](https://github.com/reingart/pyafipws/wiki)
-como punto de partida; la estructura de operación .NET y sus extras son propios.
+La organización toma el alcance del [wiki upstream](https://github.com/reingart/pyafipws/wiki) como punto de partida; la estructura de operación .NET y sus extras son propios.
 
 ## Criterios de cierre
 
@@ -102,41 +66,18 @@ como punto de partida; la estructura de operación .NET y sus extras son propios
 - [x] README enlaza el wiki publicado y conserva inicio rápido, extras y límites actuales.
 - [x] Checklist y matriz de compatibilidad actualizados; revisión final antes de declarar completo este hito.
 
-Este hito permanece al final del plan. Si aparecen módulos adicionales necesarios
-para completar el port, sus hitos de implementación deben preceder al cierre del
-wiki integral.
+Este hito permanece al final del plan. Si aparecen módulos adicionales necesarios para completar el port, sus hitos de implementación deben preceder al cierre del wiki integral.
 
 ## Reproducir la publicación
 
-1. Desde una revisión limpia del repositorio principal, ejecutar
-   `dotnet run --project tools/NetArcaWs.Build -- wiki`; el generador valida destinos internos.
-   Revisar y confirmar las fuentes y el mirror antes de continuar.
-2. Clonar `git@github.com:ARSASWebDesign/NetArcaWs.wiki.git` en una carpeta
-   externa al repositorio principal. Actualizar su rama antes de cada publicación.
-3. Copiar los Markdown de `docs/wiki-export/` a la raíz del checkout wiki.
-   Retirar únicamente páginas antiguas administradas por el manifiesto que se
-   renombraron y `_Sidebar.md` (ya no se genera); conservar contenido ajeno.
-   Revisar conflictos con páginas editadas manualmente; conservar páginas ajenas
-   al mirror. No reemplazar el historial ni usar push forzado.
-4. Guardar el SHA completo de `git rev-parse HEAD` del repositorio principal en
-   el archivo `SOURCE_COMMIT` de la wiki. Confirmar el cambio en la wiki indicando
-   ese SHA en el mensaje y hacer push a su rama predeterminada.
-5. Verificar el HEAD remoto y comparar cada archivo publicado con el mirror.
-   Home y el menú nativo permiten navegar; el manifiesto enumera las fuentes originales.
+1. Desde una revisión limpia del repositorio principal, ejecutar `dotnet run --project tools/NetArcaWs.Build -- wiki`; el generador valida destinos internos. Revisar y confirmar las fuentes y el mirror antes de continuar.
+2. Clonar `git@github.com:ARSASWebDesign/NetArcaWs.wiki.git` en una carpeta externa al repositorio principal. Actualizar su rama antes de cada publicación.
+3. Copiar los Markdown de `docs/wiki-export/` a la raíz del checkout wiki. Retirar únicamente páginas antiguas administradas por el manifiesto que se renombraron y `_Sidebar.md` (ya no se genera); conservar contenido ajeno. Revisar conflictos con páginas editadas manualmente; conservar páginas ajenas al mirror. No reemplazar el historial ni usar push forzado.
+4. Guardar el SHA completo de `git rev-parse HEAD` del repositorio principal en el archivo `SOURCE_COMMIT` de la wiki. Confirmar el cambio en la wiki indicando ese SHA en el mensaje y hacer push a su rama predeterminada.
+5. Verificar el HEAD remoto y comparar cada archivo publicado con el mirror. Home y el menú nativo permiten navegar; el manifiesto enumera las fuentes originales.
 
-El manifiesto permite reproducir el contenido de una revisión concreta del
-repositorio principal; `SOURCE_COMMIT` pertenece exclusivamente al checkout wiki
-para evitar referencias circulares en los commits del repositorio principal.
+El manifiesto permite reproducir el contenido de una revisión concreta del repositorio principal; `SOURCE_COMMIT` pertenece exclusivamente al checkout wiki para evitar referencias circulares en los commits del repositorio principal.
 
 ## Evidencia y límites del cierre
 
-Las referencias en `docs/reference/operations/` se regeneran con el comando
-`operations` de `NetArcaWs.Build`. El proyecto de ejemplos integra la solución y
-compila los 81 adaptadores tipados y ejemplos de guías. Los adaptadores reciben
-requests validados por la aplicación: no son facturas universales listas para
-producción ni reemplazan las reglas del manual ARCA. Los tests verifican
-operaciones, raíces, DTOs, actions y reproducción determinista del catálogo.
-El inventario distingue equivalencia, adaptación parcial y ausencia de port;
-la ausencia documentada no se marca como implementación. Las fuentes oficiales
-y discrepancias entre versiones de PDF/índice constan en
-[procedencia de contratos](Procedencia-de-contratos-SOAP).
+Las referencias en `docs/reference/operations/` se regeneran con el comando `operations` de `NetArcaWs.Build`. El proyecto de ejemplos integra la solución y compila los 81 adaptadores tipados y ejemplos de guías. Los adaptadores reciben requests validados por la aplicación: no son facturas universales listas para producción ni reemplazan las reglas del manual ARCA. Los tests verifican operaciones, raíces, DTOs, actions y reproducción determinista del catálogo. El inventario distingue equivalencia, adaptación parcial y ausencia de port; la ausencia documentada no se marca como implementación. Las fuentes oficiales y discrepancias entre versiones de PDF/índice constan en [procedencia de contratos](Procedencia-de-contratos-SOAP).

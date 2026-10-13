@@ -59,8 +59,7 @@ public interface IInvoiceJournal
 }
 
 /// <summary>
-/// Optional durable capability for explicitly adjudicating a narrowly allowlisted WSFEX validation rejection.
-/// Providers that do not implement it fail closed; the base journal contract remains source-compatible.
+/// Optional durable capability for explicitly adjudicating a narrowly allowlisted WSFEX validation rejection. Providers that do not implement it fail closed; the base journal contract remains source-compatible.
 /// </summary>
 public interface IInvoiceRejectionAdjudicationJournal
 {
