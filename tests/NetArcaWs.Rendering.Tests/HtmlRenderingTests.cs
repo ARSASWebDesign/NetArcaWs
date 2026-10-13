@@ -29,7 +29,7 @@ public sealed class HtmlRenderingTests
         int? condition = 6, string conditionText = "Monotributista", IReadOnlyList<string>? legends = null) =>
         new(1, TipoComprobanteGenerado.Fiscal, new(servicio, "Homologacion", 30123456789, 4, tipo, 123), "tenant",
             state, new DatosReceptor(20304050607, "Cliente", "Calle 2", conditionText, 80), "ARS", 121m,
-            [], [], legends ?? [], WsfeRequestSnapshot(tipo), 1,
+            [], [], legends ?? [], WsfeRequestSnapshot(tipo, condition ?? 6), 1,
             new ResultadoComprobante("12345678901234", new DateOnly(2026, 10, 23), [], [], "A", "E"), fecha: new DateOnly(2026, 10, 13), cotizacion: 1,
             snapshotResponse: WsfeResponseSnapshot(tipo), snapshotResponseVersion: 1, neto: 121, exento: 0, noGravado: 0, iva: 0,
             codigoCondicionIvaReceptor: condition);
@@ -148,12 +148,36 @@ public sealed class HtmlRenderingTests
     }
 
     [Fact]
+    public void Fiscal_render_rejects_missing_request_fields_and_wrong_response_qname()
+    {
+        ComprobanteGenerado valid = Fiscal();
+        XDocument missingReceiver = XDocument.Parse(valid.SnapshotRequest!);
+        missingReceiver.Descendants().First(element => element.Name.LocalName == "DocNro").Remove();
+        Assert.Throws<InvalidOperationException>(() => new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(
+            Copy(valid, request: missingReceiver.ToString(SaveOptions.DisableFormatting))));
+
+        XDocument missingTotalComponent = XDocument.Parse(valid.SnapshotRequest!);
+        missingTotalComponent.Descendants().First(element => element.Name.LocalName == "ImpNeto").Remove();
+        Assert.Throws<InvalidOperationException>(() => new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(
+            Copy(valid, request: missingTotalComponent.ToString(SaveOptions.DisableFormatting))));
+
+        string wrongRequestRoot = valid.SnapshotRequest!.Replace("http://ar.gov.afip.dif.FEV1/", "urn:wrong-contract", StringComparison.Ordinal);
+        Assert.Throws<InvalidOperationException>(() => new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(
+            Copy(valid, request: wrongRequestRoot)));
+
+        string wrongResponseRoot = valid.SnapshotResponse!.Replace("http://ar.gov.afip.dif.FEV1/", "urn:wrong-contract", StringComparison.Ordinal);
+        Assert.Throws<InvalidOperationException>(() => new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(
+            Copy(valid, response: wrongResponseRoot)));
+    }
+
+    [Fact]
     public async Task Two_issuers_render_concurrently_without_cross_contamination()
     {
         var issuerA = Issuer();
         var issuerB = new DatosEmisor(30987654321, "Segundo emisor", null, "Otra calle", "Responsable Inscripto", ingresosBrutos: "Exento", inicioActividades: new DateOnly(2020, 2, 3));
         ComprobanteGenerado docA = Fiscal();
-        ComprobanteGenerado docB = Copy(docA, identity: docA.Identidad! with { Cuit = issuerB.Identificacion });
+        ComprobanteGenerado docB = Copy(docA, identity: docA.Identidad! with { Cuit = issuerB.Identificacion },
+            response: docA.SnapshotResponse!.Replace("30123456789", issuerB.Identificacion.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal));
         Task<string> renderA = Task.Run(() => new ArcaWsGeneradorHTML(issuerA).GenerarHTMLComprobante(docA));
         Task<string> renderB = Task.Run(() => new ArcaWsGeneradorHTML(issuerB).GenerarHTMLComprobante(docB));
         string[] html = await Task.WhenAll(renderA, renderB);
@@ -182,27 +206,27 @@ public sealed class HtmlRenderingTests
         return html[start..end];
     }
 
-    private static string WsfeRequestSnapshot(int type = 1)
+    private static string WsfeRequestSnapshot(int type = 1, int condition = 6)
     {
         var request = new FecaeRequest { FeCabReq = new FecaeCabRequest { CantReg = 1, PtoVta = 4, CbteTipo = type } };
         request.FeDetReq.Add(new FecaeDetRequest
         {
             Concepto = 1, DocTipo = 80, DocNro = 20304050607, CbteDesde = 123, CbteHasta = 123,
             CbteFch = "20261013", ImpTotal = 121, ImpTotConc = 0, ImpNeto = 121, ImpOpEx = 0,
-            ImpTrib = 0, ImpIva = 0, MonId = "ARS", MonCotiz = 1
+            ImpTrib = 0, ImpIva = 0, MonId = "ARS", MonCotiz = 1, CondicionIvaReceptorId = condition
         });
         return Serialize(request);
     }
 
     private static string WsfeResponseSnapshot(int type = 1)
     {
-        var response = new FecaeResponse { FeCabResp = new FecaeCabResponse { CantReg = 1, PtoVta = 4, CbteTipo = type, Resultado = "A" } };
-        response.FeDetResp.Add(new FecaeDetResponse
+        var result = new FecaeResponse { FeCabResp = new FecaeCabResponse { CantReg = 1, Cuit = 30123456789, PtoVta = 4, CbteTipo = type, Resultado = "A" } };
+        result.FeDetResp.Add(new FecaeDetResponse
         {
             Concepto = 1, DocTipo = 80, DocNro = 20304050607, CbteDesde = 123, CbteHasta = 123,
             CbteFch = "20261013", Resultado = "A", Cae = "12345678901234", CaeFchVto = "20261023"
         });
-        return Serialize(response);
+        return Serialize(new FecaeSolicitarResponse { FecaeSolicitarResult = result });
     }
 
     private static string Serialize<T>(T value)

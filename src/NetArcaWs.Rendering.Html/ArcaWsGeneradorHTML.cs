@@ -15,7 +15,7 @@ public sealed class ArcaWsGeneradorHTML(DatosEmisor emisor)
     public string GenerarHTMLComprobante(ComprobanteGenerado datos)
     {
         DocumentLayout layout = DocumentRenderValidator.Validate(datos, _issuer);
-        ValidateConditions(datos, layout);
+        DocumentFiscalRules.ValidateConditions(datos, layout);
         string qrUrl = layout.IsFiscal ? FiscalQrPayload.Create(datos, _issuer) : string.Empty;
         string qr = layout.IsFiscal ? MakeQr(qrUrl) : string.Empty;
         var html = new StringBuilder(12_000);
@@ -44,7 +44,7 @@ public sealed class ArcaWsGeneradorHTML(DatosEmisor emisor)
         html.Append("</div></header>");
         html.Append("<section class=\"receiver\"><h3>Datos del receptor</h3><div><b>Nombre / razón social:</b> ").Append(E(datos.Receptor.Nombre)).Append("</div>");
         if (!string.IsNullOrWhiteSpace(datos.Receptor.Domicilio)) html.Append("<div><b>Domicilio:</b> ").Append(E(datos.Receptor.Domicilio)).Append("</div>");
-        if (!string.IsNullOrWhiteSpace(datos.Receptor.CondicionTributaria)) html.Append("<div><b>Condición frente al IVA:</b> ").Append(E(ReceiverCondition(datos))).Append("</div>");
+        if (!string.IsNullOrWhiteSpace(datos.Receptor.CondicionTributaria) || datos.CodigoCondicionIvaReceptor is not null) html.Append("<div><b>Condición frente al IVA:</b> ").Append(E(DocumentFiscalRules.ReceiverCondition(datos))).Append("</div>");
         string receiverId = datos.Receptor.IdentificacionFiscal ?? datos.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture);
         if (!string.IsNullOrWhiteSpace(receiverId)) html.Append("<div><b>Identificación:</b> ").Append(E(receiverId)).Append("</div>");
         html.Append("</section>");
@@ -69,7 +69,7 @@ public sealed class ArcaWsGeneradorHTML(DatosEmisor emisor)
             else AppendSummaryTable(html, datos);
             AppendTaxes(html, datos);
             AppendFiscalTotals(html, datos);
-            IReadOnlyList<string> legends = DocumentLegends(datos);
+            IReadOnlyList<string> legends = DocumentFiscalRules.DocumentLegends(datos);
             if (legends.Count > 0)
             {
                 html.Append("<section class=\"notes\"><h3>Leyendas</h3>");
@@ -84,45 +84,6 @@ public sealed class ArcaWsGeneradorHTML(DatosEmisor emisor)
         else html.Append("<div>").Append(E(layout.RequiredLegend!)).Append("</div>");
         html.Append("</div></footer></main></body></html>");
         return html.ToString();
-    }
-
-    private static void ValidateConditions(ComprobanteGenerado document, DocumentLayout layout)
-    {
-        if (!layout.IsFiscal) return;
-        foreach (string? suppliedCondition in new[] { document.CondicionIvaReceptor, document.Receptor.CondicionTributaria })
-            if (!string.IsNullOrWhiteSpace(suppliedCondition) && !ConditionMatches(document.CodigoCondicionIvaReceptor, suppliedCondition))
-                throw new InvalidOperationException("La condición de IVA informada contradice el código fiscal correlacionado.");
-        if (document.Identidad!.Tipo is 1 or 2 or 3 && document.CodigoCondicionIvaReceptor == 5)
-            throw new NotSupportedException("La combinación de comprobante A y consumidor final no está habilitada para renderizar.");
-        if (document.CodigoCondicionIvaReceptor == 5)
-        {
-            if (document.Iva is null) throw new InvalidOperationException("Falta el IVA contenido requerido para transparencia al consumidor.");
-            foreach (ImpuestoComprobante tax in document.Impuestos.Where(tax => tax.Tipo == TipoImpuestoComprobante.OtroTributo))
-                if (tax.Clasificacion is not ("NacionalIndirecto" or "NoNacionalIndirecto" or "NoIndirecto"))
-                    throw new InvalidOperationException("La clasificación fiscal de cada otro tributo es obligatoria para la transparencia al consumidor.");
-        }
-    }
-
-    private static bool ConditionMatches(int? code, string condition) => code switch
-    {
-        1 => condition.Contains("responsable inscripto", StringComparison.OrdinalIgnoreCase) || condition.Contains("responsable inscrito", StringComparison.OrdinalIgnoreCase),
-        4 => condition.Contains("exent", StringComparison.OrdinalIgnoreCase),
-        5 => condition.Contains("consumidor final", StringComparison.OrdinalIgnoreCase),
-        6 => condition.Contains("monotrib", StringComparison.OrdinalIgnoreCase),
-        _ => true
-    };
-
-    private static string ReceiverCondition(ComprobanteGenerado document) => DocumentLayout.CanonicalReceiverCondition(document.CodigoCondicionIvaReceptor)
-        ?? document.CondicionIvaReceptor ?? document.Receptor.CondicionTributaria ?? string.Empty;
-
-    private static IReadOnlyList<string> DocumentLegends(ComprobanteGenerado document)
-    {
-        var legends = document.Leyendas.ToList();
-        if (document.Identidad!.Tipo is 1 or 2 or 3 && document.CodigoCondicionIvaReceptor == 6 &&
-            !legends.Contains(DocumentLayout.MonotributoLegend, StringComparer.OrdinalIgnoreCase)) legends.Insert(0, DocumentLayout.MonotributoLegend);
-        if (document.Identidad.Tipo is 6 or 7 or 8 or 11 or 12 or 13 && document.CodigoCondicionIvaReceptor == 5 &&
-            !legends.Contains(DocumentLayout.ConsumerLegend, StringComparer.OrdinalIgnoreCase)) legends.Insert(0, DocumentLayout.ConsumerLegend);
-        return legends;
     }
 
     private static void AppendDetailTable(StringBuilder html, IReadOnlyList<LineaComprobante> lines, string currency)
@@ -156,12 +117,12 @@ public sealed class ArcaWsGeneradorHTML(DatosEmisor emisor)
         {
             if (document.Iva is not decimal consumerIva) throw new InvalidOperationException("Falta el importe de IVA contenido requerido para transparencia al consumidor.");
             decimal nationalTaxes = document.Impuestos.Where(tax => tax.Tipo == TipoImpuestoComprobante.OtroTributo && tax.Clasificacion == "NacionalIndirecto").Sum(tax => tax.Importe);
-            html.Append("<section class=\"transparency\"><h3>Régimen de Transparencia Fiscal al Consumidor (Ley 27.743)</h3><div><span>IVA contenido</span><strong>").Append(Money(consumerIva, document.Moneda)).Append("</strong></div><div><span>Otros impuestos nacionales indirectos</span><strong>").Append(Money(nationalTaxes, document.Moneda)).Append("</strong></div></section>");
+            html.Append("<section class=\"transparency\"><h3>").Append(DocumentFiscalRules.ConsumerTransparencyTitle).Append("</h3><div><span>").Append(DocumentFiscalRules.ConsumerIvaLabel).Append("</span><strong>").Append(Money(consumerIva, document.Moneda)).Append("</strong></div><div><span>").Append(DocumentFiscalRules.ConsumerOtherTaxesLabel).Append("</span><strong>").Append(Money(nationalTaxes, document.Moneda)).Append("</strong></div></section>");
         }
         else
         {
-            html.Append("<section class=\"totals\"><div><span>Importe neto</span><strong>").Append(Money(document.Neto ?? document.Total, document.Moneda)).Append("</strong></div>");
-            if (document.Iva is decimal iva) html.Append("<div><span>IVA total</span><strong>").Append(Money(iva, document.Moneda)).Append("</strong></div>");
+            html.Append("<section class=\"totals\"><div><span>").Append(DocumentFiscalRules.NetTotalLabel).Append("</span><strong>").Append(Money(document.Neto ?? document.Total, document.Moneda)).Append("</strong></div>");
+            if (document.Iva is decimal iva) html.Append("<div><span>").Append(DocumentFiscalRules.IvaTotalLabel).Append("</span><strong>").Append(Money(iva, document.Moneda)).Append("</strong></div>");
         }
         decimal nationalIndirect = document.Impuestos.Where(tax => tax.Tipo == TipoImpuestoComprobante.OtroTributo && tax.Clasificacion == "NacionalIndirecto").Sum(tax => tax.Importe);
         if (document.CodigoCondicionIvaReceptor != 5 && nationalIndirect != 0) html.Append("<div><span>Otros impuestos nacionales indirectos</span><strong>").Append(Money(nationalIndirect, document.Moneda)).Append("</strong></div>");
@@ -208,5 +169,5 @@ public sealed class ArcaWsGeneradorHTML(DatosEmisor emisor)
     private static string E(string? value) => WebUtility.HtmlEncode(value ?? string.Empty);
     private static CultureInfo ArCulture => CultureInfo.GetCultureInfo("es-AR");
 
-    private const string Styles = "@page{size:A4;margin:14mm}*{box-sizing:border-box}body{margin:0;color:#171717;background:#e8e8e8;font:10pt Arial,Helvetica,sans-serif}.page{width:210mm;min-height:297mm;margin:18px auto;padding:14mm;background:#fff;box-shadow:0 1px 8px #999;display:flex;flex-direction:column}.issuer{display:grid;grid-template-columns:1fr 19mm 48mm;gap:8px;align-items:start;border-bottom:1px solid #555;padding:8px 0 12px}.logo{grid-column:1/-1;max-width:42mm;max-height:22mm;object-fit:contain}.issuer-copy h1{font-size:15pt;margin:0 0 4px}.document-code{text-align:center;border:1px solid #333;padding:4px}.document-code strong{display:block;font-size:22pt}.document-code small{display:block;font-size:8pt}.document-meta{text-align:right;font-size:9pt}.document-meta h2{font-size:14pt;margin:0 0 5px}.copy-label{font-weight:bold;letter-spacing:.12em;margin:3px 0}.receiver{padding:12px 0;border-bottom:1px solid #aaa;line-height:1.6}.receiver h3,.payments h3,.notes h3,.taxes h3,.transparency h3{font-size:10pt;margin:0 0 5px}.details{width:100%;border-collapse:collapse;margin-top:14px}.details thead{display:table-header-group}.details th{background:#eee;text-align:left;border-bottom:1px solid #777}.details th,.details td{padding:6px;border-bottom:1px solid #ddd;vertical-align:top}.number{text-align:right;white-space:nowrap}.totals{width:68%;margin:12px 0 0 auto}.totals>div,.transparency>div{display:flex;justify-content:space-between;padding:4px;border-bottom:1px solid #ddd}.totals .grand-total{font-size:12pt;border-top:1px solid #222;border-bottom:3px double #222;margin-top:5px;padding:8px 4px}.notes,.taxes,.transparency{margin-top:12px}.notes p{margin:4px 0}.required-legend{display:flex;justify-content:center;align-items:center;gap:14px;border:2px solid #222;padding:7px;margin:0 auto 12px;text-align:center;width:100%;font-size:10pt}.required-legend strong{font-size:18pt}.authorization{display:flex;gap:14px;align-items:center;justify-content:space-between;border-top:1px solid #555;padding-top:9px;margin-top:auto}.qr{width:30mm;height:30mm;flex:none}.qr-image{display:block;width:100%;height:100%;image-rendering:pixelated}.footer-copy{text-align:right;font-size:8pt}.footer-copy strong{display:block;font-size:9pt}.payments{margin-top:12px}.payments table,.taxes table{width:100%;border-collapse:collapse}.payments th,.payments td,.taxes th,.taxes td{padding:6px;border-bottom:1px solid #ddd}@media print{body{background:#fff}.page{width:auto;min-height:269mm;margin:0;padding:0;box-shadow:none}tr{break-inside:avoid}.receiver,.totals,.authorization,.transparency{break-inside:avoid}}@media screen and (max-width:700px){.page{width:100%;min-height:100vh;margin:0;padding:18px}.issuer{grid-template-columns:1fr 16mm}.document-meta{grid-column:1/-1;text-align:left}.totals,.transparency{width:100%}.details,.taxes{font-size:8pt}.details th,.details td,.taxes th,.taxes td{padding:4px}.authorization{align-items:flex-end}}";
+    private const string Styles = "@page{size:A4;margin:14mm}*{box-sizing:border-box}body{margin:0;color:#171717;background:#e8e8e8;font:10pt Arial,Helvetica,sans-serif}.page{width:210mm;min-height:297mm;margin:18px auto;padding:14mm;background:#fff;box-shadow:0 1px 8px #999;display:flex;flex-direction:column}.issuer{display:grid;grid-template-columns:1fr 19mm 1fr;gap:8px;align-items:start;border-bottom:1px solid #555;padding:8px 0 12px}.logo{grid-column:1/-1;justify-self:start;display:block;max-width:42mm;max-height:22mm;object-fit:contain}.issuer-copy h1{font-size:15pt;margin:0 0 4px}.document-code{text-align:center;border:1px solid #333;padding:4px}.document-code strong{display:block;font-size:22pt}.document-code small{display:block;font-size:8pt}.document-meta{text-align:right;font-size:9pt}.document-meta h2{font-size:14pt;margin:0 0 5px}.copy-label{font-weight:bold;letter-spacing:.12em;margin:3px 0}.receiver{padding:12px 0;border-bottom:1px solid #aaa;line-height:1.6}.receiver h3,.payments h3,.notes h3,.taxes h3,.transparency h3{font-size:10pt;margin:0 0 5px}.details{width:100%;border-collapse:collapse;margin-top:14px}.details thead{display:table-header-group}.details th{background:#eee;text-align:left;border-bottom:1px solid #777}.details th,.details td{padding:6px;border-bottom:1px solid #ddd;vertical-align:top}.number{text-align:right;white-space:nowrap}.totals{width:68%;margin:12px 0 0 auto}.totals>div,.transparency>div{display:flex;justify-content:space-between;padding:4px;border-bottom:1px solid #ddd}.totals .grand-total{font-size:12pt;border-top:1px solid #222;border-bottom:3px double #222;margin-top:5px;padding:8px 4px}.notes,.taxes,.transparency{margin-top:12px}.notes p{margin:4px 0}.required-legend{display:flex;justify-content:center;align-items:center;gap:14px;border:2px solid #222;padding:7px;margin:0 auto 12px;text-align:center;width:100%;font-size:10pt}.required-legend strong{font-size:18pt}.authorization{display:flex;gap:14px;align-items:center;justify-content:space-between;border-top:1px solid #555;padding-top:9px;margin-top:auto}.qr{width:30mm;height:30mm;flex:none}.qr-image{display:block;width:100%;height:100%;image-rendering:pixelated}.footer-copy{text-align:right;font-size:8pt}.footer-copy strong{display:block;font-size:9pt}.payments{margin-top:12px}.payments table,.taxes table{width:100%;border-collapse:collapse}.payments th,.payments td,.taxes th,.taxes td{padding:6px;border-bottom:1px solid #ddd}@media print{body{background:#fff}.page{width:auto;min-height:269mm;margin:0;padding:0;box-shadow:none}tr{break-inside:avoid}.receiver,.totals,.authorization,.transparency{break-inside:avoid}}@media screen and (max-width:700px){.page{width:100%;min-height:100vh;margin:0;padding:18px}.issuer{grid-template-columns:1fr 16mm}.document-meta{grid-column:1/-1;text-align:left}.totals,.transparency{width:100%}.details,.taxes{font-size:8pt}.details th,.details td,.taxes th,.taxes td{padding:4px}.authorization{align-items:flex-end}}";
 }

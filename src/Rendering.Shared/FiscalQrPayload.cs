@@ -29,8 +29,12 @@ internal static class FiscalQrPayload
         };
         int? docType = document.Receptor.CodigoTipoDocumento;
         string? recipientNumber = document.Receptor.IdentificacionFiscal ?? document.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture);
-        if (docType is not null && long.TryParse(recipientNumber, NumberStyles.None, CultureInfo.InvariantCulture, out long numericId) && numericId >= 0)
+        if (docType is not null)
         {
+            if (string.IsNullOrEmpty(recipientNumber) || recipientNumber.Length > 20 ||
+                recipientNumber.Any(character => !char.IsAsciiDigit(character)) ||
+                !decimal.TryParse(recipientNumber, NumberStyles.None, CultureInfo.InvariantCulture, out decimal numericId))
+                throw new InvalidOperationException("El número de documento del receptor no es válido para el QR de ARCA.");
             values["tipoDocRec"] = docType.Value;
             values["nroDocRec"] = numericId;
         }
