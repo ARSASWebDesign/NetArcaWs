@@ -20,15 +20,35 @@ local. El [ejemplo ejecutable de galería](../../examples/NetArcaWs.Rendering.Ex
 usa únicamente snapshots sintéticos y no llama a ARCA.
 
 Conservá el snapshot y el perfil de emisor que se usó con el comprobante. Este
-ejemplo muestra un round-trip JSON básico; en producción guardá estos valores
-en el almacenamiento protegido que administre tu aplicación:
+ejemplo completo crea un recibo X local con datos sintéticos, persiste el
+snapshot y el perfil como JSON, los vuelve a cargar y genera HTML y PDF. En
+producción usá el almacenamiento protegido que administre tu aplicación:
 
 ```csharp
+using System;
+using System.IO;
 using System.Text.Json;
 using NetArcaWs.Documents;
 using NetArcaWs.Rendering.Html;
 using NetArcaWs.Rendering.Pdf;
 
+string dataDirectory = Path.Combine(AppContext.BaseDirectory, "datos-ejemplo");
+var perfilEmisor = new DatosEmisor(
+    identificacion: 30123456789,
+    razonSocial: "Comercial Ejemplo SRL",
+    nombreFantasia: "La Tienda",
+    domicilio: "Av. Ejemplo 123, Córdoba",
+    condicionTributaria: "Responsable Inscripto",
+    ingresosBrutos: "30-12345678-9",
+    inicioActividades: new DateOnly(2018, 4, 1));
+ComprobanteGenerado comprobante = new ReciboX(perfilEmisor).GenerarComprobante(new DatosReciboX(
+    NumeroInterno: "X-0001",
+    Fecha: new DateOnly(2026, 10, 13),
+    Receptor: new DatosReceptor(20304050607, "Cliente de ejemplo", "San Martín 456, Córdoba", "Responsable Inscripto"),
+    Moneda: "ARS",
+    Total: 12100m,
+    Detalles: [new LineaReciboX("Servicio de ejemplo", 12100m, "ARS")],
+    Pagos: [new PagoReciboX("Transferencia", 12100m, "ARS")]));
 var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
 {
     WriteIndented = true
@@ -46,11 +66,22 @@ DatosEmisor emisorCargado = JsonSerializer.Deserialize<DatosEmisor>(
     await File.ReadAllTextAsync(issuerPath), jsonOptions)
     ?? throw new InvalidDataException("No se pudo leer el perfil histórico del emisor.");
 
+string sampleDirectory = Path.Combine(dataDirectory, "muestras-renderizadas");
+Directory.CreateDirectory(sampleDirectory);
+
 string html = new ArcaWsGeneradorHTML(emisorCargado)
     .GenerarHTMLComprobante(comprobanteCargado);
 byte[] pdf = new ArcaWsGeneradorPDF(emisorCargado)
     .GenerarPDFComprobante(comprobanteCargado);
+await File.WriteAllTextAsync(Path.Combine(sampleDirectory, "comprobante.html"), html);
+await File.WriteAllBytesAsync(Path.Combine(sampleDirectory, "comprobante.pdf"), pdf);
 ```
+
+Para emitir un documento fiscal, reemplazá la creación local de `ReciboX` por
+la sobrecarga tipada de `ArcaWsComprobantes` y un `ArcaTenantContext` que la
+aplicación ya haya autorizado. Ese flujo fiscal requiere el `SafeInvoiceService`
+persistente y una clave de idempotencia; el ejemplo de arriba no emite ni
+consulta comprobantes en ARCA.
 
 En el proyecto consumidor agregá sólo los paquetes que vas a usar:
 `NetArcaWs.Rendering.Html` y/o `NetArcaWs.Rendering.Pdf`, además de `NetArcaWs`

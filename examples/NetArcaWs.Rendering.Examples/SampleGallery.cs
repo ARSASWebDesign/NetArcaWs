@@ -12,6 +12,7 @@ namespace NetArcaWs.Rendering.Examples;
 public sealed record SampleCase(string Id, string Group, string Description, ComprobanteGenerado Document, DatosEmisor Issuer);
 public static class SampleGallery
 {
+    private const string SyntheticNotice = "MUESTRA SINTETICA - SIN VALIDEZ FISCAL";
     private const long IssuerId = 30123456789;
     private const string Cae = "12345678901234";
     private static readonly DateOnly IssueDate = new(2026, 10, 13), ExpiryDate = new(2026, 10, 23);
@@ -67,8 +68,10 @@ public static class SampleGallery
                 (ComprobanteGenerado doc, DatosEmisor persistedIssuer) = ExampleDocumentStore.Load(db);
                 File.WriteAllText(Path.Combine(dir, "document.json"), JsonSerializer.Serialize(doc, JsonOptions));
                 File.WriteAllText(Path.Combine(dir, "issuer.json"), JsonSerializer.Serialize(persistedIssuer, JsonOptions));
-                File.WriteAllText(Path.Combine(dir, "comprobante.html"), new ArcaWsGeneradorHTML(persistedIssuer).GenerarHTMLComprobante(doc));
-                File.WriteAllBytes(Path.Combine(dir, "comprobante.pdf"), new ArcaWsGeneradorPDF(persistedIssuer).GenerarPDFComprobante(doc));
+                string renderedHtml = new ArcaWsGeneradorHTML(persistedIssuer).GenerarHTMLComprobante(doc);
+                File.WriteAllText(Path.Combine(dir, "comprobante.html"), AddSyntheticNotice(renderedHtml), new UTF8Encoding(false));
+                byte[] renderedPdf = new ArcaWsGeneradorPDF(persistedIssuer).GenerarPDFComprobante(doc);
+                File.WriteAllBytes(Path.Combine(dir, "comprobante.pdf"), AddSyntheticNotice(renderedPdf));
                 html.Append("<article class=\"card\"><h3>").Append(VariantTitle(i)).Append("</h3><p>").Append(E(sample.Description))
                     .Append("</p><p>Persistido y reabierto desde SQLite + JSON.</p><p><a href=\"").Append(E(id))
                     .Append("/comprobante.html\">Ver HTML</a> · <a href=\"").Append(E(id)).Append("/comprobante.pdf\">Abrir PDF</a></p></article>");
@@ -87,6 +90,34 @@ public static class SampleGallery
         _ => new(x.Identificacion, x.RazonSocial, null, x.Domicilio, x.CondicionTributaria, ingresosBrutos: x.IngresosBrutos, inicioActividades: x.InicioActividades)
     };
     private static string VariantTitle(int i) => i switch { 0 => "PNG LOGO · La Tienda · razón social", 1 => "Sin logo · La Tienda · razón social", _ => "Sin logo · razón social sola" };
+
+    private static string AddSyntheticNotice(string html)
+    {
+        const string body = "<body>";
+        int bodyIndex = html.IndexOf(body, StringComparison.OrdinalIgnoreCase);
+        if (bodyIndex < 0) throw new InvalidDataException("El HTML renderizado no contiene el elemento body esperado.");
+        int insertAt = bodyIndex + body.Length;
+        const string notice = "<aside role=\"note\" style=\"box-sizing:border-box;width:100%;padding:8px 12px;margin:0 0 10px;text-align:center;font:700 12px Arial,sans-serif;letter-spacing:.04em;color:#7f1d1d;background:#fee2e2;border:2px solid #b91c1c\">MUESTRA SINTETICA - SIN VALIDEZ FISCAL</aside>";
+        return html.Insert(insertAt, notice);
+    }
+
+    private static byte[] AddSyntheticNotice(byte[] pdf)
+    {
+        using var source = new MemoryStream(pdf);
+        using PdfSharp.Pdf.PdfDocument document = PdfSharp.Pdf.IO.PdfReader.Open(source, PdfSharp.Pdf.IO.PdfDocumentOpenMode.Modify);
+        foreach (PdfSharp.Pdf.PdfPage page in document.Pages)
+        {
+            using PdfSharp.Drawing.XGraphics graphics = PdfSharp.Drawing.XGraphics.FromPdfPage(page, PdfSharp.Drawing.XGraphicsPdfPageOptions.Prepend);
+            var band = new PdfSharp.Drawing.XRect(0, 0, page.Width.Point, PdfSharp.Drawing.XUnit.FromMillimeter(8).Point);
+            graphics.DrawRectangle(PdfSharp.Drawing.XBrushes.MistyRose, band);
+            graphics.DrawString(SyntheticNotice, new PdfSharp.Drawing.XFont("Noto Sans", 8, PdfSharp.Drawing.XFontStyleEx.Bold),
+                PdfSharp.Drawing.XBrushes.DarkRed, band, PdfSharp.Drawing.XStringFormats.Center);
+        }
+
+        using var output = new MemoryStream();
+        document.Save(output, closeStream: false);
+        return output.ToArray();
+    }
 
     private static ComprobanteGenerado Wsfe(int type, int cond, DatosReceptor receiver, long number, decimal net, decimal vat, string desc, bool associate = false)
     {

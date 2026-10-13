@@ -11,6 +11,29 @@ namespace NetArcaWs.Rendering.Tests;
 public sealed class RenderingSampleTests
 {
     [Fact]
+    public void Every_generated_sample_html_and_pdf_has_visible_synthetic_notice()
+    {
+        const string notice = "MUESTRA SINTETICA - SIN VALIDEZ FISCAL";
+        string root = Path.Combine(Path.GetTempPath(), $"netarcaws-gallery-notice-{Guid.NewGuid():N}");
+        try
+        {
+            string run = SampleGallery.Generate(root);
+            string[] htmlFiles = Directory.GetFiles(run, "comprobante.html", SearchOption.AllDirectories);
+            string[] pdfFiles = Directory.GetFiles(run, "comprobante.pdf", SearchOption.AllDirectories);
+            Assert.Equal(36, htmlFiles.Length);
+            Assert.Equal(36, pdfFiles.Length);
+            foreach (string path in htmlFiles)
+                Assert.Contains(notice, File.ReadAllText(path), StringComparison.Ordinal);
+            foreach (string path in pdfFiles)
+                Assert.Contains(notice, PdfText(File.ReadAllBytes(path)), StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void SampleLogo_ContainsCenteredReadableWordmarkWithSafePadding()
     {
         byte[] png = SampleGallery.CreateCases().Single(item => item.Id == "wsfe-a-ri-logo").Issuer.LogoPng!;
