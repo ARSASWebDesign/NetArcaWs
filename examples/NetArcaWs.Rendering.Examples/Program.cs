@@ -13,5 +13,5 @@ if (args.Length > 0)
 
 string run = SampleGallery.Generate(output);
 Console.WriteLine($"Galería sintética generada: {Path.GetFullPath(run)}");
-Console.WriteLine($"Muestras: {SampleGallery.CreateCases().Count} escenarios × 3 perfiles de marca.");
+Console.WriteLine($"Muestras: {SampleGallery.CreateCases().Count} escenarios × 3 perfiles de marca + 1 variante de color.");
 return 0;

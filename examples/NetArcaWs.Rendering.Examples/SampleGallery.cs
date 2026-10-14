@@ -9,7 +9,7 @@ using NetArcaWs.Documents;
 using NetArcaWs.Rendering.Html;
 using NetArcaWs.Rendering.Pdf;
 namespace NetArcaWs.Rendering.Examples;
-public sealed record SampleCase(string Id, string Group, string Description, ComprobanteGenerado Document, DatosEmisor Issuer);
+public sealed record SampleCase(string Id, string Group, string Description, ComprobanteGenerado? Document, DatosEmisor Issuer, RemitoGenerado? Remito = null);
 public static class SampleGallery
 {
     private const string SyntheticNotice = "MUESTRA SINTETICA - SIN VALIDEZ FISCAL";
@@ -26,7 +26,7 @@ public static class SampleGallery
         DatosReceptor ri = new(20304050607, "Distribuidora Horizonte SA", "San Martín 456, Córdoba", "Responsable Inscripto", 80);
         DatosReceptor mono = new(27234567891, "Taller del Centro", "Belgrano 222, Córdoba", "Monotributista", 80);
         DatosReceptor final = new(0, "Consumidor Final", null, null, 99);
-        DatosReceptor foreign = new(840, "Norte Trading LLC", "21 Market St, Miami, FL", "Cliente del exterior", 80, "9876543210123");
+        DatosReceptor foreign = new(55000002126, "Norte Trading LLC", "21 Market St, Miami, FL", "Cliente del exterior", 80, "9876543210123");
         return [
             new("wsfe-a-ri-logo", "WSFE / Factura A", "Factura A a responsable inscripto con IVA discriminado", Wsfe(1, 1, ri, 123, 100m, 21m, "Venta de mercadería"), BrandedIssuer),
             new("wsfe-a-monotributo", "WSFE / Factura A", "Factura A a monotributista con leyenda legal automática", Wsfe(1, 6, mono, 124, 100m, 21m, "Servicio de mantenimiento"), BrandedIssuer),
@@ -34,12 +34,16 @@ public static class SampleGallery
             new("wsfe-c-consumidor-final", "WSFE / Factura C", "Factura C a consumidor final sin identificación, emitida por monotributista", Wsfe(11, 5, final, 126, 121m, 0m, "Servicio a consumidor final"), BrandedMonoIssuer),
             new("wsfe-nota-credito-a", "WSFE / Nota de crédito A", "Nota de crédito A asociada a factura A 00004-00000122", Wsfe(3, 1, ri, 127, 100m, 21m, "Anulación parcial de venta", associate: true), BrandedIssuer),
             new("wsfe-nota-debito-a", "WSFE / Nota de débito A", "Nota de débito A asociada a factura A 00004-00000122", Wsfe(2, 1, ri, 128, 100m, 21m, "Diferencia de precio", associate: true), BrandedIssuer),
-            new("wsfex-e-exportacion", "WSFEX / Exportación E", "Exportación E con identificador fiscal extranjero", Wsfex(foreign, 129), BrandedIssuer),
+            new("wsfex-e-exportacion", "WSFEX / Exportación E", "Exportación E con campos fiscales y comerciales diferenciados", Wsfex(foreign, 129), BrandedIssuer),
             new("wsmtxca-a", "WSMTXCA / Factura A", "Factura A de factura con detalle e IVA", Wsmtxca(1, 1, ri, 130, 100m, 21m), BrandedIssuer),
             new("wsmtxca-b", "WSMTXCA / Factura B", "Factura B de consumidor final con IVA transparente", Wsmtxca(6, 5, final, 131, 100m, 21m), BrandedIssuer),
             new("x-recibo-total", "Recibo X", "Recibo X con pago total e imputación", Receipt("X-0001", 121m, [new("Factura A 00004-00000122", 121m, "ARS")]), LegalIssuer),
             new("x-recibo-parcial", "Recibo X", "Recibo X con pago parcial e imputación", Receipt("X-0002", 50m, [new("Factura A 00004-00000122", 50m, "ARS")]), LegalIssuer),
-            new("wsmtxca-a-multipagina", "WSMTXCA / Multipágina", "Factura A con detalle y leyendas extensas para revisar paginación", Multipage(ri, 132), BrandedIssuer)
+            new("wsmtxca-a-multipagina", "WSMTXCA / Multipágina", "Factura A con detalle y leyendas extensas para revisar paginación", Multipage(ri, 132), BrandedIssuer),
+            RemitoCase("remito-r-original", "Remitos R", "Remito R original con CAI declarado y datos de imprenta", RemitoR(ri, 133, true, 12), BrandedIssuer),
+            RemitoCase("remito-r-duplicado", "Remitos R", "Remito R duplicado", RemitoR(ri, 134, false, 4), BrandedIssuer),
+            RemitoCase("remito-x-interno", "Remitos X", "Remito X para traslado interno en el mismo predio", RemitoX(ri, 135), BrandedIssuer),
+            RemitoCase("remito-r-largo", "Remitos R", "Remito R extenso con varias páginas", RemitoR(ri, 136, true, 48), BrandedIssuer)
         ];
     }
 
@@ -53,7 +57,7 @@ public static class SampleGallery
         DateTimeOffset created = DateTimeOffset.UtcNow;
         string run = Path.Combine(root, created.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(run);
-        var html = new StringBuilder("<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Galería sintética de comprobantes</title><style>body{font:16px system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#18212b}h1,h2{color:#132d4b}.group{border-top:2px solid #cbd5e1;margin-top:2rem}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1rem}.card{border:1px solid #cbd5e1;border-radius:10px;padding:1rem}.links{display:flex;gap:1rem;margin-top:1rem}</style></head><body><h1>Galería sintética de comprobantes</h1><p>Datos ficticios para revisión visual. No prueban autorización real ni homologación ARCA.</p>");
+        var html = new StringBuilder("<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Galería sintética de comprobantes</title><style>body{font:16px system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#181818;background:#f3f3f3}h1,h2{color:#222}.group{border-top:2px solid #ccc;margin-top:2rem}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1rem}.card{border:1px solid #ccc;border-radius:4px;padding:1rem;background:white}.preview{width:100%;height:160px;border:1px solid #ccc;background:#fff;pointer-events:none}.links{display:flex;gap:1rem;margin-top:1rem}</style></head><body><h1>Galería sintética de comprobantes</h1><p>Datos ficticios para revisión visual. No prueban autorización real ni homologación ARCA.</p>");
         string[] variants = ["logo-fantasia-razon-social", "sin-logo-fantasia-razon-social", "sin-logo-solo-razon-social"];
         IReadOnlyList<SampleCase> cases = CreateCases();
         foreach (SampleCase sample in cases)
@@ -64,23 +68,49 @@ public static class SampleGallery
                 DatosEmisor issuer = BrandVariant(sample.Issuer, i);
                 string id = sample.Id + "-" + variants[i], dir = Path.Combine(run, id), db = Path.Combine(run, id, "persistence.sqlite");
                 Directory.CreateDirectory(dir);
-                ExampleDocumentStore.Save(db, sample.Document, issuer);
-                (ComprobanteGenerado doc, DatosEmisor persistedIssuer) = ExampleDocumentStore.Load(db);
-                File.WriteAllText(Path.Combine(dir, "document.json"), JsonSerializer.Serialize(doc, JsonOptions));
+                ExampleDocumentStore.StoredSample stored;
+                if (sample.Document is not null)
+                {
+                    ExampleDocumentStore.Save(db, sample.Document, issuer);
+                    stored = ExampleDocumentStore.LoadSample(db);
+                }
+                else
+                {
+                    RemitoGenerado remito = ReissueRemito(sample.Remito!, issuer);
+                    ExampleDocumentStore.Save(db, remito, issuer);
+                    stored = ExampleDocumentStore.LoadSample(db);
+                }
+                File.WriteAllText(Path.Combine(dir, "document.json"), stored.DocumentJson, new UTF8Encoding(false));
+                DatosEmisor persistedIssuer = stored.Issuer;
                 File.WriteAllText(Path.Combine(dir, "issuer.json"), JsonSerializer.Serialize(persistedIssuer, JsonOptions));
-                string renderedHtml = new ArcaWsGeneradorHTML(persistedIssuer).GenerarHTMLComprobante(doc);
+                string renderedHtml = stored.Document is not null
+                    ? new ArcaWsGeneradorHTML(persistedIssuer).GenerarHTMLComprobante(stored.Document)
+                    : new ArcaWsGeneradorHTML(persistedIssuer).GenerarHTMLComprobante(stored.Remito!);
                 File.WriteAllText(Path.Combine(dir, "comprobante.html"), AddSyntheticNotice(renderedHtml), new UTF8Encoding(false));
-                byte[] renderedPdf = new ArcaWsGeneradorPDF(persistedIssuer).GenerarPDFComprobante(doc);
+                byte[] renderedPdf = stored.Document is not null
+                    ? new ArcaWsGeneradorPDF(persistedIssuer).GenerarPDFComprobante(stored.Document)
+                    : new ArcaWsGeneradorPDF(persistedIssuer).GenerarPDFComprobante(stored.Remito!);
                 File.WriteAllBytes(Path.Combine(dir, "comprobante.pdf"), AddSyntheticNotice(renderedPdf));
                 html.Append("<article class=\"card\"><h3>").Append(VariantTitle(i)).Append("</h3><p>").Append(E(sample.Description))
-                    .Append("</p><p>Persistido y reabierto desde SQLite + JSON.</p><p><a href=\"").Append(E(id))
+                    .Append("</p><p>Persistido y reabierto desde SQLite + JSON.</p><iframe class=\"preview\" loading=\"lazy\" title=\"").Append(E(sample.Id)).Append("\" src=\"").Append(E(id)).Append("/comprobante.html\"></iframe><p><a href=\"").Append(E(id))
                     .Append("/comprobante.html\">Ver HTML</a> · <a href=\"").Append(E(id)).Append("/comprobante.pdf\">Abrir PDF</a></p></article>");
             }
             html.Append("</div></section>");
         }
+        SampleCase export = cases.Single(sample => sample.Id == "wsfex-e-exportacion");
+        string accentId = export.Id + "-acento-azul";
+        string accentDir = Path.Combine(run, accentId);
+        Directory.CreateDirectory(accentDir);
+        ExampleDocumentStore.Save(Path.Combine(accentDir, "persistence.sqlite"), export.Document!, export.Issuer);
+        ExampleDocumentStore.StoredSample accented = ExampleDocumentStore.LoadSample(Path.Combine(accentDir, "persistence.sqlite"));
+        string accentHtml = new ArcaWsGeneradorHTML(accented.Issuer, "#1A4E72").GenerarHTMLComprobante(accented.Document!);
+        File.WriteAllText(Path.Combine(accentDir, "comprobante.html"), AddSyntheticNotice(accentHtml), new UTF8Encoding(false));
+        byte[] accentPdf = new ArcaWsGeneradorPDF(accented.Issuer, "#1A4E72").GenerarPDFComprobante(accented.Document!);
+        File.WriteAllBytes(Path.Combine(accentDir, "comprobante.pdf"), AddSyntheticNotice(accentPdf));
+        html.Append("<section class=\"group\"><h2>Variante de color</h2><p>Único ejemplo con color principal personalizado; las demás muestras usan escala de grises.</p><article class=\"card\"><h3>Azul #1A4E72</h3><p>Exportación E con perfil de marca La Tienda.</p><iframe class=\"preview\" loading=\"lazy\" title=\"Exportación E azul\" src=\"").Append(accentId).Append("/comprobante.html\"></iframe><p><a href=\"").Append(accentId).Append("/comprobante.html\">Ver HTML</a> · <a href=\"").Append(accentId).Append("/comprobante.pdf\">Abrir PDF</a></p></article></section>");
         html.Append("</body></html>");
         File.WriteAllText(Path.Combine(run, "index.html"), html.ToString(), new UTF8Encoding(false));
-        ExampleDocumentStore.WriteRunManifest(run, created, cases);
+        ExampleDocumentStore.WriteRunManifest(run, created, cases.Append(export with { Id = accentId }).ToArray());
         return run;
     }
 
@@ -91,13 +121,22 @@ public static class SampleGallery
     };
     private static string VariantTitle(int i) => i switch { 0 => "PNG LOGO · La Tienda · razón social", 1 => "Sin logo · La Tienda · razón social", _ => "Sin logo · razón social sola" };
 
+    private static SampleCase RemitoCase(string id, string group, string description, RemitoGenerado remito, DatosEmisor issuer) =>
+        new(id, group, description, null, issuer, remito);
+
+    private static RemitoGenerado ReissueRemito(RemitoGenerado remito, DatosEmisor issuer) =>
+        new Remito(issuer).GenerarComprobante(new DatosRemito(remito.Clase, remito.FechaEmision, remito.PuntoVenta,
+            remito.Numero, remito.Receptor, remito.Destino, remito.Mercaderia, remito.EsOriginal, remito.Transportista,
+            remito.Cai, remito.PrimerNumero, remito.UltimoNumero, remito.Vencimiento, remito.Imprenta,
+            remito.EsAutoimpresor, remito.AmbitoInterno));
+
     private static string AddSyntheticNotice(string html)
     {
         const string body = "<body>";
         int bodyIndex = html.IndexOf(body, StringComparison.OrdinalIgnoreCase);
         if (bodyIndex < 0) throw new InvalidDataException("El HTML renderizado no contiene el elemento body esperado.");
         int insertAt = bodyIndex + body.Length;
-        const string notice = "<aside role=\"note\" style=\"box-sizing:border-box;width:100%;padding:8px 12px;margin:0 0 10px;text-align:center;font:700 12px Arial,sans-serif;letter-spacing:.04em;color:#7f1d1d;background:#fee2e2;border:2px solid #b91c1c\">MUESTRA SINTETICA - SIN VALIDEZ FISCAL</aside>";
+        const string notice = "<aside role=\"note\" style=\"box-sizing:border-box;width:100%;padding:8px 12px;margin:0 0 10px;text-align:center;font:700 12px Arial,sans-serif;letter-spacing:.04em;color:#111827;background:#f3f4f6;border:2px solid #6b7280\">MUESTRA SINTETICA - SIN VALIDEZ FISCAL</aside>";
         return html.Insert(insertAt, notice);
     }
 
@@ -109,9 +148,9 @@ public static class SampleGallery
         {
             using PdfSharp.Drawing.XGraphics graphics = PdfSharp.Drawing.XGraphics.FromPdfPage(page, PdfSharp.Drawing.XGraphicsPdfPageOptions.Prepend);
             var band = new PdfSharp.Drawing.XRect(0, 0, page.Width.Point, PdfSharp.Drawing.XUnit.FromMillimeter(8).Point);
-            graphics.DrawRectangle(PdfSharp.Drawing.XBrushes.MistyRose, band);
+            graphics.DrawRectangle(PdfSharp.Drawing.XBrushes.Gainsboro, band);
             graphics.DrawString(SyntheticNotice, new PdfSharp.Drawing.XFont("Noto Sans", 8, PdfSharp.Drawing.XFontStyleEx.Bold),
-                PdfSharp.Drawing.XBrushes.DarkRed, band, PdfSharp.Drawing.XStringFormats.Center);
+                PdfSharp.Drawing.XBrushes.Black, band, PdfSharp.Drawing.XStringFormats.Center);
         }
 
         using var output = new MemoryStream();
@@ -147,16 +186,18 @@ public static class SampleGallery
     {
         const string description = "Válvulas de acero inoxidable para proceso industrial";
         var request = new ClsFexRequest { Id = 42, FechaCbte = IssueDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
-            CbteTipo = 19, PuntoVta = 4, CbteNro = number, TipoExpo = 1, DstCmp = 840, Cliente = receiver.Nombre,
-            CuitPaisCliente = 840, DomicilioCliente = receiver.Domicilio ?? "", IdImpositivo = receiver.IdentificacionFiscal,
-            MonedaId = "USD", MonedaCtz = 1200m, ImpTotal = 125m };
+            CbteTipo = 19, PuntoVta = 4, CbteNro = number, TipoExpo = 1, DstCmp = 212, Cliente = receiver.Nombre,
+            CuitPaisCliente = receiver.Identificacion, DomicilioCliente = receiver.Domicilio ?? "", IdImpositivo = receiver.IdentificacionFiscal,
+            MonedaId = "DOL", MonedaCtz = 1234.567891m, ImpTotal = 125m, FormaPago = "Transferencia bancaria",
+            FechaPago = "20261018", Incoterms = "FOB", IncotermsDs = "Puerto de Miami",
+            ObsComerciales = "Entrega parcial acordada para octubre", Obs = "Muestra sintética de exportación" };
         request.Items.Add(new Item { ProCodigo = "VAL-INOX-01", ProDs = description, ProQty = 5m, ProUmed = 7, ProPrecioUni = 25m, ProTotalItem = 125m });
         var authorized = new ClsFexOutAuthorize { Id = request.Id, Cuit = IssuerId, CbteTipo = 19, PuntoVta = 4, CbteNro = number,
             Cae = Cae, FchVencCae = ExpiryDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
             FchCbte = IssueDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture), Resultado = "A" };
         return new(1, TipoComprobanteGenerado.Fiscal, new("wsfex", "Homologacion", IssuerId, 4, 19, number), "muestra-sintetica", "Authorized",
-            receiver, "USD", 125m, [new(description, 125m, "USD", "VAL-INOX-01", 5m, 7, 25m)], [], [], Serialize(request), 1,
-            new(Cae, ExpiryDate, [], [], "A", "E"), fecha: IssueDate, cotizacion: 1200m, neto: 125m,
+            receiver, "DOL", 125m, [new(description, 125m, "DOL", "VAL-INOX-01", 5m, 7, 25m)], [], [], Serialize(request), 1,
+            new(Cae, ExpiryDate, [], [], "A", "E"), fecha: IssueDate, cotizacion: 1234.567891m, neto: 125m,
             snapshotResponse: Serialize(new FexAuthorizeResponse { FexAuthorizeResult = new FexResponseAuthorize { FexResultAuth = authorized } }), snapshotResponseVersion: 1);
     }
 
@@ -202,6 +243,21 @@ public static class SampleGallery
         string[] legends = Enumerable.Range(1, 20).Select(i => $"Observación {i:00}: detalle informativo de muestra para verificar que no se superponga con la autorización fiscal.").ToArray();
         return Wsmtxca(1, 1, receiver, number, 100m, 21m, lines, legends);
     }
+
+    private static RemitoGenerado RemitoR(DatosReceptor receiver, long number, bool original, int lineCount)
+    {
+        var goods = Enumerable.Range(1, lineCount).Select(i => new LineaRemito(
+            $"Cajas de válvulas industriales de repuesto, lote sintético {i:00}", "bultos", i % 5 + 1)).ToArray();
+        return new Remito(BrandedIssuer).GenerarComprobante(new DatosRemito(ClaseRemito.R, IssueDate, 4, number,
+            receiver, "Depósito de destino, Av. Ejemplo 789, Córdoba", goods, esOriginal: original,
+            cai: "12345678901234", primerNumero: 100, ultimoNumero: 999, vencimiento: new DateOnly(2026, 12, 31),
+            imprenta: new DatosImprentaRemito("Gráfica Ejemplo SRL", IssuerId, new DateOnly(2026, 9, 1), 100, 999, "HAB-2026-001")));
+    }
+
+    private static RemitoGenerado RemitoX(DatosReceptor receiver, long number) =>
+        new Remito(BrandedIssuer).GenerarComprobante(new DatosRemito(ClaseRemito.X, IssueDate, 4, number,
+            receiver, "Nave B, depósito 3", [new("Muestras de repuestos para control interno", "cajas", 2)],
+            ambitoInterno: "Predio Industrial Ejemplo, nave B"));
     private static string Serialize<T>(T value) { var serializer = new XmlSerializer(typeof(T)); using var writer = new StringWriter(CultureInfo.InvariantCulture); serializer.Serialize(writer, value); return writer.ToString(); }
     private static string E(string value) => System.Net.WebUtility.HtmlEncode(value);
 }

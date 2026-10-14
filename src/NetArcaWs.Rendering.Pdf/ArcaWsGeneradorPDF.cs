@@ -291,12 +291,12 @@ public sealed class ArcaWsGeneradorPDF
     {
         if (export is null) return;
         var rows = new List<string[]>();
-        rows.Add(["Moneda", $"{CurrencyDisplay.Code(export.CurrencyCode)} · {CurrencyDisplay.Label(export.CurrencyCode)}"]);
+        rows.Add(["Moneda", CurrencyDisplay.Label(export.CurrencyCode)]);
         if (export.ExchangeRate is string rate) rows.Add(["Cotización", $"{rate} ARS por {CurrencyDisplay.Code(export.CurrencyCode)}"]);
         if (export.PaymentMethod is { Length: > 0 } payment) rows.Add(["Forma de pago", payment]);
         if (FormatSnapshotDate(export.PaymentDate) is string date) rows.Add(["Fecha de pago", date]);
         if (export.Incoterms is { Length: > 0 } incoterm) rows.Add(["Incoterms", string.IsNullOrWhiteSpace(export.IncotermsDescription) ? incoterm : $"{incoterm} · {export.IncotermsDescription}"]);
-        if (export.ExportCondition is { Length: > 0 } condition) rows.Add(["Condición de exportación", condition]);
+        if (export.ExportCondition is { Length: > 0 } condition) rows.Add(["Tipo de exportación", condition]);
         if (export.CommercialObservations is { Length: > 0 } commercial) rows.Add(["Observaciones comerciales", commercial]);
         if (export.Observations is { Length: > 0 } observations) rows.Add(["Observaciones", observations]);
         if (rows.Count == 0) return;
@@ -313,11 +313,25 @@ public sealed class ArcaWsGeneradorPDF
         row.Cells[0].Format.Font.Color = ParseColor(_style.TextOnPrincipal);
         row.Cells[1].Format.Font.Color = ParseColor(_style.ColorPrincipal);
         row.Cells[2].Format.Font.Color = ParseColor(_style.TextOnPrincipal);
-        Paragraph brand = row.Cells[0].AddParagraph(_issuer.RazonSocial);
-        brand.Format.Font.Bold = true; brand.Format.Font.Size = 14;
-        if (_issuer.LogoPng is { Length: > 0 }) brand.Format.LeftIndent = Unit.FromMillimeter(37);
-        if (!string.IsNullOrWhiteSpace(_issuer.NombreFantasia)) { brand.AddLineBreak(); brand.AddText(_issuer.NombreFantasia); }
-        brand.AddLineBreak(); brand.AddText(_issuer.Domicilio);
+        double brandIndent = _issuer.LogoPng is { Length: > 0 } ? 37 : 0;
+        Paragraph legalName = row.Cells[0].AddParagraph(_issuer.RazonSocial);
+        legalName.Format.Font.Bold = true;
+        legalName.Format.Font.Size = 13;
+        legalName.Format.LeftIndent = Unit.FromMillimeter(brandIndent);
+        if (!string.IsNullOrWhiteSpace(_issuer.NombreFantasia))
+        {
+            Paragraph tradeName = row.Cells[0].AddParagraph(_issuer.NombreFantasia);
+            tradeName.Format.Font.Bold = true;
+            tradeName.Format.Font.Size = 11;
+            tradeName.Format.LeftIndent = Unit.FromMillimeter(brandIndent);
+        }
+        if (!string.IsNullOrWhiteSpace(_issuer.Domicilio))
+        {
+            Paragraph address = row.Cells[0].AddParagraph(_issuer.Domicilio);
+            address.Format.Font.Bold = false;
+            address.Format.Font.Size = 9;
+            address.Format.LeftIndent = Unit.FromMillimeter(brandIndent);
+        }
         Paragraph letter = row.Cells[1].AddParagraph(remito.Clase.ToString()); letter.Format.Font.Bold = true; letter.Format.Font.Size = 24; letter.Format.Alignment = ParagraphAlignment.Center;
         if (remito.Clase == ClaseRemito.R) { Paragraph code = row.Cells[1].AddParagraph("COD. 091"); code.Format.Font.Size = 7; code.Format.Alignment = ParagraphAlignment.Center; }
         Paragraph meta = row.Cells[2].AddParagraph($"Remito {remito.Clase}"); meta.Format.Font.Bold = true; meta.Format.Font.Size = 14; meta.Format.Alignment = ParagraphAlignment.Right;
@@ -413,16 +427,25 @@ public sealed class ArcaWsGeneradorPDF
         row.Cells[0].Format.Font.Color = ParseColor(_style.TextOnPrincipal);
         row.Cells[1].Format.Font.Color = ParseColor(_style.ColorPrincipal);
         row.Cells[2].Format.Font.Color = ParseColor(_style.TextOnPrincipal);
-        Paragraph brand = row.Cells[0].AddParagraph();
-        if (_issuer.LogoPng is { Length: > 0 })
+        double brandIndent = _issuer.LogoPng is { Length: > 0 } ? 37 : 0;
+        Paragraph legalName = row.Cells[0].AddParagraph(_issuer.RazonSocial);
+        legalName.Format.Font.Bold = true;
+        legalName.Format.Font.Size = 13;
+        legalName.Format.LeftIndent = Unit.FromMillimeter(brandIndent);
+        if (!string.IsNullOrWhiteSpace(_issuer.NombreFantasia))
         {
-            brand.Format.LeftIndent = Unit.FromMillimeter(37);
+            Paragraph tradeName = row.Cells[0].AddParagraph(_issuer.NombreFantasia);
+            tradeName.Format.Font.Bold = true;
+            tradeName.Format.Font.Size = 11;
+            tradeName.Format.LeftIndent = Unit.FromMillimeter(brandIndent);
         }
-        brand.AddText(_issuer.RazonSocial);
-        brand.Format.Font.Bold = true;
-        brand.Format.Font.Size = 14;
-        if (!string.IsNullOrWhiteSpace(_issuer.NombreFantasia)) { brand.AddLineBreak(); brand.AddText(_issuer.NombreFantasia); }
-        if (!string.IsNullOrWhiteSpace(_issuer.Domicilio)) { brand.AddLineBreak(); brand.AddText(_issuer.Domicilio); }
+        if (!string.IsNullOrWhiteSpace(_issuer.Domicilio))
+        {
+            Paragraph address = row.Cells[0].AddParagraph(_issuer.Domicilio);
+            address.Format.Font.Bold = false;
+            address.Format.Font.Size = 9;
+            address.Format.LeftIndent = Unit.FromMillimeter(brandIndent);
+        }
         Paragraph code = row.Cells[1].AddParagraph(layout.Letter);
         code.Format.Font.Bold = true;
             code.Format.Font.Size = 24;
@@ -464,14 +487,14 @@ public sealed class ArcaWsGeneradorPDF
         table.Borders.Width = Unit.FromPoint(0.35);
         table.AddColumn(Unit.FromCentimeter(8.3)); table.AddColumn(Unit.FromCentimeter(2.1));
         table.AddColumn(Unit.FromCentimeter(4.0)); table.AddColumn(Unit.FromCentimeter(3.8));
-        Row header = table.AddRow(); StyleHeader(header, ["Descripción", "Cantidad", "Precio unitario", $"Importe ({CurrencyDisplay.Code(data.Moneda)})"]);
+        Row header = table.AddRow(); StyleHeader(header, ["Descripción", "Cantidad", $"Precio unitario ({CurrencyDisplay.Code(data.Moneda)})", $"Importe ({CurrencyDisplay.Code(data.Moneda)})"]);
         foreach (LineaComprobante line in data.Detalles)
         {
             Row row = table.AddRow();
             row.Shading.Color = Colors.White;
             row.Cells[0].AddParagraph(line.DescripcionPresentacion ?? line.Descripcion);
             row.Cells[1].AddParagraph(line.Cantidad is decimal qty ? Number(qty) : "—");
-            row.Cells[2].AddParagraph(line.PrecioUnitario is decimal price ? $"{Number(price)} {CurrencyDisplay.Label(data.Moneda)}" : "—");
+            row.Cells[2].AddParagraph(line.PrecioUnitario is decimal price ? $"{Number(price)} {CurrencyDisplay.Code(data.Moneda)}" : "—");
             row.Cells[3].AddParagraph(Money(line.Importe, data.Moneda));
             row.Cells[1].Format.Alignment = row.Cells[2].Format.Alignment = row.Cells[3].Format.Alignment = ParagraphAlignment.Right;
         }
@@ -644,7 +667,7 @@ public sealed class ArcaWsGeneradorPDF
     private static string Date(DateOnly date) => date.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
     private static string Number(decimal value) => value.ToString("N2", CultureInfo.GetCultureInfo("es-AR"));
     private static string FullDecimal(decimal value) => value.ToString("#,##0.########################", CultureInfo.GetCultureInfo("es-AR"));
-    private static string Money(decimal value, string currency) => $"{Number(value)} {CurrencyDisplay.Label(currency)}";
+    private static string Money(decimal value, string currency) => $"{Number(value)} {CurrencyDisplay.Code(currency)}";
     private static string CurrencyName(string code) => CurrencyDisplay.Name(code);
     private static bool IsPesoCurrency(string code) => CurrencyDisplay.IsPeso(code);
     private static string DocumentNumber(ComprobanteGenerado data) => data.Identidad is null ? data.NumeroInterno ?? string.Empty : $"{data.Identidad.PuntoVenta:00000}-{data.Identidad.Numero:00000000}";

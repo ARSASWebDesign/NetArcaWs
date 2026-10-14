@@ -38,17 +38,20 @@ internal sealed record ExportDocumentFields(
             throw new InvalidOperationException("El snapshot WSFEX no coincide con el contrato esperado.");
         ClsFexRequest request = (ClsFexRequest)(serializer.Deserialize(reader)
             ?? throw new InvalidOperationException("El snapshot WSFEX está vacío."));
-        string currency = request.MonedaId;
-        string currencyName = currency.ToUpperInvariant() switch
-        {
-            "DOL" => "USD (dólares estadounidenses)",
-            "PES" => "ARS (pesos)",
-            _ => currency.ToUpperInvariant()
-        };
+        string currencyCode = CurrencyDisplay.Code(request.MonedaId);
         string? rate = request.MonedaCtz?.ToString("0.############################", CultureInfo.InvariantCulture);
+        string? paymentDate = DateOnly.TryParseExact(request.FechaPago, "yyyyMMdd", CultureInfo.InvariantCulture,
+            DateTimeStyles.None, out DateOnly parsedPaymentDate) ? parsedPaymentDate.ToString("dd/MM/yyyy", CultureInfo.GetCultureInfo("es-AR")) : request.FechaPago;
+        string exportType = request.TipoExpo switch
+        {
+            1 => "Bienes",
+            2 => "Servicios",
+            4 => "Otros",
+            _ => $"Código {request.TipoExpo.ToString(CultureInfo.InvariantCulture)}"
+        };
         return new(request.CuitPaisCliente.ToString(CultureInfo.InvariantCulture), request.IdImpositivo,
-            request.DstCmp.ToString(CultureInfo.InvariantCulture), currency, currencyName, rate,
-            request.FormaPago, request.FechaPago, request.Incoterms, request.IncotermsDs,
-            request.TipoExpo.ToString(CultureInfo.InvariantCulture), request.ObsComerciales, request.Obs);
+            request.DstCmp.ToString(CultureInfo.InvariantCulture), currencyCode, CurrencyDisplay.Label(currencyCode), rate,
+            request.FormaPago, paymentDate, request.Incoterms, request.IncotermsDs,
+            exportType, request.ObsComerciales, request.Obs);
     }
 }

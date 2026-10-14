@@ -52,9 +52,11 @@ public sealed class ArcaWsGeneradorHTML
             ? datos.Receptor.IdentificacionFiscal
             : datos.Receptor.Identificacion > 0 ? datos.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture) : null;
         if (receiverId is not null) html.Append("<div><b>").Append(E(ReceiverIdLabel(datos))).Append(":</b> ").Append(E(receiverId)).Append("</div>");
+        if (export?.CuitPais is string cuitPais) html.Append("<div><b>CUIT país:</b> ").Append(E(cuitPais)).Append("</div>");
+        if (export?.DestinationCountryCode is string destination) html.Append("<div><b>País destino (código):</b> ").Append(E(destination)).Append("</div>");
         if (datos.FechaPago is DateOnly paymentDue) html.Append("<div><b>Vencimiento de pago:</b> ").Append(Date(paymentDue)).Append("</div>");
         html.Append("</div></div></section>");
-        AppendInvoiceSupplementalFields(html, datos);
+        if (export is null) AppendInvoiceSupplementalFields(html, datos);
         if (export is not null) AppendExportFields(html, export);
 
         IReadOnlyList<string> associatedDocuments = FiscalAssociatedDocuments.Read(datos);
@@ -145,16 +147,13 @@ public sealed class ArcaWsGeneradorHTML
     private static void AppendExportFields(StringBuilder html, ExportDocumentFields fields)
     {
         html.Append("<section class=\"export-fields\"><h3>Datos de exportación</h3><div class=\"receiver-columns\">");
-        if (fields.CuitPais is not null) html.Append("<div><b>CUIT país del cliente:</b> ").Append(E(fields.CuitPais)).Append("</div>");
-        if (fields.ForeignTaxId is not null) html.Append("<div><b>ID impositivo del cliente:</b> ").Append(E(fields.ForeignTaxId)).Append("</div>");
-        if (fields.DestinationCountryCode is not null) html.Append("<div><b>Código de país destino:</b> ").Append(E(fields.DestinationCountryCode)).Append("</div>");
-        html.Append("<div><b>Moneda:</b> ").Append(E(fields.CurrencyCode)).Append(" · ").Append(E(fields.CurrencyName)).Append("</div>");
-        if (fields.ExchangeRate is not null) html.Append("<div><b>Cotización:</b> ").Append(E(fields.ExchangeRate)).Append(" ARS por ").Append(E(fields.CurrencyName)).Append("</div>");
+        html.Append("<div><b>Moneda:</b> ").Append(E(fields.CurrencyName)).Append("</div>");
+        if (fields.ExchangeRate is not null) html.Append("<div><b>Cotización:</b> ").Append(E(fields.ExchangeRate)).Append(" ARS por ").Append(E(fields.CurrencyCode)).Append("</div>");
         if (fields.PaymentMethod is not null) html.Append("<div><b>Forma de pago:</b> ").Append(E(fields.PaymentMethod)).Append("</div>");
         if (fields.PaymentDate is not null) html.Append("<div><b>Fecha de pago:</b> ").Append(E(fields.PaymentDate)).Append("</div>");
         if (fields.Incoterms is not null) html.Append("<div><b>Incoterms:</b> ").Append(E(fields.Incoterms)).Append("</div>");
         if (fields.IncotermsDescription is not null) html.Append("<div><b>Descripción de Incoterms:</b> ").Append(E(fields.IncotermsDescription)).Append("</div>");
-        if (fields.ExportCondition is not null) html.Append("<div><b>Condición de exportación:</b> ").Append(E(fields.ExportCondition)).Append("</div>");
+        if (fields.ExportCondition is not null) html.Append("<div><b>Tipo de exportación:</b> ").Append(E(fields.ExportCondition)).Append("</div>");
         if (fields.CommercialObservations is not null) html.Append("<div><b>Observaciones comerciales:</b> ").Append(E(fields.CommercialObservations)).Append("</div>");
         if (fields.Observations is not null) html.Append("<div><b>Observaciones:</b> ").Append(E(fields.Observations)).Append("</div>");
         html.Append("</div></section>");
@@ -207,11 +206,11 @@ public sealed class ArcaWsGeneradorHTML
 
     private static void AppendDetailTable(StringBuilder html, IReadOnlyList<LineaComprobante> lines, string currency)
     {
-        html.Append("<table class=\"details\"><thead><tr><th>Descripción</th><th class=\"number\">Cantidad</th><th class=\"number\">Precio unitario</th><th class=\"number\">Importe</th></tr></thead><tbody>");
+        html.Append("<table class=\"details\"><thead><tr><th>Descripción</th><th class=\"number\">Cantidad</th><th class=\"number\">Precio unitario (").Append(E(CurrencyDisplay.Code(currency))).Append(")</th><th class=\"number\">Importe (").Append(E(CurrencyDisplay.Code(currency))).Append(")</th></tr></thead><tbody>");
         foreach (LineaComprobante line in lines)
         {
             html.Append("<tr><td>").Append(E(line.DescripcionPresentacion ?? line.Descripcion)).Append("</td><td class=\"number\">").Append(line.Cantidad is decimal quantity ? FullDecimal(quantity) : "—")
-                .Append("</td><td class=\"number\">").Append(line.PrecioUnitario is decimal price ? $"{FullDecimal(price)} {CurrencyName(currency)}" : "—")
+                .Append("</td><td class=\"number\">").Append(line.PrecioUnitario is decimal price ? $"{FullDecimal(price)} {E(CurrencyDisplay.Code(currency))}" : "—")
                 .Append("</td><td class=\"number\">").Append(Money(line.Importe, currency)).Append("</td></tr>");
         }
         html.Append("</tbody></table>");
@@ -277,12 +276,9 @@ public sealed class ArcaWsGeneradorHTML
         return "<img class=\"qr-image\" alt=\"Código QR de verificación ARCA\" src=\"data:image/png;base64," + Convert.ToBase64String(png) + "\">";
     }
 
-    private static string Money(decimal amount, string currency) => $"{amount.ToString("N2", ArCulture)} {CurrencyName(currency)}";
-    private static string CurrencyName(string currency) => currency.ToUpperInvariant() switch
-    {
-        "ARS" or "PES" => "pesos", "USD" => "dólares estadounidenses", "EUR" => "euros", "BRL" => "reales", _ => currency.ToUpperInvariant()
-    };
-    private static bool IsPesoCurrency(string currency) => currency.Equals("ARS", StringComparison.OrdinalIgnoreCase) || currency.Equals("PES", StringComparison.OrdinalIgnoreCase);
+    private static string Money(decimal amount, string currency) => $"{amount.ToString("N2", ArCulture)} {E(CurrencyDisplay.Code(currency))}";
+    private static string CurrencyName(string currency) => CurrencyDisplay.Name(currency);
+    private static bool IsPesoCurrency(string currency) => CurrencyDisplay.IsPeso(currency);
     private static string FullDecimal(decimal value) => value.ToString("#,##0.########################", ArCulture);
     private static string Date(DateOnly date) => date.ToString("dd/MM/yyyy", ArCulture);
     private static string E(string? value) => WebUtility.HtmlEncode(value ?? string.Empty);

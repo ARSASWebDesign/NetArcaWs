@@ -186,11 +186,13 @@ public sealed partial class HtmlRenderingTests
             noGravado: invoice.NoGravado, iva: invoice.Iva, snapshotResponse: invoice.SnapshotResponse,
             snapshotResponseVersion: invoice.SnapshotResponseVersion);
         string html = new ArcaWsGeneradorHTML(HtmlRenderingTests.Issuer()).GenerarHTMLComprobante(changed);
-        Assert.Contains("DOL · USD", html);
+        Assert.Contains("USD (d&#243;lares estadounidenses)", html);
         Assert.Contains("123.456789", html);
-        Assert.Contains("ID impositivo del cliente", html);
+        Assert.Contains("ID impositivo extranjero", html);
         Assert.Contains("Puerto &lt;destino&gt;", html);
         Assert.Contains("Carga &amp; embalaje", html);
         Assert.Contains("Entrega acordada", html);
     }
+
+
 }

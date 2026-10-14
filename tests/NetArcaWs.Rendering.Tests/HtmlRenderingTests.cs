@@ -75,7 +75,7 @@ public sealed partial class HtmlRenderingTests
             Assert.Contains("Factura A", html);
             Assert.Contains("Monotributista", html);
             Assert.Contains("27.618", html);
-            Assert.Contains("121,00 pesos", html);
+            Assert.Contains("121,00 ARS", html);
             Assert.Contains("https://www.arca.gob.ar/fe/qr/", html);
             string payload = ExtractQrPayload(html);
             using JsonDocument json = JsonDocument.Parse(Convert.FromBase64String(payload));
@@ -119,7 +119,7 @@ public sealed partial class HtmlRenderingTests
         Assert.True(sectionStart >= 0 && totalStart > sectionStart && sectionEnd > totalStart,
             "The total must stay inside the consumer-transparency section.");
         Assert.Contains(".transparency>.grand-total", html);
-        Assert.Contains("121,00 pesos", html[totalStart..sectionEnd]);
+        Assert.Contains("121,00 ARS", html[totalStart..sectionEnd]);
     }
 
     [Fact]
@@ -155,7 +155,7 @@ public sealed partial class HtmlRenderingTests
         Assert.Contains("A CONSUMIDOR FINAL", consumidorFinal);
         Assert.Contains("Régimen de Transparencia Fiscal al Consumidor (Ley 27.743)", consumidorFinal);
         Assert.Contains("Otros impuestos nacionales indirectos", consumidorFinal);
-        Assert.Contains("0,00 pesos", consumidorFinal);
+        Assert.Contains("0,00 ARS", consumidorFinal);
     }
 
     [Fact]

@@ -50,3 +50,12 @@ y wiki continúa sujeta al proceso de entrega.
   una instalación libre de dependencias PDF/QR.
 - Cambiar un logo o perfil de emisor no reescribe el snapshot de emisión. Para
   una salida histórica se debe reutilizar el perfil que la aplicación guardó.
+- Los renderers admiten un único color `#RRGGBB` opcional y usan `#333333` por
+  defecto. `VersionRenderizado` combina la versión del paquete y la revisión de
+  plantilla HTML/PDF; cada consumidor agrega su versión o hash del perfil,
+  logo y color al cache key porque esa propiedad no cubre su configuración.
+- `RemitoGenerado` representa documentos R/X locales sin autorización fiscal.
+  R imprime el CAI y los datos declarados por la aplicación sin verificarlos
+  ante ARCA; X muestra el ámbito interno indicado y no habilita traslado
+  externo. La primera versión requiere receptor identificado con CUIT y no
+  abarca consumidor final, DTV-e, regímenes sectoriales ni controladores fiscales.

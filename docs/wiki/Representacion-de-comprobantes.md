@@ -75,6 +75,11 @@ byte[] pdf = new ArcaWsGeneradorPDF(emisorCargado)
     .GenerarPDFComprobante(comprobanteCargado);
 await File.WriteAllTextAsync(Path.Combine(sampleDirectory, "comprobante.html"), html);
 await File.WriteAllBytesAsync(Path.Combine(sampleDirectory, "comprobante.pdf"), pdf);
+
+var htmlRenderer = new ArcaWsGeneradorHTML(emisorCargado, colorPrincipal: "#333333");
+string rendererVersion = htmlRenderer.VersionRenderizado;
+string revisionPerfilEmisor = "perfil-marca-config-v2"; // revisión o hash administrado por la aplicación
+string cacheKey = $"{rendererVersion}:{revisionPerfilEmisor}";
 ```
 
 Para emitir un documento fiscal, reemplazá la creación local de `ReciboX` por
@@ -82,6 +87,35 @@ la sobrecarga tipada de `ArcaWsComprobantes` y un `ArcaTenantContext` que la
 aplicación ya haya autorizado. Ese flujo fiscal requiere el `SafeInvoiceService`
 persistente y una clave de idempotencia; el ejemplo de arriba no emite ni
 consulta comprobantes en ARCA.
+
+## Remitos R y X
+
+`Remito(DatosEmisor).GenerarComprobante(DatosRemito)` crea un documento local,
+sin numeración automática ni llamada de autorización. La aplicación administra
+la numeración, el historial y la recepción/entrega de mercadería. La primera
+versión requiere CUIT, domicilio y condición tributaria del receptor; no modela
+consumidor final.
+
+Un remito **R** muestra el código 091, la leyenda obligatoria, el CAI, su
+vencimiento, el rango declarado y la información de imprenta o condición de
+autoimpresor. La biblioteca no verifica ante ARCA el CAI, el rango ni la
+habilitación de imprenta. Un remito **X** debe indicar que el movimiento ocurre
+dentro del mismo predio, polo o parque industrial; no incluye CAI, CAE ni QR
+fiscal y no habilita transporte externo. Regímenes sectoriales, DTV-e y
+controladores fiscales quedan fuera de este modelo.
+
+Ambos modelos se pueden guardar como JSON y enviar a los renderers. La galería
+ejecutable incluye un R original, su duplicado, un X interno y un remito R
+extenso, con persistencia de ejemplo en SQLite y JSON. La salida sintética lleva
+un aviso visible; no representa autorización ni homologación ARCA.
+
+`ColorPrincipal` permite configurar una sola tinta `#RRGGBB`; el valor por
+defecto es gris `#333333`. `VersionRenderizado` combina la versión real del
+paquete con la revisión independiente de la plantilla HTML o PDF. No incluye
+la configuración del consumidor. Si cambia el logo, la razón social, el color u otra opción visual,
+la aplicación debe cambiar su propia revisión/hash de perfil y combinarlo con
+`VersionRenderizado` en la clave de caché. Esa revisión de renderizado no cambia
+el snapshot fiscal ni requiere reemitirlo.
 
 En el proyecto consumidor agregá sólo los paquetes que vas a usar:
 `NetArcaWs.Rendering.Html` y/o `NetArcaWs.Rendering.Pdf`, además de `NetArcaWs`

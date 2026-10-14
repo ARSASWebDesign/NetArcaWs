@@ -87,13 +87,18 @@ La guía [Diario fiscal](https://github.com/ARSASWebDesign/NetArcaWs/wiki/Diario
 
 ## Representación de comprobantes
 
-La rama incorpora `NetArcaWs.Rendering.Html` y `NetArcaWs.Rendering.Pdf` como paquetes opcionales para representar un `ComprobanteGenerado` ya persistido; los renderizadores no emiten ni consultan comprobantes. El receptor se conserva en el snapshot y el consumidor debe guardar también el perfil histórico de emisor y logo para reproducir la misma marca. WSFE aporta resumen fiscal sin ítems inventados; los adaptadores de WSFEX y WSMTXCA conservan el detalle disponible. El alcance local incluye CAE unitario para tipos explícitamente soportados y recibos X. La implementación fue probada localmente con muestras sintéticas; esta rama aún no acredita homologación ni disponibilidad pública de estos paquetes.
+La rama incorpora `NetArcaWs.Rendering.Html` y `NetArcaWs.Rendering.Pdf` como paquetes opcionales para representar un `ComprobanteGenerado` ya persistido y remitos locales R/X; los renderizadores no emiten ni consultan comprobantes. El receptor se conserva en el snapshot y el consumidor debe guardar también el perfil histórico de emisor, logo y color para reproducir la misma marca. WSFE aporta resumen fiscal sin ítems inventados; los adaptadores de WSFEX y WSMTXCA conservan el detalle disponible. `ColorPrincipal` acepta un único color `#RRGGBB` y usa gris `#333333` por defecto. `VersionRenderizado` identifica el paquete y la revisión de plantilla del renderer; para invalidar caché cuando cambia la marca o su configuración, el consumidor debe incluir además su propia versión o hash de perfil. Los remitos requieren receptor identificado con CUIT; R imprime CAI y datos declarados del talonario sin verificarlos ante ARCA, y X identifica el ámbito interno compartido sin afirmar autorización para transporte externo. La implementación fue probada localmente con muestras sintéticas; esta rama aún no acredita homologación ni disponibilidad pública de estos paquetes.
 
 ```csharp
 var html = new ArcaWsGeneradorHTML(perfilEmisorPersistido)
     .GenerarHTMLComprobante(comprobantePersistido);
 byte[] pdf = new ArcaWsGeneradorPDF(perfilEmisorPersistido)
     .GenerarPDFComprobante(comprobantePersistido);
+
+var htmlRenderer = new ArcaWsGeneradorHTML(perfilEmisorPersistido);
+string rendererVersion = htmlRenderer.VersionRenderizado;
+string revisionPerfilEmisor = "perfil-marca-config-v2"; // revisión o hash calculado por la aplicación
+string cacheKey = $"{rendererVersion}:{revisionPerfilEmisor}";
 ```
 
 Instalá los extras sólo si la aplicación necesita esos formatos; el paquete core no incorpora dependencias de PDF ni QR. Consultá la [guía de representación](https://github.com/ARSASWebDesign/NetArcaWs/wiki/Representacion-de-comprobantes) para estados imprimibles, datos del receptor, perfiles históricos, servicios y limitaciones.

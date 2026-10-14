@@ -20,8 +20,8 @@ public sealed class RenderingSampleTests
             string run = SampleGallery.Generate(root);
             string[] htmlFiles = Directory.GetFiles(run, "comprobante.html", SearchOption.AllDirectories);
             string[] pdfFiles = Directory.GetFiles(run, "comprobante.pdf", SearchOption.AllDirectories);
-            Assert.Equal(36, htmlFiles.Length);
-            Assert.Equal(36, pdfFiles.Length);
+            Assert.Equal(49, htmlFiles.Length);
+            Assert.Equal(49, pdfFiles.Length);
             foreach (string path in htmlFiles)
                 Assert.Contains(notice, File.ReadAllText(path), StringComparison.Ordinal);
             foreach (string path in pdfFiles)
@@ -31,6 +31,56 @@ public sealed class RenderingSampleTests
         {
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }
+    }
+
+    [Fact]
+    public void ExportSample_UsesDistinctForeignIdentifiersAndReadableFrozenFields()
+    {
+        SampleCase sample = SampleGallery.CreateCases().Single(item => item.Id == "wsfex-e-exportacion");
+        string html = new ArcaWsGeneradorHTML(sample.Issuer).GenerarHTMLComprobante(sample.Document!);
+
+        Assert.Contains("País destino (código):</b> 212", html, StringComparison.Ordinal);
+        Assert.Contains("CUIT país:</b> 55000002126", html, StringComparison.Ordinal);
+        Assert.Contains("Moneda:</b> USD (", html, StringComparison.Ordinal);
+        Assert.Contains("Cotización:</b> 1234.567891 ARS por USD", html, StringComparison.Ordinal);
+        Assert.Contains("Fecha de pago:</b> 18/10/2026", html, StringComparison.Ordinal);
+        Assert.Contains("Tipo de exportación:</b> Bienes", html, StringComparison.Ordinal);
+        Assert.Contains("Importe (USD)", html, StringComparison.Ordinal);
+        Assert.Contains("125,00 USD", html, StringComparison.Ordinal);
+        Assert.Equal(1, Count(html, "Cotización:</b>"));
+        Assert.Contains("DOL", sample.Document!.SnapshotRequest, StringComparison.Ordinal);
+        Assert.Equal(1, Count(html, "9876543210123"));
+        Assert.DoesNotContain("840", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SyntheticNotice_IsGrayscaleAndDoesNotAddASecondAccentColor()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"netarcaws-gallery-gray-{Guid.NewGuid():N}");
+        try
+        {
+            string run = SampleGallery.Generate(root);
+            string[] html = Directory.GetFiles(run, "comprobante.html", SearchOption.AllDirectories);
+            Assert.All(html, path =>
+            {
+                string contents = File.ReadAllText(path);
+                Assert.Contains("color:#111827;background:#f3f4f6;border:2px solid #6b7280", contents, StringComparison.Ordinal);
+                Assert.DoesNotContain("#fee2e2", contents, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("#b91c1c", contents, StringComparison.OrdinalIgnoreCase);
+                if (path.Contains("acento-azul", StringComparison.Ordinal))
+                    Assert.Contains("--principal:#1A4E72", contents, StringComparison.Ordinal);
+                else
+                    Assert.Contains("--principal:#333333", contents, StringComparison.Ordinal);
+            });
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+    }
+
+    private static int Count(string text, string value)
+    {
+        int count = 0, offset = 0;
+        while ((offset = text.IndexOf(value, offset, StringComparison.Ordinal)) >= 0) { count++; offset += value.Length; }
+        return count;
     }
 
     [Fact]
@@ -54,14 +104,14 @@ public sealed class RenderingSampleTests
         SampleCase sample = SampleGallery.CreateCases().Single(item => item.Id == "x-recibo-parcial");
         DatosEmisor withLogo = new(sample.Issuer.Identificacion, sample.Issuer.RazonSocial, "La Tienda", sample.Issuer.Domicilio,
             sample.Issuer.CondicionTributaria, SampleGallery.CreateCases().Single(item => item.Id == "wsfe-a-ri-logo").Issuer.LogoPng);
-        byte[] pdf = new ArcaWsGeneradorPDF(withLogo).GenerarPDFComprobante(sample.Document);
+        byte[] pdf = new ArcaWsGeneradorPDF(withLogo).GenerarPDFComprobante(sample.Document!);
         using PdfDocument document = PdfDocument.Open(pdf);
         Assert.NotEmpty(document.GetPages().Single().GetImages());
         Assert.Contains("Recibo", PdfText(pdf));
 
         DatosEmisor withoutLogo = new(sample.Issuer.Identificacion, sample.Issuer.RazonSocial, "La Tienda", sample.Issuer.Domicilio,
             sample.Issuer.CondicionTributaria);
-        byte[] plainPdf = new ArcaWsGeneradorPDF(withoutLogo).GenerarPDFComprobante(sample.Document);
+        byte[] plainPdf = new ArcaWsGeneradorPDF(withoutLogo).GenerarPDFComprobante(sample.Document!);
         double logoHeaderTop = IssuerNameTop(pdf);
         double plainHeaderTop = IssuerNameTop(plainPdf);
         Assert.InRange(Math.Abs(plainHeaderTop - logoHeaderTop), 0, 25);
@@ -75,12 +125,12 @@ public sealed class RenderingSampleTests
         {
             string run = SampleGallery.Generate(root);
             string[] pdfs = Directory.GetFiles(run, "comprobante.pdf", SearchOption.AllDirectories);
-            Assert.Equal(36, pdfs.Length);
+            Assert.Equal(49, pdfs.Length);
             foreach (string path in pdfs)
             {
                 string scenario = Path.GetFileName(Path.GetDirectoryName(path))!;
                 bool hasLogo = !scenario.Contains("-sin-logo-", StringComparison.Ordinal);
-                bool isFiscal = !scenario.StartsWith("x-recibo-", StringComparison.Ordinal);
+                bool isFiscal = !scenario.StartsWith("x-recibo-", StringComparison.Ordinal) && !scenario.StartsWith("remito-", StringComparison.Ordinal);
                 int expectedImages = (hasLogo ? 1 : 0) + (isFiscal ? 1 : 0);
                 using PdfDocument pdf = PdfDocument.Open(path);
                 Assert.True(expectedImages == pdf.GetPages().First().GetImages().Count(),
@@ -97,10 +147,10 @@ public sealed class RenderingSampleTests
     public void FiscalSampleScenarios_UseUniqueArcaIdentityAcrossServices()
     {
         var duplicates = SampleGallery.CreateCases()
-            .Where(sample => sample.Document.Tipo == TipoComprobanteGenerado.Fiscal)
+            .Where(sample => sample.Document?.Tipo == TipoComprobanteGenerado.Fiscal)
             .GroupBy(sample =>
             {
-                IdentidadComprobante identity = sample.Document.Identidad!;
+                IdentidadComprobante identity = sample.Document!.Identidad!;
                 return (identity.Ambiente, identity.Cuit, identity.PuntoVenta, identity.Tipo, identity.Numero);
             })
             .Where(group => group.Count() > 1)
@@ -119,19 +169,52 @@ public sealed class RenderingSampleTests
         {
             string database = Path.Combine(directory, "sample.db");
             SampleCase sample = SampleGallery.CreateCases().Single(item => item.Id == "wsfe-a-ri-logo");
-            ExampleDocumentStore.Save(database, sample.Document, sample.Issuer);
+            ExampleDocumentStore.Save(database, sample.Document!, sample.Issuer);
             (ComprobanteGenerado document, DatosEmisor issuer) = ExampleDocumentStore.Load(database);
 
-            string beforeHtml = new ArcaWsGeneradorHTML(sample.Issuer).GenerarHTMLComprobante(sample.Document);
+            string beforeHtml = new ArcaWsGeneradorHTML(sample.Issuer).GenerarHTMLComprobante(sample.Document!);
             string afterHtml = new ArcaWsGeneradorHTML(issuer).GenerarHTMLComprobante(document);
-            byte[] beforePdf = new ArcaWsGeneradorPDF(sample.Issuer).GenerarPDFComprobante(sample.Document);
+            byte[] beforePdf = new ArcaWsGeneradorPDF(sample.Issuer).GenerarPDFComprobante(sample.Document!);
             byte[] afterPdf = new ArcaWsGeneradorPDF(issuer).GenerarPDFComprobante(document);
 
             Assert.Equal(beforeHtml, afterHtml);
             Assert.Equal(PdfText(beforePdf), PdfText(afterPdf));
-            Assert.Equal(sample.Document.Identidad, document.Identidad);
-            Assert.Equal(sample.Document.Iva, document.Iva);
+            Assert.Equal(sample.Document!.Identidad, document.Identidad);
+            Assert.Equal(sample.Document!.Iva, document.Iva);
             Assert.Equal(sample.Issuer.LogoPng, issuer.LogoPng);
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Theory]
+    [InlineData("remito-r-original", "ORIGINAL", "CAI:", "12345678901234", false)]
+    [InlineData("remito-r-duplicado", "DUPLICADO", "CAI:", "12345678901234", false)]
+    [InlineData("remito-x-interno", "ORIGINAL", "Uso interno:", "PredioIndustrialEjemplo", true)]
+    public void RemitoSamples_RoundTripThroughSqliteJsonAndRenderWithoutFiscalAuthorization(string id, string copy, string expected, string expectedPdf, bool internalUse)
+    {
+        string directory = Path.Combine(Path.GetTempPath(), $"netarcaws-remito-roundtrip-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            string database = Path.Combine(directory, "sample.sqlite");
+            SampleCase sample = SampleGallery.CreateCases().Single(item => item.Id == id);
+            RemitoGenerado remito = sample.Remito!;
+            ExampleDocumentStore.Save(database, remito, sample.Issuer);
+            ExampleDocumentStore.StoredSample persisted = ExampleDocumentStore.LoadSample(database);
+            Assert.Null(persisted.Document);
+            Assert.NotNull(persisted.Remito);
+            string html = new ArcaWsGeneradorHTML(persisted.Issuer).GenerarHTMLComprobante(persisted.Remito!);
+            byte[] pdf = new ArcaWsGeneradorPDF(persisted.Issuer).GenerarPDFComprobante(persisted.Remito!);
+            string pdfText = PdfText(pdf);
+            string compactPdfText = string.Concat(pdfText.Where(character => !char.IsWhiteSpace(character)));
+            Assert.Contains(copy, html, StringComparison.Ordinal);
+            Assert.Contains(expected, html, StringComparison.Ordinal);
+            Assert.Contains(copy, pdfText, StringComparison.Ordinal);
+            Assert.Contains(expectedPdf.Replace(" ", "", StringComparison.Ordinal), compactPdfText, StringComparison.Ordinal);
+            Assert.Equal(0, Count(html, "QRCode"));
+            Assert.DoesNotContain("CAE:", html, StringComparison.Ordinal);
+            if (internalUse) Assert.Contains("Predio Industrial Ejemplo", html, StringComparison.Ordinal);
+            else Assert.Contains("HAB-2026-001", html, StringComparison.Ordinal);
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

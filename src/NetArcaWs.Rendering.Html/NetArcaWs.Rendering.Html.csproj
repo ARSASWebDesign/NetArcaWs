@@ -21,6 +21,7 @@
     <Compile Include="../Rendering.Shared/FiscalAssociatedDocuments.cs" Link="Shared/FiscalAssociatedDocuments.cs" />
     <Compile Include="../Rendering.Shared/RenderingStyle.cs" Link="Shared/RenderingStyle.cs" />
     <Compile Include="../Rendering.Shared/ExportDocumentFields.cs" Link="Shared/ExportDocumentFields.cs" />
+    <Compile Include="../Rendering.Shared/CurrencyDisplay.cs" Link="Shared/CurrencyDisplay.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="../../LICENSE" Pack="true" PackagePath="/" />

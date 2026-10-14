@@ -321,6 +321,18 @@ y WSMTXCA representan los ítems disponibles en sus snapshots. Cada adaptador
 limita los tipos de comprobante que valida. WSFECred, CAEA, lotes durables y el
 PDF de WSCPE quedan fuera de esta fachada.
 
+Los extras admiten un único `ColorPrincipal` opcional en formato `#RRGGBB` y
+usan gris `#333333` por defecto. También exponen `VersionRenderizado`, que
+combina la versión real del paquete con una revisión independiente de HTML o
+PDF. La propiedad identifica el código
+y la plantilla del renderer, no el perfil del emisor, el logo ni el color; la
+aplicación incluye además una revisión o hash propio de su configuración al
+invalidar cachés. Los remitos R y X son documentos locales separados del estado
+de autorización fiscal: R imprime el CAI y los datos del talonario declarados
+por la aplicación sin verificarlos ante ARCA; X limita el documento al ámbito
+interno indicado. La primera versión exige receptor identificado con CUIT y no
+cubre consumidor final, DTV-e, regímenes sectoriales ni controlador fiscal.
+
 El core no referencia PDFsharp, QRCoder ni StbImageSharp. Los extras comparten
 reglas fuente internas, pero no dependen uno del otro. El PDF requiere un
 resolver global de fuentes de PDFsharp: instala de forma inmutable Noto Sans en
