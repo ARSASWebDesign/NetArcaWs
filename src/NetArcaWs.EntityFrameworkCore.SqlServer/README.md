@@ -2,6 +2,8 @@
 
 Optional SQL Server integration for the NetArcaWs EF Core persistence package. It is maintained under LGPL-3.0-or-later; see the package license and third-party notices.
 
+This provider uses EF Core SQL Server 10.0.13 and pins Microsoft.Data.SqlClient 7.1.1. Entra authentication configured through SqlClient requires the separately installed optional `Microsoft.Data.SqlClient.Extensions.Azure` package; it is not included or license-reviewed as a NetArcaWs dependency. The provider does not enable process-wide networking switches.
+
 Pass the consumer-managed connection string and explicitly select the persistence modules and ARCA services:
 
 ```csharp

@@ -24,10 +24,10 @@
   "referenceOnlyPackages": [
     {
       "id": "Microsoft.Data.SqlClient.SNI.runtime",
-      "version": "6.0.3",
+      "version": "7.1.0",
       "licensePath": "LICENSE.txt",
       "licenseSha256": "9335e8bad875dd7be4eebd55d2335eb6433d1cea61aadb3817af7807bef8932a",
-      "source": "https://www.nuget.org/packages/Microsoft.Data.SqlClient.SNI.runtime/6.0.3",
+      "source": "https://www.nuget.org/packages/Microsoft.Data.SqlClient.SNI.runtime/7.1.0",
       "reason": "Reviewed optional Windows native runtime terms; reference only, do not embed this package or its native binaries in release artifacts."
     },
     {
@@ -36,7 +36,7 @@
       "licensePath": "LICENSE",
       "licenseSha256": "0fe665c2ada5962fd01190ab5b2947b9a9d2c625a9f8225577441eb3256e14e3",
       "source": "https://www.nuget.org/packages/Microsoft.Identity.Client.NativeInterop/0.20.6",
-      "reason": "Reference only: the package license restricts redistribution. Its managed/native binaries must not be present in NetArcaWs release artifacts."
+      "reason": "Blocked dependency: keep this policy entry so any future graph reintroduction requires explicit license review; its managed/native binaries must not be present in NetArcaWs release artifacts."
     }
   ],
   "upstreamLegalOverrides": [

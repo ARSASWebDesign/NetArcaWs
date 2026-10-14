@@ -1,5 +1,7 @@
 # NetArcaWs migrations for SqlServer
 
+The companion SQL Server provider pins Microsoft.Data.SqlClient 7.1.1. Entra authentication through SqlClient requires the separately installed optional `Microsoft.Data.SqlClient.Extensions.Azure` package; it is not included with NetArcaWs and must be reviewed separately.
+
 This optional LGPL-3.0-or-later package contains the official, versioned EF Core migrations for NetArcaWs persistence modules. It is separate from operational stores. Register it and run it only from an explicit deployment actor; normal API registration and startup do not connect or change the schema.
 
 Select only the modules required by this deployment using the same `NetArcaWsModelOptions` used by the stores. A service selection changes which operations use a module, not its schema. For example:
