@@ -64,7 +64,7 @@ public sealed class RenderingSampleTests
         byte[] plainPdf = new ArcaWsGeneradorPDF(withoutLogo).GenerarPDFComprobante(sample.Document);
         double logoHeaderTop = IssuerNameTop(pdf);
         double plainHeaderTop = IssuerNameTop(plainPdf);
-        Assert.InRange(plainHeaderTop - logoHeaderTop, 30, 50);
+        Assert.InRange(Math.Abs(plainHeaderTop - logoHeaderTop), 0, 25);
     }
 
     [Fact]

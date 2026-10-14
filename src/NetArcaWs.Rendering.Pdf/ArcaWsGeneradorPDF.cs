@@ -19,8 +19,16 @@ public sealed class ArcaWsGeneradorPDF
 {
     private static readonly object FontGate = new();
     private readonly DatosEmisor _issuer;
+    private readonly RenderingStyle _style;
 
-    public ArcaWsGeneradorPDF(DatosEmisor emisor) => _issuer = emisor ?? throw new ArgumentNullException(nameof(emisor));
+    public ArcaWsGeneradorPDF(DatosEmisor emisor, string colorPrincipal = "#333333")
+    {
+        _issuer = emisor ?? throw new ArgumentNullException(nameof(emisor));
+        _style = new RenderingStyle(colorPrincipal);
+    }
+
+    public string ColorPrincipal => _style.ColorPrincipal;
+    public string VersionRenderizado => RenderingStyle.RendererVersion(typeof(ArcaWsGeneradorPDF).Assembly, "pdf-2");
 
     public byte[] GenerarPDFComprobante(ComprobanteGenerado datos)
     {
@@ -30,6 +38,7 @@ public sealed class ArcaWsGeneradorPDF
         string? qrUrl = layout.IsFiscal ? FiscalQrPayload.Create(datos, _issuer) : null;
         EnsureFontResolver();
 
+        ExportDocumentFields? export = ExportDocumentFields.Read(datos.Identidad?.Servicio, datos.SnapshotRequest);
         var document = new Document();
         document.Info.Title = $"{layout.Title} {layout.Letter}";
         Style normal = document.Styles["Normal"]!;
@@ -44,33 +53,25 @@ public sealed class ArcaWsGeneradorPDF
         Section section = document.AddSection();
         section.PageSetup = document.DefaultPageSetup.Clone();
         section.PageSetup.PageFormat = PageFormat.A4;
-        section.PageSetup.TopMargin = Unit.FromMillimeter(_issuer.LogoPng is null ? 24 : 38);
-        section.PageSetup.BottomMargin = Unit.FromMillimeter(layout.IsFiscal ? 54 : 14);
+        section.PageSetup.TopMargin = Unit.FromMillimeter(17);
+        section.PageSetup.BottomMargin = Unit.FromMillimeter(layout.IsFiscal ? 50 : 15);
         section.PageSetup.LeftMargin = Unit.FromCentimeter(1.4);
         section.PageSetup.RightMargin = Unit.FromCentimeter(1.4);
-        Paragraph runningHeader = section.Headers.Primary.AddParagraph($"{layout.Title} {layout.Letter} · Nº {DocumentNumber(datos)}");
-        runningHeader.Format.Font.Size = 8;
-        runningHeader.Format.Font.Bold = true;
-        runningHeader.Format.Alignment = ParagraphAlignment.Right;
+        AddRunningHeader(section, $"{layout.Title} {layout.Letter} · Nº {DocumentNumber(datos)}");
+        if (layout.IsFiscal) AddCopyLabel(section, "ORIGINAL");
         if (layout.RequiredLegend is not null)
         {
             Paragraph legend = section.AddParagraph($"COMPROBANTE {layout.Letter}    {layout.RequiredLegend}");
             legend.Format.Alignment = ParagraphAlignment.Center;
-            legend.Format.Borders.Width = Unit.FromPoint(1.5);
-            legend.Format.Borders.Distance = Unit.FromPoint(7);
+            legend.Format.Borders.Width = Unit.FromPoint(.5);
+            legend.Format.Borders.Distance = Unit.FromPoint(4);
+            legend.Format.SpaceAfter = Unit.FromPoint(8);
             legend.Format.Font.Bold = true;
-            legend.Format.Font.Size = 13;
+            legend.Format.Font.Size = 10;
         }
-        AddIssuer(section, datos, layout);
-        section.AddParagraph("Datos del receptor", "Heading2");
-        AddLine(section, "Nombre / razón social", datos.Receptor.Nombre);
-        if (!string.IsNullOrWhiteSpace(datos.Receptor.Domicilio)) AddLine(section, "Domicilio", datos.Receptor.Domicilio);
-        string receiverCondition = DocumentFiscalRules.ReceiverCondition(datos);
-        if (!string.IsNullOrWhiteSpace(receiverCondition)) AddLine(section, DocumentFiscalRules.ReceiverConditionLabel(datos), receiverCondition);
-        string? receiverId = !string.IsNullOrWhiteSpace(datos.Receptor.IdentificacionFiscal)
-            ? datos.Receptor.IdentificacionFiscal
-            : datos.Receptor.Identificacion > 0 ? datos.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture) : null;
-        if (receiverId is not null) AddLine(section, "Identificación", receiverId);
+        AddIssuer(section, datos, layout, export);
+        AddReceiver(section, datos, export);
+        AddSupplementalFields(section, datos, export);
         IReadOnlyList<string> associatedDocuments = FiscalAssociatedDocuments.Read(datos);
         if (associatedDocuments.Count != 0)
         {
@@ -116,7 +117,11 @@ public sealed class ArcaWsGeneradorPDF
             code.Format.RightIndent = Unit.FromMillimeter(44);
             authorization.Format.RightIndent = Unit.FromMillimeter(44);
         }
-        else section.AddParagraph(layout.RequiredLegend!, "Heading2");
+        else
+        {
+            Paragraph footerLegend = section.Footers.Primary.AddParagraph(layout.RequiredLegend!);
+            footerLegend.Format.Font.Size = 8;
+        }
         Paragraph pageCount = section.Footers.Primary.AddParagraph();
         pageCount.Format.Alignment = ParagraphAlignment.Right;
         pageCount.Format.Font.Size = 7;
@@ -128,30 +133,295 @@ public sealed class ArcaWsGeneradorPDF
         using var output = new MemoryStream();
         renderer.PdfDocument!.Save(output, closeStream: false);
         byte[] result = output.ToArray();
-        return OverlayImages(result, _issuer.LogoPng, qrUrl);
+        return OverlayImages(result, _issuer.LogoPng, qrUrl, layout.RequiredLegend is null ? 23 : 33);
     }
 
-    private void AddIssuer(Section section, ComprobanteGenerado data, DocumentLayout layout)
+    public byte[] GenerarPDFComprobante(RemitoGenerado remito)
+    {
+        RemitoValidator.Validate(remito);
+        if (remito.CuitEmisor != _issuer.Identificacion)
+            throw new ArgumentException("El remito pertenece a un CUIT emisor distinto del perfil configurado.", nameof(remito));
+        _ = new Remito(_issuer).GenerarComprobante(new DatosRemito(remito.Clase, remito.FechaEmision, remito.PuntoVenta,
+            remito.Numero, remito.Receptor, remito.Destino, remito.Mercaderia, remito.EsOriginal, remito.Transportista,
+            remito.Cai, remito.PrimerNumero, remito.UltimoNumero, remito.Vencimiento, remito.Imprenta,
+            remito.EsAutoimpresor, remito.AmbitoInterno));
+        ValidatePrintableText(remito);
+        EnsureFontResolver();
+        var document = CreateDocument();
+        Section section = document.AddSection();
+        ConfigurePage(document, section, false);
+        AddRunningHeader(section, $"Remito {remito.Clase} · Nº {remito.PuntoVenta:00000}-{remito.Numero:00000000}");
+        AddCopyLabel(section, remito.EsOriginal ? "ORIGINAL" : "DUPLICADO");
+        Paragraph legend = section.AddParagraph($"REMITO {remito.Clase}    {remito.Leyenda}");
+        legend.Format.Alignment = ParagraphAlignment.Center;
+        legend.Format.Borders.Width = Unit.FromPoint(.5);
+        legend.Format.Borders.Distance = Unit.FromPoint(4);
+        legend.Format.SpaceAfter = Unit.FromPoint(8);
+        legend.Format.Font.Bold = true;
+        AddRemitoHeader(section, remito);
+        AddRemitoReceiver(section, remito);
+        var goods = section.AddTable();
+        StyleHeader(goods, ["Descripción", "Unidad", "Cantidad"], ["10.8", "3.8", "3.8"]);
+        foreach (LineaRemito item in remito.Mercaderia)
+        {
+            Row row = goods.AddRow();
+            row.Cells[0].AddParagraph(item.Descripcion);
+            row.Cells[1].AddParagraph(item.Unidad);
+            row.Cells[2].AddParagraph(Number(item.Cantidad));
+            row.Cells[2].Format.Alignment = ParagraphAlignment.Right;
+        }
+        AddRemitoDetails(section, remito);
+        Paragraph reception = section.AddParagraph("Recibí conforme la mercadería detallada.");
+        reception.Format.SpaceBefore = Unit.FromPoint(30);
+        reception.Format.Borders.Top.Width = Unit.FromPoint(.5);
+        reception.Format.Borders.Top.Color = Colors.Gray;
+        reception.Format.LeftIndent = Unit.FromCentimeter(9);
+        reception.Format.Font.Size = 8;
+        AddPageNumber(section, false);
+        return OverlayImages(Render(document), _issuer.LogoPng, null, 36);
+    }
+
+    private Document CreateDocument()
+    {
+        var document = new Document();
+        document.Info.Title = "Remito";
+        Style normal = document.Styles["Normal"]!;
+        normal.Font.Name = EmbeddedFontResolver.Family;
+        normal.Font.Size = 9;
+        normal.Font.Color = Colors.Black;
+        normal.ParagraphFormat.SpaceAfter = Unit.FromPoint(3);
+        foreach (string name in new[] { "Heading1", "Heading2" })
+        {
+            Style heading = document.Styles[name]!;
+            heading.Font.Name = EmbeddedFontResolver.Family;
+            heading.Font.Bold = true;
+            heading.Font.Size = name == "Heading1" ? 14 : 10;
+            heading.ParagraphFormat.SpaceBefore = Unit.FromPoint(8);
+            heading.ParagraphFormat.SpaceAfter = Unit.FromPoint(4);
+        }
+        return document;
+    }
+
+    private static void ConfigurePage(Document document, Section section, bool fiscal)
+    {
+        section.PageSetup = document.DefaultPageSetup.Clone();
+        section.PageSetup.PageFormat = PageFormat.A4;
+        section.PageSetup.TopMargin = Unit.FromMillimeter(17);
+        section.PageSetup.BottomMargin = Unit.FromMillimeter(fiscal ? 35 : 15);
+        section.PageSetup.LeftMargin = Unit.FromCentimeter(1.4);
+        section.PageSetup.RightMargin = Unit.FromCentimeter(1.4);
+    }
+
+    private void AddRunningHeader(Section section, string value)
+    {
+        Paragraph header = section.Headers.Primary.AddParagraph(value);
+        header.Format.Font.Size = 7;
+        header.Format.Font.Color = Colors.Gray;
+        header.Format.Alignment = ParagraphAlignment.Right;
+        header.Format.Borders.Bottom.Width = Unit.FromPoint(.3);
+        header.Format.Borders.Bottom.Color = Colors.LightGray;
+    }
+
+    private static void AddCopyLabel(Section section, string value)
+    {
+        Paragraph copy = section.AddParagraph(value);
+        copy.Format.Alignment = ParagraphAlignment.Center;
+        copy.Format.Font.Bold = true;
+        copy.Format.Font.Size = 8;
+        copy.Format.Font.Color = Colors.Gray;
+        copy.Format.SpaceAfter = Unit.FromPoint(5);
+    }
+
+    private static void AddPageNumber(Section section, bool fiscal)
+    {
+        Paragraph page = section.Footers.Primary.AddParagraph();
+        page.Format.Alignment = ParagraphAlignment.Right;
+        page.Format.Font.Size = 7;
+        page.AddText("Página "); page.AddPageField(); page.AddText(" de "); page.AddNumPagesField();
+        if (fiscal) page.Format.RightIndent = Unit.FromMillimeter(44);
+    }
+
+    private void StyleHeader(Table table, string[] headings, string[]? widths = null)
+    {
+        if (widths is not null)
+        {
+            foreach (string width in widths) table.AddColumn(Unit.FromCentimeter(double.Parse(width, CultureInfo.InvariantCulture)));
+        }
+        Row row = table.AddRow();
+        StyleHeader(row, headings);
+    }
+
+    private void StyleHeader(Row row, string[] headings)
+    {
+        row.HeadingFormat = true;
+        row.Shading.Color = ParseColor(_style.ColorPrincipal);
+        for (int index = 0; index < headings.Length; index++)
+        {
+            Paragraph cell = row.Cells[index].AddParagraph(headings[index]);
+            cell.Format.Font.Bold = true;
+            cell.Format.Font.Color = ParseColor(_style.TextOnPrincipal);
+        }
+    }
+
+    private void AddReceiver(Section section, ComprobanteGenerado data, ExportDocumentFields? export)
     {
         var table = section.AddTable();
-        table.Borders.Width = Unit.FromPoint(0.4);
-        table.AddColumn(Unit.FromCentimeter(7.75));
-        table.AddColumn(Unit.FromCentimeter(2.7));
-        table.AddColumn(Unit.FromCentimeter(7.75));
-        Row row = table.AddRow();
-        row.VerticalAlignment = VerticalAlignment.Center;
+        table.Borders.Color = Colors.LightGray; table.Borders.Width = Unit.FromPoint(.3);
+        table.AddColumn(Unit.FromCentimeter(9.1)); table.AddColumn(Unit.FromCentimeter(9.1));
+        Row header = table.AddRow(); header.Shading.Color = Colors.Gainsboro;
+        header.Cells[0].AddParagraph("Datos del receptor").Format.Font.Bold = true;
+        header.Cells[1].AddParagraph("Condición tributaria").Format.Font.Bold = true;
+        Row body = table.AddRow();
+        body.Shading.Color = Colors.White;
+        AddLine(body.Cells[0], "Nombre / razón social", data.Receptor.Nombre);
+        if (!string.IsNullOrWhiteSpace(data.Receptor.Domicilio)) AddLine(body.Cells[0], "Domicilio", data.Receptor.Domicilio);
+        string condition = DocumentFiscalRules.ReceiverCondition(data);
+        if (!string.IsNullOrWhiteSpace(condition)) AddLine(body.Cells[1], DocumentFiscalRules.ReceiverConditionLabel(data).TrimEnd(':', ' '), condition);
+        string? id = export?.ForeignTaxId ?? data.Receptor.IdentificacionFiscal;
+        if (string.IsNullOrWhiteSpace(id) && data.Receptor.Identificacion > 0) id = data.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture);
+        if (!string.IsNullOrWhiteSpace(id)) AddLine(body.Cells[1], export is null ? "Identificación" : "ID impositivo extranjero", id);
+        if (export?.CuitPais is string cuitPais) AddLine(body.Cells[1], "CUIT país", cuitPais);
+        if (export?.DestinationCountryCode is string country) AddLine(body.Cells[1], "País de destino (código)", country);
+        if (data.FechaPago is DateOnly due) AddLine(body.Cells[1], "Vencimiento de pago", Date(due));
+    }
+
+    private void AddSupplementalFields(Section section, ComprobanteGenerado data, ExportDocumentFields? export)
+    {
+        if (export is null) return;
+        var rows = new List<string[]>();
+        rows.Add(["Moneda", $"{CurrencyDisplay.Code(export.CurrencyCode)} · {CurrencyDisplay.Label(export.CurrencyCode)}"]);
+        if (export.ExchangeRate is string rate) rows.Add(["Cotización", $"{rate} ARS por {CurrencyDisplay.Code(export.CurrencyCode)}"]);
+        if (export.PaymentMethod is { Length: > 0 } payment) rows.Add(["Forma de pago", payment]);
+        if (FormatSnapshotDate(export.PaymentDate) is string date) rows.Add(["Fecha de pago", date]);
+        if (export.Incoterms is { Length: > 0 } incoterm) rows.Add(["Incoterms", string.IsNullOrWhiteSpace(export.IncotermsDescription) ? incoterm : $"{incoterm} · {export.IncotermsDescription}"]);
+        if (export.ExportCondition is { Length: > 0 } condition) rows.Add(["Condición de exportación", condition]);
+        if (export.CommercialObservations is { Length: > 0 } commercial) rows.Add(["Observaciones comerciales", commercial]);
+        if (export.Observations is { Length: > 0 } observations) rows.Add(["Observaciones", observations]);
+        if (rows.Count == 0) return;
+        section.AddParagraph("Datos de exportación", "Heading2");
+        AddSimpleTable(section, ["Campo", "Detalle"], rows);
+    }
+
+    private void AddRemitoHeader(Section section, RemitoGenerado remito)
+    {
+        var table = section.AddTable();
+        table.Borders.Color = ParseColor(_style.ColorPrincipal); table.Borders.Width = Unit.FromPoint(.2);
+        table.AddColumn(Unit.FromCentimeter(7.4)); table.AddColumn(Unit.FromCentimeter(2.2)); table.AddColumn(Unit.FromCentimeter(8.6));
+        Row row = table.AddRow(); row.Shading.Color = ParseColor(_style.ColorPrincipal); row.Cells[1].Shading.Color = Colors.White; row.VerticalAlignment = VerticalAlignment.Center;
+        row.Cells[0].Format.Font.Color = ParseColor(_style.TextOnPrincipal);
+        row.Cells[1].Format.Font.Color = ParseColor(_style.ColorPrincipal);
+        row.Cells[2].Format.Font.Color = ParseColor(_style.TextOnPrincipal);
         Paragraph brand = row.Cells[0].AddParagraph(_issuer.RazonSocial);
+        brand.Format.Font.Bold = true; brand.Format.Font.Size = 14;
+        if (_issuer.LogoPng is { Length: > 0 }) brand.Format.LeftIndent = Unit.FromMillimeter(37);
+        if (!string.IsNullOrWhiteSpace(_issuer.NombreFantasia)) { brand.AddLineBreak(); brand.AddText(_issuer.NombreFantasia); }
+        brand.AddLineBreak(); brand.AddText(_issuer.Domicilio);
+        Paragraph letter = row.Cells[1].AddParagraph(remito.Clase.ToString()); letter.Format.Font.Bold = true; letter.Format.Font.Size = 24; letter.Format.Alignment = ParagraphAlignment.Center;
+        if (remito.Clase == ClaseRemito.R) { Paragraph code = row.Cells[1].AddParagraph("COD. 091"); code.Format.Font.Size = 7; code.Format.Alignment = ParagraphAlignment.Center; }
+        Paragraph meta = row.Cells[2].AddParagraph($"Remito {remito.Clase}"); meta.Format.Font.Bold = true; meta.Format.Font.Size = 14; meta.Format.Alignment = ParagraphAlignment.Right;
+        Paragraph remitoDetails = row.Cells[2].AddParagraph($"Nº {remito.PuntoVenta:00000}-{remito.Numero:00000000}");
+        remitoDetails.Format.Alignment = ParagraphAlignment.Right; remitoDetails.Format.Font.Size = 9;
+        remitoDetails.AddLineBreak(); remitoDetails.AddText($"Fecha: {Date(remito.FechaEmision)}");
+        Paragraph issuerFiscal = row.Cells[2].AddParagraph(); issuerFiscal.Format.Alignment = ParagraphAlignment.Right; issuerFiscal.Format.Font.Size = 7;
+        issuerFiscal.Format.Borders.Top.Width = Unit.FromPoint(.3); issuerFiscal.Format.Borders.Top.Color = Colors.LightGray;
+        issuerFiscal.AddText($"CUIT: {_issuer.Identificacion} · {_issuer.CondicionTributaria}");
+        if (!string.IsNullOrWhiteSpace(_issuer.IngresosBrutos)) { issuerFiscal.AddLineBreak(); issuerFiscal.AddText($"Ingresos Brutos: {_issuer.IngresosBrutos}"); }
+        if (_issuer.InicioActividades is DateOnly start) { issuerFiscal.AddLineBreak(); issuerFiscal.AddText($"Inicio de actividades: {Date(start)}"); }
+    }
+
+    private void AddRemitoReceiver(Section section, RemitoGenerado remito)
+    {
+        var table = section.AddTable(); table.Borders.Color = Colors.LightGray; table.Borders.Width = Unit.FromPoint(.3);
+        table.AddColumn(Unit.FromCentimeter(9.1)); table.AddColumn(Unit.FromCentimeter(9.1));
+        Row heading = table.AddRow(); heading.Shading.Color = Colors.Gainsboro;
+        heading.Cells[0].AddParagraph("Datos del receptor").Format.Font.Bold = true;
+        heading.Cells[1].AddParagraph("Traslado").Format.Font.Bold = true;
+        Row body = table.AddRow(); body.Shading.Color = Colors.White;
+        AddLine(body.Cells[0], "Nombre / razón social", remito.Receptor.Nombre);
+        AddLine(body.Cells[0], "CUIT", remito.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture));
+        AddLine(body.Cells[0], "Domicilio", remito.Receptor.Domicilio ?? "");
+        AddLine(body.Cells[0], "Condición tributaria", remito.Receptor.CondicionTributaria ?? "");
+        AddLine(body.Cells[1], "Destino", remito.Destino);
+        if (remito.Transportista is { } carrier)
+        {
+            AddLine(body.Cells[1], "Transportista", carrier.RazonSocial);
+            AddLine(body.Cells[1], "CUIT transportista", carrier.Cuit.ToString(CultureInfo.InvariantCulture));
+            AddLine(body.Cells[1], "Domicilio transportista", carrier.Domicilio);
+        }
+        if (remito.AmbitoInterno is string scope) AddLine(body.Cells[1], "Ámbito de circulación interna", scope);
+    }
+
+    private static void AddRemitoDetails(Section section, RemitoGenerado remito)
+    {
+        if (remito.Clase != ClaseRemito.R) return;
+        section.AddParagraph("Datos del talonario R", "Heading2");
+        AddLine(section, "CAI declarado", remito.Cai!);
+        AddLine(section, "Vencimiento de talonario", Date(remito.Vencimiento!.Value));
+        AddLine(section, "Rango autorizado declarado", $"{remito.PrimerNumero:00000000}–{remito.UltimoNumero:00000000}");
+        if (remito.EsAutoimpresor) AddLine(section, "Condición de impresión", "Autoimpresor");
+        if (remito.Imprenta is { } printer)
+        {
+            AddLine(section, "Imprenta", printer.RazonSocial);
+            AddLine(section, "CUIT imprenta", printer.Cuit.ToString(CultureInfo.InvariantCulture));
+            AddLine(section, "Habilitación de imprenta", printer.NumeroHabilitacion);
+            AddLine(section, "Fecha de impresión", Date(printer.FechaImpresion));
+        }
+    }
+
+    private static string? FormatSnapshotDate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return DateOnly.TryParseExact(value, ["yyyyMMdd", "yyyy-MM-dd", "dd/MM/yyyy"], CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly date)
+            ? Date(date) : value;
+    }
+
+    private void AddLine(Cell cell, string label, string value)
+    {
+        Paragraph p = cell.AddParagraph();
+        p.AddFormattedText(label + ": ", TextFormat.Bold);
+        p.AddText(value);
+    }
+
+    private static Color ParseColor(string hex) => Color.FromRgb(
+        Convert.ToByte(hex.Substring(1, 2), 16), Convert.ToByte(hex.Substring(3, 2), 16), Convert.ToByte(hex.Substring(5, 2), 16));
+
+    private byte[] Render(Document document)
+    {
+        var renderer = new PdfDocumentRenderer { Document = document };
+        renderer.RenderDocument();
+        using var output = new MemoryStream();
+        renderer.PdfDocument!.Save(output, closeStream: false);
+        return output.ToArray();
+    }
+
+    private void AddIssuer(Section section, ComprobanteGenerado data, DocumentLayout layout, ExportDocumentFields? export)
+    {
+        var table = section.AddTable();
+        table.Borders.Width = Unit.FromPoint(.2);
+        table.Borders.Color = ParseColor(_style.ColorPrincipal);
+        table.AddColumn(Unit.FromCentimeter(7.4));
+        table.AddColumn(Unit.FromCentimeter(2.2));
+        table.AddColumn(Unit.FromCentimeter(8.6));
+        Row row = table.AddRow();
+        row.Shading.Color = ParseColor(_style.ColorPrincipal);
+        row.Cells[1].Shading.Color = Colors.White;
+        row.VerticalAlignment = VerticalAlignment.Center;
+        row.Cells[0].Format.Font.Color = ParseColor(_style.TextOnPrincipal);
+        row.Cells[1].Format.Font.Color = ParseColor(_style.ColorPrincipal);
+        row.Cells[2].Format.Font.Color = ParseColor(_style.TextOnPrincipal);
+        Paragraph brand = row.Cells[0].AddParagraph();
+        if (_issuer.LogoPng is { Length: > 0 })
+        {
+            brand.Format.LeftIndent = Unit.FromMillimeter(37);
+        }
+        brand.AddText(_issuer.RazonSocial);
         brand.Format.Font.Bold = true;
-        brand.Format.Font.Size = 13;
+        brand.Format.Font.Size = 14;
         if (!string.IsNullOrWhiteSpace(_issuer.NombreFantasia)) { brand.AddLineBreak(); brand.AddText(_issuer.NombreFantasia); }
         if (!string.IsNullOrWhiteSpace(_issuer.Domicilio)) { brand.AddLineBreak(); brand.AddText(_issuer.Domicilio); }
-        brand.AddLineBreak(); brand.AddText($"CUIT: {_issuer.Identificacion.ToString(CultureInfo.InvariantCulture)}");
-        brand.AddLineBreak(); brand.AddText(_issuer.CondicionTributaria);
-        if (!string.IsNullOrWhiteSpace(_issuer.IngresosBrutos)) { brand.AddLineBreak(); brand.AddText($"Ingresos Brutos: {_issuer.IngresosBrutos}"); }
-        if (_issuer.InicioActividades is DateOnly start) { brand.AddLineBreak(); brand.AddText($"Inicio de actividades: {Date(start)}"); }
         Paragraph code = row.Cells[1].AddParagraph(layout.Letter);
         code.Format.Font.Bold = true;
-        code.Format.Font.Size = 22;
+            code.Format.Font.Size = 24;
         code.Format.Alignment = ParagraphAlignment.Center;
         if (layout.IsFiscal)
         {
@@ -161,44 +431,49 @@ public sealed class ArcaWsGeneradorPDF
         }
         Paragraph title = row.Cells[2].AddParagraph(layout.Title);
         title.Format.Font.Bold = true;
-        title.Format.Font.Size = 13;
+        title.Format.Font.Size = 14;
         title.Format.Alignment = ParagraphAlignment.Right;
-        title.AddLineBreak();
         string number = data.Identidad is null ? data.NumeroInterno ?? string.Empty : $"{data.Identidad.PuntoVenta:00000}-{data.Identidad.Numero:00000000}";
-        title.AddText($"Nº {number}");
-        title.AddLineBreak(); title.AddText($"Fecha: {(data.Fecha is DateOnly date ? Date(date) : "—")}");
-        if (layout.IsFiscal) { title.AddLineBreak(); title.AddText("ORIGINAL"); }
-        if (layout.IsFiscal) { title.AddLineBreak(); title.AddText($"CAE: {data.Resultado!.CodigoAutorizacion}"); title.AddLineBreak(); title.AddText($"Vencimiento CAE: {Date(data.Resultado.Vencimiento!.Value)}"); }
-        if (data.FechaDesde is DateOnly from) { title.AddLineBreak(); title.AddText($"Período desde: {Date(from)}"); }
-        if (data.FechaHasta is DateOnly through) { title.AddLineBreak(); title.AddText($"Período hasta: {Date(through)}"); }
-        if (data.FechaPago is DateOnly due) { title.AddLineBreak(); title.AddText($"Vencimiento de pago: {Date(due)}"); }
-        if (!string.IsNullOrWhiteSpace(data.Moneda)) { title.AddLineBreak(); title.AddText($"Moneda: {CurrencyName(data.Moneda)}"); }
-        if (!IsPesoCurrency(data.Moneda) && data.Cotizacion > 0) { title.AddLineBreak(); title.AddText($"Cotización: {FullDecimal(data.Cotizacion)} ARS por {CurrencyName(data.Moneda)}"); }
+        Paragraph details = row.Cells[2].AddParagraph($"Nº {number}");
+        details.Format.Alignment = ParagraphAlignment.Right; details.Format.Font.Size = 9;
+        details.AddLineBreak(); details.AddText($"Fecha: {(data.Fecha is DateOnly date ? Date(date) : "—")}");
+        if (data.FechaDesde is DateOnly from) { details.AddLineBreak(); details.AddText($"Período desde: {Date(from)}"); }
+        if (data.FechaHasta is DateOnly through) { details.AddLineBreak(); details.AddText($"Período hasta: {Date(through)}"); }
+        if (data.FechaPago is DateOnly due) { details.AddLineBreak(); details.AddText($"Vencimiento de pago: {Date(due)}"); }
+        if (export is null && !string.IsNullOrWhiteSpace(data.Moneda)) { details.AddLineBreak(); details.AddText($"Moneda: {CurrencyDisplay.Label(data.Moneda)}"); }
+        if (export is null && !CurrencyDisplay.IsPeso(data.Moneda) && data.Cotizacion > 0) { details.AddLineBreak(); details.AddText($"Cotización: {FullDecimal(data.Cotizacion)} ARS por {CurrencyDisplay.Code(data.Moneda)}"); }
+        Paragraph issuerFiscal = row.Cells[2].AddParagraph();
+        issuerFiscal.Format.Alignment = ParagraphAlignment.Right;
+        issuerFiscal.Format.Font.Size = 7;
+        issuerFiscal.Format.Borders.Top.Width = Unit.FromPoint(.3);
+        issuerFiscal.Format.Borders.Top.Color = Colors.LightGray;
+        issuerFiscal.AddText($"CUIT: {_issuer.Identificacion} · {_issuer.CondicionTributaria}");
+        if (!string.IsNullOrWhiteSpace(_issuer.IngresosBrutos)) { issuerFiscal.AddLineBreak(); issuerFiscal.AddText($"Ingresos Brutos: {_issuer.IngresosBrutos}"); }
+        if (_issuer.InicioActividades is DateOnly start) { issuerFiscal.AddLineBreak(); issuerFiscal.AddText($"Inicio de actividades: {Date(start)}"); }
         section.AddParagraph();
     }
 
-    private static void AddDetailTable(Section section, ComprobanteGenerado data)
+    private void AddDetailTable(Section section, ComprobanteGenerado data)
     {
         var table = section.AddTable();
         table.Borders.Color = Colors.LightGray;
         table.Borders.Width = Unit.FromPoint(0.35);
         table.AddColumn(Unit.FromCentimeter(8.3)); table.AddColumn(Unit.FromCentimeter(2.1));
         table.AddColumn(Unit.FromCentimeter(4.0)); table.AddColumn(Unit.FromCentimeter(3.8));
-        Row header = table.AddRow(); header.HeadingFormat = true; header.Shading.Color = Colors.Gainsboro;
-        header.Cells[0].AddParagraph("Descripción"); header.Cells[1].AddParagraph("Cantidad");
-        header.Cells[2].AddParagraph("Precio unitario"); header.Cells[3].AddParagraph("Importe");
-        foreach (Cell? cell in header.Cells) if (cell is not null) cell.Format.Font.Bold = true;
+        Row header = table.AddRow(); StyleHeader(header, ["Descripción", "Cantidad", "Precio unitario", $"Importe ({CurrencyDisplay.Code(data.Moneda)})"]);
         foreach (LineaComprobante line in data.Detalles)
         {
             Row row = table.AddRow();
+            row.Shading.Color = Colors.White;
             row.Cells[0].AddParagraph(line.DescripcionPresentacion ?? line.Descripcion);
             row.Cells[1].AddParagraph(line.Cantidad is decimal qty ? Number(qty) : "—");
-            row.Cells[2].AddParagraph(line.PrecioUnitario is decimal price ? $"{Number(price)} {CurrencyName(data.Moneda)}" : "—");
+            row.Cells[2].AddParagraph(line.PrecioUnitario is decimal price ? $"{Number(price)} {CurrencyDisplay.Label(data.Moneda)}" : "—");
             row.Cells[3].AddParagraph(Money(line.Importe, data.Moneda));
+            row.Cells[1].Format.Alignment = row.Cells[2].Format.Alignment = row.Cells[3].Format.Alignment = ParagraphAlignment.Right;
         }
     }
 
-    private static void AddFiscalSummary(Section section, ComprobanteGenerado data)
+    private void AddFiscalSummary(Section section, ComprobanteGenerado data)
     {
         if (data.Impuestos.Count == 0) return;
         section.AddParagraph("Impuestos y alícuotas", "Heading2");
@@ -211,7 +486,7 @@ public sealed class ArcaWsGeneradorPDF
         }));
     }
 
-    private static void AddSummaryRows(Section section, ComprobanteGenerado data)
+    private void AddSummaryRows(Section section, ComprobanteGenerado data)
     {
         section.AddParagraph("Resumen", "Heading2");
         var rows = new List<string[]>();
@@ -221,7 +496,7 @@ public sealed class ArcaWsGeneradorPDF
         if (rows.Count != 0) AddSimpleTable(section, ["Concepto", "Importe"], rows);
     }
 
-    private static void AddFiscalTotals(Section section, ComprobanteGenerado data)
+    private void AddFiscalTotals(Section section, ComprobanteGenerado data)
     {
         section.AddParagraph(data.CodigoCondicionIvaReceptor == 5 ? DocumentFiscalRules.ConsumerTransparencyTitle : "Totales", "Heading2");
         var rows = new List<string[]>();
@@ -238,28 +513,47 @@ public sealed class ArcaWsGeneradorPDF
             if (data.Iva is decimal iva) rows.Add([DocumentFiscalRules.IvaTotalLabel, Money(iva, data.Moneda)]);
             if (nationalIndirect != 0) rows.Add(["Otros impuestos nacionales indirectos", Money(nationalIndirect, data.Moneda)]);
         }
-        rows.Add(["TOTAL", Money(data.Total, data.Moneda)]);
         AddSimpleTable(section, ["Concepto", "Importe"], rows);
+        AddTotalTable(section, "TOTAL", data.Total, data.Moneda);
     }
 
-    private static void AddTotalTable(Section section, string label, decimal amount, string currency)
+    private void AddTotalTable(Section section, string label, decimal amount, string currency)
     {
-        var table = section.AddTable(); table.Borders.Width = Unit.FromPoint(0.6);
-        table.AddColumn(Unit.FromCentimeter(10)); table.AddColumn(Unit.FromCentimeter(8));
-        Row row = table.AddRow(); row.Cells[0].AddParagraph(label).Format.Font.Bold = true;
-        row.Cells[1].AddParagraph(Money(amount, currency)).Format.Font.Bold = true;
+        var table = section.AddTable(); table.Borders.Width = 0;
+        table.AddColumn(Unit.FromCentimeter(6)); table.AddColumn(Unit.FromCentimeter(5));
+        table.Rows.LeftIndent = Unit.FromCentimeter(7.2);
+        Row row = table.AddRow(); row.Shading.Color = ParseColor(_style.ColorPrincipal);
+        foreach (Cell? cell in row.Cells) if (cell is not null) cell.Format.Font.Color = ParseColor(_style.TextOnPrincipal);
+        Paragraph labelText = row.Cells[0].AddParagraph(label); labelText.Format.Font.Bold = true; labelText.Format.Font.Color = ParseColor(_style.TextOnPrincipal);
+        Paragraph amountText = row.Cells[1].AddParagraph(Money(amount, currency)); amountText.Format.Font.Bold = true; amountText.Format.Font.Color = ParseColor(_style.TextOnPrincipal);
         row.Cells[1].Format.Alignment = ParagraphAlignment.Right;
+        row.Cells[0].Format.Alignment = ParagraphAlignment.Left;
     }
 
-    private static void AddSimpleTable(Section section, string[] headers, IEnumerable<string[]> rows)
+    private void AddSimpleTable(Section section, string[] headers, IEnumerable<string[]> rows)
     {
-        var table = section.AddTable(); table.Borders.Width = Unit.FromPoint(0.3);
-        table.AddColumn(Unit.FromCentimeter(headers.Length == 2 ? 12 : 5));
-        for (int index = 1; index < headers.Length; index++) table.AddColumn(Unit.FromCentimeter(headers.Length == 2 ? 6 : 4.4));
-        Row header = table.AddRow(); header.HeadingFormat = true; header.Shading.Color = Colors.Gainsboro;
-        for (int index = 0; index < headers.Length; index++) header.Cells[index].AddParagraph(headers[index]);
-        foreach (Cell? cell in header.Cells) if (cell is not null) cell.Format.Font.Bold = true;
-        foreach (string[] values in rows) { Row row = table.AddRow(); for (int index = 0; index < values.Length; index++) row.Cells[index].AddParagraph(values[index]); }
+        var table = section.AddTable(); table.Borders.Color = Colors.LightGray; table.Borders.Width = Unit.FromPoint(0.3);
+        double totalWidth = headers.Length == 2 ? 11.4 : 18.2;
+        if (headers.Length == 2)
+        {
+            table.AddColumn(Unit.FromCentimeter(12));
+            table.AddColumn(Unit.FromCentimeter(6.2));
+        }
+        else
+        {
+            double colWidth = totalWidth / headers.Length;
+            foreach (string _ in headers) table.AddColumn(Unit.FromCentimeter(colWidth));
+        }
+        Row header = table.AddRow(); header.HeadingFormat = true; StyleHeader(header, headers);
+        foreach (string[] values in rows)
+        {
+            Row row = table.AddRow(); row.Shading.Color = Colors.White;
+            for (int index = 0; index < values.Length; index++)
+            {
+                row.Cells[index].AddParagraph(values[index]);
+                if (index > 0) row.Cells[index].Format.Alignment = ParagraphAlignment.Right;
+            }
+        }
     }
 
     private static void AddLine(Section section, string label, string value)
@@ -267,7 +561,7 @@ public sealed class ArcaWsGeneradorPDF
         Paragraph p = section.AddParagraph(); p.AddFormattedText(label + (label.EndsWith(':') ? " " : ": "), TextFormat.Bold); p.AddText(value);
     }
 
-    private static byte[] OverlayImages(byte[] input, byte[]? logo, string? qrUrl)
+    private static byte[] OverlayImages(byte[] input, byte[]? logo, string? qrUrl, double logoTopMillimeter)
     {
         using var source = new MemoryStream(input);
         PdfDocument document = PdfReader.Open(source, PdfDocumentOpenMode.Modify);
@@ -277,10 +571,11 @@ public sealed class ArcaWsGeneradorPDF
             using XGraphics graphics = XGraphics.FromPdfPage(firstPage, XGraphicsPdfPageOptions.Append);
             using var logoStream = new MemoryStream(ToBmp(logo));
             using XImage image = XImage.FromStream(logoStream);
-            double max = XUnit.FromMillimeter(23).Point;
-            double scale = Math.Min(max / image.PixelWidth, max / image.PixelHeight);
+            double maxWidth = XUnit.FromMillimeter(35).Point;
+            double maxHeight = XUnit.FromMillimeter(22).Point;
+            double scale = Math.Min(maxWidth / image.PixelWidth, maxHeight / image.PixelHeight);
             double width = image.PixelWidth * scale, height = image.PixelHeight * scale;
-            graphics.DrawImage(image, XUnit.FromMillimeter(15).Point, XUnit.FromMillimeter(14).Point, width, height);
+            graphics.DrawImage(image, XUnit.FromMillimeter(15).Point, XUnit.FromMillimeter(logoTopMillimeter).Point, width, height);
         }
         if (qrUrl is not null)
         {
@@ -345,9 +640,9 @@ public sealed class ArcaWsGeneradorPDF
     private static string Date(DateOnly date) => date.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
     private static string Number(decimal value) => value.ToString("N2", CultureInfo.GetCultureInfo("es-AR"));
     private static string FullDecimal(decimal value) => value.ToString("#,##0.########################", CultureInfo.GetCultureInfo("es-AR"));
-    private static string Money(decimal value, string currency) => $"{Number(value)} {CurrencyName(currency)}";
-    private static string CurrencyName(string code) => code.ToUpperInvariant() switch { "ARS" or "PES" => "pesos", "USD" => "dólares estadounidenses", "EUR" => "euros", "BRL" => "reales", _ => code.ToUpperInvariant() };
-    private static bool IsPesoCurrency(string code) => code.Equals("ARS", StringComparison.OrdinalIgnoreCase) || code.Equals("PES", StringComparison.OrdinalIgnoreCase);
+    private static string Money(decimal value, string currency) => $"{Number(value)} {CurrencyDisplay.Label(currency)}";
+    private static string CurrencyName(string code) => CurrencyDisplay.Name(code);
+    private static bool IsPesoCurrency(string code) => CurrencyDisplay.IsPeso(code);
     private static string DocumentNumber(ComprobanteGenerado data) => data.Identidad is null ? data.NumeroInterno ?? string.Empty : $"{data.Identidad.PuntoVenta:00000}-{data.Identidad.Numero:00000000}";
 
     private void ValidatePrintableText(ComprobanteGenerado document)
@@ -363,5 +658,18 @@ public sealed class ArcaWsGeneradorPDF
         foreach (string? value in values)
             if (value is not null && value.Any(character => char.IsControl(character) && character is not ('\r' or '\n' or '\t')))
                 throw new ArgumentException("El comprobante contiene texto con caracteres de control no imprimibles.", nameof(document));
+    }
+
+    private void ValidatePrintableText(RemitoGenerado remito)
+    {
+        var values = new List<string?> { _issuer.RazonSocial, _issuer.NombreFantasia, _issuer.Domicilio,
+            _issuer.CondicionTributaria, _issuer.IngresosBrutos, remito.Receptor.Nombre, remito.Receptor.Domicilio,
+            remito.Receptor.CondicionTributaria, remito.Destino, remito.AmbitoInterno, remito.Cai,
+            remito.Transportista?.RazonSocial, remito.Transportista?.Domicilio, remito.Imprenta?.RazonSocial,
+            remito.Imprenta?.NumeroHabilitacion };
+        values.AddRange(remito.Mercaderia.SelectMany(item => new[] { item.Descripcion, item.Unidad }));
+        foreach (string? value in values)
+            if (value is not null && value.Any(character => char.IsControl(character) && character is not ('\r' or '\n' or '\t')))
+                throw new ArgumentException("El remito contiene texto con caracteres de control no imprimibles.", nameof(remito));
     }
 }
