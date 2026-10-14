@@ -13,8 +13,13 @@ public static class ReleaseAssets
         ValidateArtifacts(tag[1..], artifacts);
         using var release = JsonDocument.Parse(await GhAsync("release", "view", tag, "--repo", repository, "--json", "assets"));
         var existing = release.RootElement.GetProperty("assets").EnumerateArray()
-            .Select(asset => asset.GetProperty("name").GetString()).ToHashSet(StringComparer.Ordinal);
+            .Select(asset => asset.GetProperty("name").GetString() ?? throw new InvalidOperationException("GitHub release asset has no name."))
+            .ToHashSet(StringComparer.Ordinal);
         string[] files = ExpectedFiles(tag[1..], artifacts);
+        var expectedNames = files.Select(file => Path.GetFileName(file)!).ToHashSet(StringComparer.Ordinal);
+        string[] unexpected = existing.Where(name => !expectedNames.Contains(name)).Order(StringComparer.Ordinal).ToArray();
+        if (unexpected.Length != 0)
+            throw new InvalidOperationException($"Release contains assets outside the exact allowlist: {string.Join(", ", unexpected)}.");
         var temporary = Directory.CreateTempSubdirectory("netarca-release-");
         try
         {
@@ -43,42 +48,62 @@ public static class ReleaseAssets
 
     public static void ValidateArtifacts(string version, string artifacts)
     {
-        var packages = ExpectedFiles(version, artifacts).Take(ReleaseVersion.PackageProjects.Count).ToArray();
+        string[] expectedFiles = ExpectedFiles(version, artifacts);
+        var packages = expectedFiles.Take(ReleaseVersion.PackageProjects.Count).ToArray();
         var actualPackages = Directory.GetFiles(artifacts, "*.nupkg").Order(StringComparer.Ordinal).ToArray();
         if (!actualPackages.SequenceEqual(packages.Order(StringComparer.Ordinal), StringComparer.Ordinal))
             throw new InvalidOperationException($"Release artifacts must contain exactly the {ReleaseVersion.PackageProjects.Count} allowlisted packages for the release version.");
 
+        var expectedTopLevel = expectedFiles.Select(Path.GetFileName).ToHashSet(StringComparer.Ordinal);
+        var actualTopLevel = Directory.GetFiles(artifacts, "*", SearchOption.TopDirectoryOnly)
+            .Select(Path.GetFileName).ToHashSet(StringComparer.Ordinal);
+        if (!actualTopLevel.SetEquals(expectedTopLevel))
+            throw new InvalidOperationException("Release artifacts do not match the exact release artifact allowlist (17 top-level files).");
+
         string commitPath = Path.Combine(artifacts, "BUILD_COMMIT");
         string commit = File.ReadAllText(commitPath).Trim();
-        if (commit.Length != 40 || commit.Any(character => !Uri.IsHexDigit(character)))
+        if (commit.Length != 40 || commit.Any(character => character is not (>= '0' and <= '9' or >= 'a' and <= 'f')))
             throw new InvalidOperationException("BUILD_COMMIT must contain one full 40-character commit hash.");
+        ReleaseSource.ValidateEvidenceAndSource(
+            Path.Combine(artifacts, ReleaseSource.SourceArchiveName),
+            Path.Combine(artifacts, ReleaseSource.LicenseEvidenceName),
+            commit);
 
         string sumsPath = Path.Combine(artifacts, "SHA256SUMS");
-        var expectedNames = packages.Select(Path.GetFileName).ToHashSet(StringComparer.Ordinal);
+        var expectedNames = packages.Select(Path.GetFileName)
+            .Append(ReleaseSource.SourceArchiveName)
+            .Append(ReleaseSource.LicenseEvidenceName)
+            .ToHashSet(StringComparer.Ordinal);
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (string line in File.ReadAllLines(sumsPath))
         {
             string[] fields = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             if (fields.Length != 2 || fields[0].Length != 64 || fields[0].Any(character => !Uri.IsHexDigit(character)))
-                throw new InvalidOperationException("SHA256SUMS must contain exactly one SHA-256 entry per release package.");
+                throw new InvalidOperationException("SHA256SUMS must contain exactly one SHA-256 entry per release payload.");
             string name = fields[1].StartsWith("./", StringComparison.Ordinal) ? fields[1][2..] : fields[1];
-            if (!expectedNames.Contains(name) || !seen.Add(name))
-                throw new InvalidOperationException("SHA256SUMS contains an unexpected or duplicate package entry.");
+            if (!expectedNames.Contains(name) || !seen.Add(name) || Path.GetFileName(name) != name)
+                throw new InvalidOperationException("SHA256SUMS contains an unexpected, unsafe or duplicate release payload entry.");
             using var stream = File.OpenRead(Path.Combine(artifacts, name));
             string actualHash = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
             if (!CryptographicOperations.FixedTimeEquals(Convert.FromHexString(fields[0]), Convert.FromHexString(actualHash)))
-                throw new InvalidOperationException($"Package checksum does not match: {name}.");
+                throw new InvalidOperationException($"Release payload checksum does not match: {name}.");
         }
         if (seen.Count != expectedNames.Count)
-            throw new InvalidOperationException("SHA256SUMS must contain exactly one SHA-256 entry per release package.");
+            throw new InvalidOperationException("SHA256SUMS must contain exactly one SHA-256 entry per release payload.");
     }
 
     private static string[] ExpectedFiles(string version, string artifacts)
     {
         string[] packages = ReleaseVersion.PackageProjects.Select(project => Path.Combine(artifacts, project + "." + version + ".nupkg")).ToArray();
-        var files = packages.Concat(new[] { Path.Combine(artifacts, "SHA256SUMS"), Path.Combine(artifacts, "BUILD_COMMIT") }).ToArray();
+        var files = packages.Concat(new[]
+        {
+            Path.Combine(artifacts, ReleaseSource.SourceArchiveName),
+            Path.Combine(artifacts, ReleaseSource.LicenseEvidenceName),
+            Path.Combine(artifacts, "SHA256SUMS"),
+            Path.Combine(artifacts, "BUILD_COMMIT")
+        }).ToArray();
         if (files.Any(file => !File.Exists(file)))
-            throw new InvalidOperationException($"Expected {ReleaseVersion.PackageProjects.Count} packages, SHA256SUMS and BUILD_COMMIT.");
+            throw new InvalidOperationException($"Expected {ReleaseVersion.PackageProjects.Count} packages, SOURCE.zip, LICENSE_EVIDENCE.json, SHA256SUMS and BUILD_COMMIT.");
         return files;
     }
 

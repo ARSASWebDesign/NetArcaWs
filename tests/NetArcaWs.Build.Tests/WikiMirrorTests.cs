@@ -185,6 +185,25 @@ public sealed class WikiMirrorTests
     }
 
     [Fact]
+    public void Run_excludes_verbatim_license_materials_but_keeps_project_notices_page()
+    {
+        using var workspace = new BuildTestWorkspace();
+        workspace.Write("THIRD-PARTY-NOTICES.md", "# Third-party notices\n\nSee [MIT text](licenses/third-party/example/1.0/LICENSE).\n");
+        workspace.Write("licenses/third-party/example/1.0/README.md", "# Package README\n");
+        workspace.Write("licenses/upstream/example/README.md", "# Upstream README\n");
+        workspace.Write("docs/wiki/Home.md", "# Home\n");
+
+        WikiMirror.Run(workspace.Root);
+
+        string sources = workspace.Read("docs/wiki-export/Fuentes-documentales.md");
+        sources.Should().Contain("THIRD-PARTY-NOTICES.md");
+        sources.Should().NotContain("licenses/");
+        workspace.Read("docs/wiki-export/Avisos-de-terceros.md")
+            .Should().Contain("https://github.com/ARSASWebDesign/NetArcaWs/blob/main/licenses/third-party/example/1.0/LICENSE");
+        workspace.Exists("docs/wiki-export/Documento-README.md").Should().BeFalse();
+    }
+
+    [Fact]
     public void Run_excludes_private_superpowers_markdown_from_pages_and_manifest()
     {
         using var workspace = new BuildTestWorkspace();

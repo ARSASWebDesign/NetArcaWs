@@ -20,6 +20,8 @@ jobs:
         with:
           global-json-file: global.json
       - run: dotnet restore NetArcaWs.slnx --locked-mode
+      - name: Verify dependency license inventory
+        run: dotnet run --project tools/NetArcaWs.Build --configuration Release --no-restore -- licenses --check
       - name: Validate package versions
         id: version
         run: dotnet run --project tools/NetArcaWs.Build --configuration Release --no-restore -- release-version
@@ -49,6 +51,8 @@ jobs:
       - run: dotnet pack src/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer/NetArcaWs.EntityFrameworkCore.Migrations.SqlServer.csproj --configuration Release --no-build --no-restore --output artifacts
       - run: dotnet pack src/NetArcaWs.Rendering.Html/NetArcaWs.Rendering.Html.csproj --configuration Release --no-build --no-restore --output artifacts
       - run: dotnet pack src/NetArcaWs.Rendering.Pdf/NetArcaWs.Rendering.Pdf.csproj --configuration Release --no-build --no-restore --output artifacts
+      - name: Audit package license materials
+        run: dotnet run --project tools/NetArcaWs.Build --configuration Release --no-build --no-restore -- licenses --check-packages artifacts
       - name: Verify core package has no renderer dependencies
         run: |
           if unzip -p artifacts/NetArcaWs.${{ steps.version.outputs.version }}.nupkg '*.nuspec' | grep -Eiq 'PDFsharp|QRCoder|StbImageSharp'; then

@@ -113,6 +113,16 @@ anteriormente también era Apache-2.0. Consulta los
 Las actualizaciones automáticas son propuestas de revisión; no garantizan que
 una nueva versión conserve la licencia anterior.
 
+CI valida el inventario después de restaurar con `--locked-mode` y audita los trece paquetes después de empaquetarlos en `artifacts/`. Para generar los materiales de una release, ese directorio debe contener los trece `.nupkg`, el árbol rastreado debe estar limpio y el commit esperado debe coincidir con `HEAD`:
+
+```sh
+dotnet run --project tools/NetArcaWs.Build -- licenses --check
+dotnet run --project tools/NetArcaWs.Build -- licenses --check-packages artifacts
+dotnet run --project tools/NetArcaWs.Build -- release-source "$(git rev-parse HEAD)" artifacts
+```
+
+El comando `release-source` crea `SOURCE.zip` y `LICENSE_EVIDENCE.json` desde los archivos rastreados del commit y comprueba que el archivo incluya el árbol completo, las licencias y los insumos de compilación requeridos. No incluye cambios rastreados sin confirmar, archivos sueltos ni archivos ignorados. Consulte [la guía de distribución de licencias](docs/license-distribution.md) y [el procedimiento de releases](docs/releases.md) para obtener la fuente correspondiente a los paquetes publicados.
+
 ## Herramientas de mantenimiento .NET
 
 El desarrollo, CI y las releases no requieren Python. La herramienta interna

@@ -54,8 +54,11 @@ try
         case ["release-assets", var repository, var tag, var directory]:
             await ReleaseAssets.RunAsync(repository, tag, Path.GetFullPath(directory));
             break;
+        case ["release-source", var commit, var directory]:
+            ReleaseSource.Generate(root, commit, Path.GetFullPath(directory));
+            break;
         default:
-            Console.Error.WriteLine("Commands: operations | wiki | persistence-schema [--check] | persistence-migrations [--check] | licenses --update | licenses --check | licenses --check-packages DIRECTORY | contracts --xscgen PATH | release-version | release-assets OWNER/REPO TAG DIRECTORY");
+            Console.Error.WriteLine("Commands: operations | wiki | persistence-schema [--check] | persistence-migrations [--check] | licenses --update | licenses --check | licenses --check-packages DIRECTORY | contracts --xscgen PATH | release-version | release-source COMMIT DIRECTORY | release-assets OWNER/REPO TAG DIRECTORY");
             return 2;
     }
     return 0;

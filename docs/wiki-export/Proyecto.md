@@ -125,4 +125,4 @@ Las pruebas locales usan datos sintéticos y no acreditan homologación con ARCA
 
 ## Licencia
 
-NetArcaWs se distribuye bajo [LGPL-3.0-or-later](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/LICENSE), con atribución al proyecto upstream [PyAfipWs](https://github.com/reingart/pyafipws) y a su autor, Mariano Reingart. Consultá [THIRD-PARTY-NOTICES.md](Avisos-de-terceros) para los avisos de terceros.
+NetArcaWs se distribuye bajo [LGPL-3.0-or-later](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/LICENSE), con atribución al proyecto upstream [PyAfipWs](https://github.com/reingart/pyafipws) y a su autor, Mariano Reingart. Consultá [THIRD-PARTY-NOTICES.md](Avisos-de-terceros) para los avisos de terceros. Para paquetes de releases posteriores a la incorporación de este control, descargá `SOURCE.zip` desde la misma [página de release](https://github.com/ARSASWebDesign/NetArcaWs/releases) y versión que el paquete NuGet; incluye el commit y los insumos de compilación correspondientes. La [guía de distribución de licencias](Documento-license-distribution) explica su relación con `LICENSE_EVIDENCE.json` y `SHA256SUMS`.

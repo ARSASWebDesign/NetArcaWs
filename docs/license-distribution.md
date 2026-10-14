@@ -8,9 +8,22 @@ NetArcaWs y NetArcaWs.Tool se distribuyen bajo LGPL-3.0-or-later. La licencia co
 
 El provider SQL Server fija directamente `Microsoft.Data.SqlClient` 7.1.1 para mantener una versión compatible con EF Core 10 y evitar que la resolución seleccione una versión anterior. Su grafo base ya no contiene `Microsoft.Identity.Client.NativeInterop`. La autenticación Entra mediante connection string requiere instalar y revisar por separado el paquete opcional `Microsoft.Data.SqlClient.Extensions.Azure`, que no forma parte del grafo ni de los paquetes NetArcaWs; la autenticación SQL y Windows sigue disponible mediante el driver base. No se habilitan switches globales de red administrada.
 
-La LGPL permite el uso comercial sujeto a sus condiciones. Quien distribuya NetArcaWs debe conservar la posibilidad práctica de reemplazar la biblioteca, entregar la licencia y los avisos aplicables, y proporcionar el código fuente correspondiente de la biblioteca o una oferta escrita válida. El archivo fuente de release debe contener el código y los insumos de compilación correspondientes al commit exacto; Task 2 incorpora y vincula ese archivo a los checksums de release. No empaquete esta biblioteca como un artefacto de archivo único, AOT o exclusivamente estático que quite al destinatario la posibilidad práctica de reemplazarla. Cuando corresponda, la LGPL permite la ingeniería inversa para depurar modificaciones de la biblioteca.
+La LGPL permite el uso comercial sujeto a sus condiciones. Quien distribuya NetArcaWs debe conservar la posibilidad práctica de reemplazar la biblioteca, entregar la licencia y los avisos aplicables, y proporcionar el código fuente correspondiente de la biblioteca o una oferta escrita válida. Cada release producida por el workflow actual publica `SOURCE.zip` junto a los paquetes NuGet en la [página de releases](https://github.com/ARSASWebDesign/NetArcaWs/releases); elegí el asset de la misma versión del paquete. El ZIP se genera desde el commit exacto, conserva el árbol completo rastreado y contiene las licencias, avisos e insumos de compilación. `LICENSE_EVIDENCE.json` vincula el commit, `licenses/dependencies.json` y el hash del ZIP; `SHA256SUMS` cubre los trece paquetes y ambos archivos de fuente/evidencia. `BUILD_COMMIT` y el comentario del ZIP identifican el mismo commit. El archivo incluye instrucciones reproducibles para restaurar y compilar con el SDK de `global.json`. No empaquetes esta biblioteca como un artefacto de archivo único, AOT o exclusivamente estático que quite al destinatario la posibilidad práctica de reemplazarla. Cuando corresponda, la LGPL permite la ingeniería inversa para depurar modificaciones de la biblioteca.
 
 La auditoría automatizada comprueba la consistencia de metadatos y archivos de paquetes; no constituye asesoría ni certificación legal. Quien redistribuye NetArcaWs debe evaluar las obligaciones aplicables a su aplicación y entorno.
+
+## Fuente y compilación de cada release
+
+En releases creadas con el control de distribución actual, la página de GitHub incluye `SOURCE.zip` junto a los paquetes NuGet de esa versión. Descargá ambos desde la [misma release](https://github.com/ARSASWebDesign/NetArcaWs/releases); el archivo no se obtiene del branch actual ni de una release distinta. `LICENSE_EVIDENCE.json`, `BUILD_COMMIT` y `SHA256SUMS` permiten comprobar la relación entre el commit, el inventario de licencias, la fuente y los paquetes.
+
+El ZIP incluye el árbol completo de archivos rastreados, las licencias LGPL y de terceros, los lockfiles y los proyectos de compilación. Para restaurar y compilar la solución con el SDK indicado en `global.json`:
+
+```sh
+dotnet restore NetArcaWs.slnx --locked-mode
+dotnet build NetArcaWs.slnx --configuration Release --no-restore
+```
+
+La release 0.6.0 antecede a la incorporación de estos assets; no infieras que releases históricas contienen `SOURCE.zip` o evidencia de licencia.
 
 Para actualizar el inventario después de una restauración bloqueada y revisar los cambios:
 

@@ -2,17 +2,7 @@
 
 # Releases y publicación en NuGet
 
-El workflow [Release](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/.github/workflows/release.yml) de esta rama valida una
-allowlist de trece paquetes con versión común: `NetArcaWs`, `NetArcaWs.Tool`,
-cuatro paquetes EF Core de persistencia/proveedores, cinco de migraciones y los
-extras opcionales `NetArcaWs.Rendering.Html` y `NetArcaWs.Rendering.Pdf`. El
-evento `release: published` compila, prueba, verifica los snapshots de schemas y
-migraciones, empaqueta los trece, prueba la instalación del tool y consumidores
-aislados de persistencia y renderizado, adjunta checksums y publica en nuget.org.
-El paquete core se comprueba aparte para que no incorpore dependencias PDF/QR.
-Ejecutarlo
-manualmente (`workflow_dispatch`) **solo valida y genera artefactos**, sin
-publicar ni solicitar credenciales NuGet.
+El workflow [Release](https://github.com/ARSASWebDesign/NetArcaWs/blob/main/.github/workflows/release.yml) de esta rama valida una allowlist de trece paquetes con versión común: `NetArcaWs`, `NetArcaWs.Tool`, cuatro paquetes EF Core de persistencia/proveedores, cinco de migraciones y los extras opcionales `NetArcaWs.Rendering.Html` y `NetArcaWs.Rendering.Pdf`. El evento `release: published` compila, prueba, verifica los snapshots de schemas y migraciones, empaqueta los trece, prueba la instalación del tool y consumidores aislados de persistencia y renderizado, audita los materiales legales, genera `SOURCE.zip` y `LICENSE_EVIDENCE.json`, adjunta sus checksums y publica en nuget.org. El paquete core se comprueba aparte para que no incorpore dependencias PDF/QR. Ejecutarlo manualmente (`workflow_dispatch`) **solo valida y genera artefactos**, sin publicar ni solicitar credenciales NuGet.
 
 ## Estado de activación
 
@@ -101,10 +91,7 @@ en GitHub. La política otorga una clave temporal al job de publicación. Refere
 
 ## Firma de los paquetes
 
-Trusted Publishing autentica al workflow mediante OIDC; no es una firma de autor
-del archivo `.nupkg`. NuGet.org aplica su firma de repositorio a los paquetes
-aceptados. Los assets de GitHub se verifican mediante `SHA256SUMS` y
-`BUILD_COMMIT`, pero esta versión no incorpora firma de autor de Arsas.
+Trusted Publishing autentica al workflow mediante OIDC; no es una firma de autor del archivo `.nupkg`. NuGet.org aplica su firma de repositorio a los paquetes aceptados. `SHA256SUMS` verifica los trece paquetes, `SOURCE.zip` y `LICENSE_EVIDENCE.json`; `BUILD_COMMIT` y el comentario del ZIP enlazan los assets con el commit exacto. Esta versión no incorpora firma de autor de Arsas.
 
 Agregar firma de autor requiere un certificado de firma de código aceptado por
 NuGet y registrado previamente en la cuenta, custodia segura de su clave privada
@@ -123,8 +110,7 @@ y [requisitos de firma de autor](https://learn.microsoft.com/en-us/nuget/create-
    versiones distintas o proyectos de paquete faltantes/inesperados.
 3. Usar `X.Y.Z` para una release estable o `X.Y.Z-preview.N` para una previa.
    Los identificadores previos deben estar en minúsculas; no usar metadata `+...`.
-4. Ejecutar el workflow Release manualmente desde `main`. Revisar los tests,
-   instalación del tool y artefactos descargables, antes de publicar.
+4. Ejecutar el workflow Release manualmente desde `main`. Revisar los tests, instalación del tool, auditoría legal, `SOURCE.zip`, `LICENSE_EVIDENCE.json` y `SHA256SUMS` de los artefactos generados antes de publicar.
 5. Crear una release GitHub en borrador con tag `vX.Y.Z` exactamente coincidente
    con los trece proyectos y apuntando al commit validado de `main`. Para una versión
    previa, marcar también la release como prerelease.
@@ -134,13 +120,7 @@ y [requisitos de firma de autor](https://learn.microsoft.com/en-us/nuget/create-
    el workflow; comprobar por separado que **los trece** paquetes fueron aceptados e
    indexados en NuGet. El éxito de GitHub Release no demuestra éxito en NuGet.
 
-Los paquetes de la release se construyen una sola vez en el job `build`; el job
-`publish` descarga esos artefactos y comprueba `SHA256SUMS`, identidad de versión y commit. No hace checkout, restore ni ejecuta código del repositorio con credenciales de publicación. Se adjunta también
-`BUILD_COMMIT` para identificar el código. Los assets existentes deben coincidir
-byte por byte: el flujo nunca los reemplaza. Se usa Ubuntu 24.04 y restauración
-`--locked-mode` con los lockfiles versionados. Los jobs de PR y forks
-no reciben OIDC ni credenciales de publicación. No se usa `pull_request_target`.
-El contenido se publica mediante acciones fijadas a commit.
+Los paquetes y el archivo fuente se construyen una sola vez en el job `build`; el job `publish` descarga esos artefactos y comprueba la allowlist, `SHA256SUMS`, la evidencia de licencia, el commit del ZIP y la identidad de versión/commit. No hace checkout, restore ni ejecuta código del repositorio con credenciales de publicación. Los assets existentes deben coincidir byte por byte: el flujo nunca los reemplaza. Se usa Ubuntu 24.04 y restauración `--locked-mode` con los lockfiles versionados. Los jobs de PR y forks no reciben OIDC ni credenciales de publicación. No se usa `pull_request_target`. El contenido se publica mediante acciones fijadas a commit.
 
 Antes de solicitar el login OIDC de NuGet, el workflow consulta el flat-container
 público para cada ID y versión. Un 404 significa que todavía no existe ese

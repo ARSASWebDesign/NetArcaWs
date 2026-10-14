@@ -98,20 +98,9 @@ referenced by the core or base EF package. See the
 [Npgsql driver](https://www.nuget.org/packages/Npgsql/10.0.3), and
 [PostgreSQL license](https://www.postgresql.org/about/licence/).
 
-`NetArcaWs.EntityFrameworkCore.SqlServer` 0.5.0 references
-`Microsoft.EntityFrameworkCore.SqlServer` 10.0.13 (MIT), which resolves
-`Microsoft.Data.SqlClient` 6.1.7 (MIT). SqlClient in turn references
-`Microsoft.Data.SqlClient.SNI.runtime` 6.0.3, whose NuGet manifest points to
-its included `LICENSE.txt` with the Microsoft Software License Terms; the
-package contains platform-specific native SNI binaries for Windows. This
-transitive native component is not licensed as MIT in this notice. The
-NetArcaWs SQL Server package itself does not embed SqlClient or SNI files;
-NuGet resolves their dependencies for consumers. Both provider packages are
-optional and neither dependency is referenced by the core or base EF package.
-The provider metadata and included SNI license file were checked in restored
-NuGet artifacts on 2026-10-14. See
+`NetArcaWs.EntityFrameworkCore.SqlServer` 0.6.0 references `Microsoft.EntityFrameworkCore.SqlServer` 10.0.13 (MIT) and pins `Microsoft.Data.SqlClient` 7.1.1 (MIT) as a direct dependency; `NetArcaWs.EntityFrameworkCore.Migrations.SqlServer` also pins the same driver version. SqlClient references `Microsoft.Data.SqlClient.SNI.runtime` 7.1.0, whose NuGet manifest points to its included `LICENSE.txt` with the Microsoft Software License Terms; the package contains platform-specific native SNI binaries for Windows. This transitive native component is not licensed as MIT in this notice. Neither NetArcaWs SQL Server package embeds SqlClient or SNI files; NuGet resolves their dependencies for consumers. The packages are optional and neither dependency is referenced by the core or base EF package. The provider metadata and included SNI license file were checked in restored NuGet artifacts on 2026-10-14. See
 [EF Core SQL Server](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.SqlServer/10.0.13)
-and [Microsoft.Data.SqlClient](https://www.nuget.org/packages/Microsoft.Data.SqlClient/6.1.7),
+and [Microsoft.Data.SqlClient](https://www.nuget.org/packages/Microsoft.Data.SqlClient/7.1.1),
 plus SqlClient's [NOTICE](https://github.com/dotnet/SqlClient/blob/main/NOTICE.txt)
 and [copyright/license notes](https://github.com/dotnet/SqlClient/blob/main/COPYRIGHT.md).
 
@@ -173,3 +162,22 @@ NetArcaWs remains LGPL-3.0-or-later. This permits commercial use subject to the
 LGPL obligations; it does not replace third-party licenses or exempt a user from
 their conditions. Review the license of every new dependency and version,
 including development tools, before merging an update.
+
+## Tool and release package materials
+
+The `NetArcaWs.Tool` package redistributes application dependencies. It includes
+the project LGPL texts, this attribution file, and the reviewed per-package
+license/copyright/NOTICE materials recorded in `licenses/dependencies.json`.
+The inventory is generated from versioned NuGet lockfiles and restored package
+metadata; its file hashes make local edits and content drift fail closed. For
+MIT and Apache-2.0 packages whose archive has a NOTICE but omits the standard
+license text, the project includes the pinned SPDX text while preserving the
+package's own copyright metadata and notices.
+
+The reviewed Microsoft.Data.SqlClient.SNI.runtime 7.1.0 license is recorded
+only as a reference hash in `licenses/policy.json`. NetArcaWs release artifacts
+must not contain that package's native SNI binaries. Consumers that separately
+redistribute or deploy those components must review Microsoft's license terms
+and their obligations. Managed networking is intended for testing and
+troubleshooting, not production use. See `docs/license-distribution.md` for the
+scope and limits of the automated audit.
