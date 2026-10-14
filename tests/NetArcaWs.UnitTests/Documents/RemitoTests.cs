@@ -53,8 +53,23 @@ public sealed class RemitoTests
         var factory = new Remito(Emisor());
         ((Action)(() => factory.GenerarComprobante(RemitoR() with { Cai = "123" }))).Should().Throw<ArgumentException>();
         ((Action)(() => factory.GenerarComprobante(RemitoR() with { Numero = 400 }))).Should().Throw<ArgumentException>();
+        ((Action)(() => factory.GenerarComprobante(RemitoR() with { PrimerNumero = 0 }))).Should().Throw<ArgumentException>();
+        ((Action)(() => factory.GenerarComprobante(RemitoR() with { UltimoNumero = 100_000_000 }))).Should().Throw<ArgumentException>();
         ((Action)(() => factory.GenerarComprobante(RemitoR() with { FechaEmision = new DateOnly(2026, 1, 1) }))).Should().Throw<ArgumentException>();
         ((Action)(() => factory.GenerarComprobante(RemitoR() with { Imprenta = null }))).Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Remito_R_rechaza_extremo_superior_del_rango_mayor_a_ocho_digitos()
+    {
+        var data = RemitoR() with
+        {
+            UltimoNumero = 100_000_000,
+            Imprenta = new DatosImprentaRemito("Imprenta Ejemplo SA", 30711111119,
+                new DateOnly(2025, 3, 1), 300, 100_000_000, "HAB-123")
+        };
+
+        ((Action)(() => new Remito(Emisor()).GenerarComprobante(data))).Should().Throw<ArgumentException>();
     }
 
     [Fact]
@@ -65,6 +80,32 @@ public sealed class RemitoTests
         generated.EsAutoimpresor.Should().BeTrue();
         generated.Cai.Should().Be("12345678901234");
         ((Action)(() => new Remito(Emisor("Monotributo")).GenerarComprobante(data))).Should().Throw<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData("No inscripto")]
+    [InlineData("No exento")]
+    [InlineData("IVA No inscripto")]
+    public void Remito_R_autoimpresor_rechaza_condiciones_fuera_de_la_lista_normativa(string condicion)
+    {
+        var data = RemitoR() with { PrimerNumero = null, UltimoNumero = null, Imprenta = null, EsAutoimpresor = true };
+        ((Action)(() => new Remito(Emisor(condicion)).GenerarComprobante(data))).Should().Throw<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData("Responsable Inscripto")]
+    [InlineData("Responsable Inscrito")]
+    [InlineData("IVA Responsable Inscripto")]
+    [InlineData("Responsable Inscripto IVA")]
+    [InlineData("Responsable Inscrito IVA")]
+    [InlineData("  IVA   Responsable Inscripto  ")]
+    [InlineData("IVA Exento")]
+    [InlineData("IVA Sujeto Exento")]
+    [InlineData("Exento")]
+    public void Remito_R_autoimpresor_acepta_condiciones_normativas_explicitas(string condicion)
+    {
+        var data = RemitoR() with { PrimerNumero = null, UltimoNumero = null, Imprenta = null, EsAutoimpresor = true };
+        new Remito(Emisor(condicion)).GenerarComprobante(data).EsAutoimpresor.Should().BeTrue();
     }
 
     [Fact]

@@ -188,8 +188,7 @@ public sealed class Remito(DatosEmisor emisor)
         if (data.AmbitoInterno is not null) throw Invalid("El ámbito interno solo corresponde a remitos X.");
         if (data.EsAutoimpresor)
         {
-            string taxStatus = issuer.CondicionTributaria.Trim().ToUpperInvariant();
-            if (!(taxStatus.Contains("INSCRIPTO", StringComparison.Ordinal) || taxStatus.Contains("EXENTO", StringComparison.Ordinal)))
+            if (!IsEligibleAutoPrinterStatus(issuer.CondicionTributaria))
                 throw Invalid("La excepción de autoimpresor para remitos R requiere condición IVA responsable inscripto o exento.");
             if (!ValidCai(data.Cai) || data.Vencimiento is null || data.FechaEmision > data.Vencimiento)
                 throw Invalid("El remito R autoimpresor conserva el CAI y la fecha de vencimiento; la vigencia debe cubrir la fecha histórica de emisión.");
@@ -202,8 +201,9 @@ public sealed class Remito(DatosEmisor emisor)
 
         if (!ValidCai(data.Cai))
             throw Invalid("El remito R requiere un CAI declarado de catorce dígitos.");
-        if (data.PrimerNumero is null || data.UltimoNumero is null || data.PrimerNumero < 1 ||
-            data.UltimoNumero < data.PrimerNumero || data.Numero < data.PrimerNumero || data.Numero > data.UltimoNumero)
+        if (data.PrimerNumero is null || data.UltimoNumero is null || data.PrimerNumero is < 1 or > 99_999_999 ||
+            data.UltimoNumero is < 1 or > 99_999_999 || data.UltimoNumero < data.PrimerNumero ||
+            data.Numero < data.PrimerNumero || data.Numero > data.UltimoNumero)
             throw Invalid("El rango de numeración declarado debe ser válido e incluir el número del remito.");
         if (data.Vencimiento is null || data.FechaEmision > data.Vencimiento)
             throw Invalid("El vencimiento del talonario debe estar informado y cubrir la fecha histórica de emisión.");
@@ -227,6 +227,15 @@ public sealed class Remito(DatosEmisor emisor)
 
     private static bool ValidCuit(long value) => value is >= 10_000_000_000 and <= 99_999_999_999;
     private static bool ValidCai(string? value) => value is { Length: 14 } && value.All(c => c is >= '0' and <= '9');
+    private static bool IsEligibleAutoPrinterStatus(string condition)
+    {
+        string normalized = string.Join(' ', condition.Trim().ToUpperInvariant()
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return normalized is "RESPONSABLE INSCRIPTO" or "RESPONSABLE INSCRITO" or
+            "IVA RESPONSABLE INSCRIPTO" or "IVA RESPONSABLE INSCRITO" or
+            "RESPONSABLE INSCRIPTO IVA" or "RESPONSABLE INSCRITO IVA" or
+            "EXENTO" or "IVA EXENTO" or "IVA SUJETO EXENTO";
+    }
     private static ArgumentException Invalid(string message) => new(message);
 }
 
