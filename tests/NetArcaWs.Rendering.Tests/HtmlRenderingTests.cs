@@ -68,7 +68,10 @@ public sealed partial class HtmlRenderingTests
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
             string html = new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(Fiscal());
             if (Environment.GetEnvironmentVariable("NETARCAWS_RENDER_SAMPLE_PATH") is { Length: > 0 } samplePath)
-                File.WriteAllText(samplePath, html);
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(samplePath))!);
+                File.WriteAllText(samplePath, "<!-- Synthetic demonstration data; not a real fiscal document. -->\n" + html);
+            }
             Assert.Contains("Factura A", html);
             Assert.Contains("Monotributista", html);
             Assert.Contains("27.618", html);
@@ -497,7 +500,9 @@ public sealed partial class HtmlRenderingTests
 
     private static string DecodeRenderedQr(string html)
     {
-        int imageStart = html.IndexOf("data:image/png;base64,", StringComparison.Ordinal);
+        int qrTag = html.IndexOf("<img class=\"qr-image\"", StringComparison.Ordinal);
+        Assert.True(qrTag >= 0);
+        int imageStart = html.IndexOf("data:image/png;base64,", qrTag, StringComparison.Ordinal);
         Assert.True(imageStart >= 0);
         imageStart += "data:image/png;base64,".Length;
         int imageEnd = html.IndexOf('"', imageStart);

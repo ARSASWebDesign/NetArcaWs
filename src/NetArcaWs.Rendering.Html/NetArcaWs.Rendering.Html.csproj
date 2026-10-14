@@ -19,6 +19,8 @@
     <Compile Include="../Rendering.Shared/FiscalQrPayload.cs" Link="Shared/FiscalQrPayload.cs" />
     <Compile Include="../Rendering.Shared/DocumentRenderValidator.cs" Link="Shared/DocumentRenderValidator.cs" />
     <Compile Include="../Rendering.Shared/FiscalAssociatedDocuments.cs" Link="Shared/FiscalAssociatedDocuments.cs" />
+    <Compile Include="../Rendering.Shared/RenderingStyle.cs" Link="Shared/RenderingStyle.cs" />
+    <Compile Include="../Rendering.Shared/ExportDocumentFields.cs" Link="Shared/ExportDocumentFields.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="../../LICENSE" Pack="true" PackagePath="/" />

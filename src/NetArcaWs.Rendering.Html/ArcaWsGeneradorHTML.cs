@@ -8,9 +8,19 @@ using QRCoder;
 namespace NetArcaWs.Rendering.Html;
 
 /// <summary>Renders authorized fiscal documents and local X receipts as self-contained printable HTML.</summary>
-public sealed class ArcaWsGeneradorHTML(DatosEmisor emisor)
+public sealed class ArcaWsGeneradorHTML
 {
-    private readonly DatosEmisor _issuer = emisor ?? throw new ArgumentNullException(nameof(emisor));
+    public ArcaWsGeneradorHTML(DatosEmisor emisor, string colorPrincipal = "#333333")
+    {
+        _issuer = emisor ?? throw new ArgumentNullException(nameof(emisor));
+        _style = new RenderingStyle(colorPrincipal);
+    }
+
+    private readonly DatosEmisor _issuer;
+    private readonly RenderingStyle _style;
+
+    public string ColorPrincipal => _style.ColorPrincipal;
+    public string VersionRenderizado => RenderingStyle.RendererVersion(typeof(ArcaWsGeneradorHTML).Assembly, "html-2");
 
     public string GenerarHTMLComprobante(ComprobanteGenerado datos)
     {
@@ -20,7 +30,8 @@ public sealed class ArcaWsGeneradorHTML(DatosEmisor emisor)
         string qr = layout.IsFiscal ? MakeQr(qrUrl) : string.Empty;
         var html = new StringBuilder(12_000);
         html.Append("<!doctype html><html lang=\"es-AR\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>")
-            .Append(E(layout.Title)).Append(' ').Append(E(layout.Letter)).Append("</title><style>").Append(Styles).Append("</style></head><body><main class=\"page\">");
+            .Append(E(layout.Title)).Append(' ').Append(E(layout.Letter)).Append("</title><style>:root{").Append(_style.CssVariables).Append('}').Append(Styles).Append(StyleOverrides).Append("</style></head><body><main class=\"page\">");
+        if (layout.IsFiscal) html.Append("<div class=\"copy-label\">ORIGINAL</div>");
         if (layout.RequiredLegend is not null)
             html.Append("<div class=\"required-legend\"><strong>COMPROBANTE ").Append(E(layout.Letter)).Append("</strong><span>").Append(E(layout.RequiredLegend)).Append("</span></div>");
         html.Append("<header class=\"issuer\">");
@@ -34,7 +45,6 @@ public sealed class ArcaWsGeneradorHTML(DatosEmisor emisor)
         html.Append("</div><div class=\"document-code\"><strong>").Append(E(layout.Letter)).Append("</strong>");
         if (layout.IsFiscal) html.Append("<small>COD. ").Append(datos.Identidad!.Tipo.ToString("000", CultureInfo.InvariantCulture)).Append("</small>");
         html.Append("</div><div class=\"document-meta\"><h2>").Append(E(layout.Title)).Append("</h2><div>Nº ").Append(E(datos.Identidad is null ? datos.NumeroInterno : $"{datos.Identidad.PuntoVenta:00000}-{datos.Identidad.Numero:00000000}")).Append("</div><div>Fecha: ").Append(datos.Fecha is DateOnly date ? Date(date) : "—").Append("</div>");
-        if (layout.IsFiscal) html.Append("<div class=\"copy-label\">ORIGINAL</div>");
         if (datos.Tipo == TipoComprobanteGenerado.Fiscal)
             html.Append("<div>CAE: ").Append(E(datos.Resultado!.CodigoAutorizacion!)).Append("</div><div>Vencimiento CAE: ").Append(Date(datos.Resultado.Vencimiento!.Value)).Append("</div>");
         if (datos.FechaDesde is DateOnly from) html.Append("<div>Período desde: ").Append(Date(from)).Append("</div>");
@@ -42,14 +52,16 @@ public sealed class ArcaWsGeneradorHTML(DatosEmisor emisor)
         if (datos.FechaPago is DateOnly paymentDue) html.Append("<div>Vencimiento de pago: ").Append(Date(paymentDue)).Append("</div>");
         if (!IsPesoCurrency(datos.Moneda) && datos.Cotizacion > 0) html.Append("<div>Cotización: ").Append(FullDecimal(datos.Cotizacion)).Append(" ARS por ").Append(E(CurrencyName(datos.Moneda))).Append("</div>");
         html.Append("</div></header>");
+        ExportDocumentFields? export = ExportDocumentFields.Read(datos.Identidad?.Servicio, datos.SnapshotRequest);
         html.Append("<section class=\"receiver\"><h3>Datos del receptor</h3><div><b>Nombre / razón social:</b> ").Append(E(datos.Receptor.Nombre)).Append("</div>");
         if (!string.IsNullOrWhiteSpace(datos.Receptor.Domicilio)) html.Append("<div><b>Domicilio:</b> ").Append(E(datos.Receptor.Domicilio)).Append("</div>");
         if (!string.IsNullOrWhiteSpace(datos.Receptor.CondicionTributaria) || datos.CodigoCondicionIvaReceptor is not null) html.Append("<div><b>").Append(E(DocumentFiscalRules.ReceiverConditionLabel(datos))).Append("</b> ").Append(E(DocumentFiscalRules.ReceiverCondition(datos))).Append("</div>");
         string? receiverId = !string.IsNullOrWhiteSpace(datos.Receptor.IdentificacionFiscal)
             ? datos.Receptor.IdentificacionFiscal
             : datos.Receptor.Identificacion > 0 ? datos.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture) : null;
-        if (receiverId is not null) html.Append("<div><b>Identificación:</b> ").Append(E(receiverId)).Append("</div>");
+        if (receiverId is not null) html.Append("<div><b>").Append(E(ReceiverIdLabel(datos))).Append(":</b> ").Append(E(receiverId)).Append("</div>");
         html.Append("</section>");
+        if (export is not null) AppendExportFields(html, export);
 
         IReadOnlyList<string> associatedDocuments = FiscalAssociatedDocuments.Read(datos);
         if (associatedDocuments.Count != 0)
@@ -94,6 +106,82 @@ public sealed class ArcaWsGeneradorHTML(DatosEmisor emisor)
         else html.Append("<div>").Append(E(layout.RequiredLegend!)).Append("</div>");
         html.Append("</div></footer></main></body></html>");
         return html.ToString();
+    }
+
+    /// <summary>Renders a validated local remito R/X without fiscal authorization data.</summary>
+    public string GenerarHTMLComprobante(RemitoGenerado remito)
+    {
+        RemitoValidator.Validate(remito);
+        if (remito.Emisor.Identificacion != _issuer.Identificacion)
+            throw new ArgumentException("El remito pertenece a otro perfil de emisor.", nameof(remito));
+        var html = new StringBuilder(8_000);
+        html.Append("<!doctype html><html lang=\"es-AR\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Remito ")
+            .Append(remito.Clase).Append("</title><style>:root{").Append(_style.CssVariables).Append('}').Append(Styles).Append(StyleOverrides).Append("</style></head><body><main class=\"page\">");
+        html.Append("<div class=\"copy-label\">").Append(remito.EsOriginal ? "ORIGINAL" : "DUPLICADO").Append("</div><header class=\"issuer\">");
+        if (_issuer.LogoPng is { Length: > 0 } logo)
+            html.Append("<img class=\"logo\" alt=\"Logo del emisor\" src=\"data:image/png;base64,").Append(Convert.ToBase64String(logo)).Append("\">");
+        html.Append("<div class=\"issuer-copy\"><h1>").Append(E(_issuer.RazonSocial)).Append("</h1>");
+        if (!string.IsNullOrWhiteSpace(_issuer.NombreFantasia)) html.Append("<div>").Append(E(_issuer.NombreFantasia)).Append("</div>");
+        html.Append("<div>").Append(E(_issuer.Domicilio)).Append("</div><div>CUIT: ").Append(_issuer.Identificacion.ToString(CultureInfo.InvariantCulture))
+            .Append("</div><div>").Append(E(_issuer.CondicionTributaria)).Append("</div>");
+        if (!string.IsNullOrWhiteSpace(_issuer.IngresosBrutos)) html.Append("<div>Ingresos Brutos: ").Append(E(_issuer.IngresosBrutos)).Append("</div>");
+        if (_issuer.InicioActividades is DateOnly start) html.Append("<div>Inicio de actividades: ").Append(Date(start)).Append("</div>");
+        html.Append("</div><div class=\"document-code\"><strong>").Append(remito.Clase).Append("</strong>");
+        if (remito.CodigoTipoComprobante is int code) html.Append("<small>COD. ").Append(code.ToString("000", CultureInfo.InvariantCulture)).Append("</small>");
+        html.Append("</div><div class=\"document-meta\"><h2>Remito ").Append(remito.Clase).Append("</h2><div>Nº ")
+            .Append(remito.PuntoVenta.ToString("00000", CultureInfo.InvariantCulture)).Append('-').Append(remito.Numero.ToString("00000000", CultureInfo.InvariantCulture))
+            .Append("</div><div>Fecha: ").Append(Date(remito.FechaEmision)).Append("</div><div>Destino: ").Append(E(remito.Destino)).Append("</div>");
+        if (remito.Cai is not null) html.Append("<div>CAI: ").Append(E(remito.Cai)).Append("</div><div>Vencimiento CAI: ").Append(Date(remito.Vencimiento!.Value)).Append("</div>");
+        if (remito.EsAutoimpresor) html.Append("<div>Autoimpresor</div>");
+        html.Append("</div></header><section class=\"receiver\"><h3>Datos del receptor</h3><div class=\"receiver-columns\"><div><b>Nombre / razón social:</b> ")
+            .Append(E(remito.Receptor.Nombre)).Append("</div><div><b>CUIT:</b> ").Append(remito.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture)).Append("</div><div><b>Domicilio:</b> ")
+            .Append(E(remito.Receptor.Domicilio)).Append("</div><div><b>Condición tributaria:</b> ").Append(E(remito.Receptor.CondicionTributaria)).Append("</div></div></section>");
+        if (remito.Clase == ClaseRemito.X) html.Append("<section class=\"notes\"><strong>Uso interno:</strong> ").Append(E(remito.AmbitoInterno)).Append("</section>");
+        html.Append("<table class=\"details\"><thead><tr><th>Descripción</th><th>Unidad</th><th class=\"number\">Cantidad</th></tr></thead><tbody>");
+        foreach (LineaRemito item in remito.Mercaderia)
+            html.Append("<tr><td>").Append(E(item.Descripcion)).Append("</td><td>").Append(E(item.Unidad)).Append("</td><td class=\"number\">").Append(FullDecimal(item.Cantidad)).Append("</td></tr>");
+        html.Append("</tbody></table>");
+        if (remito.Transportista is { } transportista)
+            html.Append("<section class=\"notes\"><strong>Transportista:</strong> ").Append(E(transportista.RazonSocial)).Append(" · CUIT: ")
+                .Append(transportista.Cuit.ToString(CultureInfo.InvariantCulture)).Append(" · ").Append(E(transportista.Domicilio)).Append("</section>");
+        if (remito.Imprenta is { } printer)
+            html.Append("<section class=\"notes\"><strong>Imprenta:</strong> ").Append(E(printer.RazonSocial)).Append(" · CUIT: ")
+                .Append(printer.Cuit.ToString(CultureInfo.InvariantCulture)).Append(" · Habilitación: ").Append(E(printer.NumeroHabilitacion))
+                .Append(" · Impreso ").Append(Date(printer.FechaImpresion)).Append(" · Rango ").Append(printer.PrimerNumero).Append("–").Append(printer.UltimoNumero).Append("</section>");
+        html.Append("<footer class=\"authorization\"><strong>").Append(E(remito.Leyenda)).Append("</strong><span>Recibí conforme: ____________________</span></footer></main></body></html>");
+        return html.ToString();
+    }
+
+    private static void AppendExportFields(StringBuilder html, ExportDocumentFields fields)
+    {
+        html.Append("<section class=\"export-fields\"><h3>Datos de exportación</h3><div class=\"receiver-columns\">");
+        if (fields.CuitPais is not null) html.Append("<div><b>CUIT país del cliente:</b> ").Append(E(fields.CuitPais)).Append("</div>");
+        if (fields.ForeignTaxId is not null) html.Append("<div><b>ID impositivo del cliente:</b> ").Append(E(fields.ForeignTaxId)).Append("</div>");
+        if (fields.DestinationCountryCode is not null) html.Append("<div><b>Código de país destino:</b> ").Append(E(fields.DestinationCountryCode)).Append("</div>");
+        html.Append("<div><b>Moneda:</b> ").Append(E(fields.CurrencyCode)).Append(" · ").Append(E(fields.CurrencyName)).Append("</div>");
+        if (fields.ExchangeRate is not null) html.Append("<div><b>Cotización:</b> ").Append(E(fields.ExchangeRate)).Append(" ARS por ").Append(E(fields.CurrencyName)).Append("</div>");
+        if (fields.PaymentMethod is not null) html.Append("<div><b>Forma de pago:</b> ").Append(E(fields.PaymentMethod)).Append("</div>");
+        if (fields.PaymentDate is not null) html.Append("<div><b>Fecha de pago:</b> ").Append(E(fields.PaymentDate)).Append("</div>");
+        if (fields.Incoterms is not null) html.Append("<div><b>Incoterms:</b> ").Append(E(fields.Incoterms)).Append("</div>");
+        if (fields.IncotermsDescription is not null) html.Append("<div><b>Descripción de Incoterms:</b> ").Append(E(fields.IncotermsDescription)).Append("</div>");
+        if (fields.ExportCondition is not null) html.Append("<div><b>Condición de exportación:</b> ").Append(E(fields.ExportCondition)).Append("</div>");
+        if (fields.CommercialObservations is not null) html.Append("<div><b>Observaciones comerciales:</b> ").Append(E(fields.CommercialObservations)).Append("</div>");
+        if (fields.Observations is not null) html.Append("<div><b>Observaciones:</b> ").Append(E(fields.Observations)).Append("</div>");
+        html.Append("</div></section>");
+    }
+
+    private static string ReceiverIdLabel(ComprobanteGenerado document)
+    {
+        if (document.Identidad?.Servicio.Equals("wsfex", StringComparison.OrdinalIgnoreCase) == true)
+            return "ID impositivo extranjero";
+        return document.Receptor.CodigoTipoDocumento switch
+        {
+            80 => "CUIT",
+            96 => "DNI",
+            86 => "CUIL",
+            87 => "CDI",
+            _ => "Documento"
+        };
     }
 
     private static void AppendDetailTable(StringBuilder html, IReadOnlyList<LineaComprobante> lines, string currency)
@@ -179,5 +267,6 @@ public sealed class ArcaWsGeneradorHTML(DatosEmisor emisor)
     private static string E(string? value) => WebUtility.HtmlEncode(value ?? string.Empty);
     private static CultureInfo ArCulture => CultureInfo.GetCultureInfo("es-AR");
 
-    private const string Styles = "@page{size:A4;margin:14mm}*{box-sizing:border-box}body{margin:0;color:#171717;background:#e8e8e8;font:10pt Arial,Helvetica,sans-serif}.page{width:210mm;min-height:297mm;margin:18px auto;padding:14mm;background:#fff;box-shadow:0 1px 8px #999;display:flex;flex-direction:column}.issuer{display:grid;grid-template-columns:1fr 19mm 1fr;gap:8px;align-items:start;border-bottom:1px solid #555;padding:8px 0 12px}.logo{grid-column:1/-1;justify-self:start;display:block;max-width:42mm;max-height:22mm;object-fit:contain}.issuer-copy h1{font-size:15pt;margin:0 0 4px}.document-code{text-align:center;border:1px solid #333;padding:4px}.document-code strong{display:block;font-size:22pt}.document-code small{display:block;font-size:8pt}.document-meta{text-align:right;font-size:9pt}.document-meta h2{font-size:14pt;margin:0 0 5px}.copy-label{font-weight:bold;letter-spacing:.12em;margin:3px 0}.receiver{padding:12px 0;border-bottom:1px solid #aaa;line-height:1.6}.receiver h3,.references h3,.payments h3,.notes h3,.taxes h3,.transparency h3{font-size:10pt;margin:0 0 5px}.references{margin-top:12px}.details{width:100%;border-collapse:collapse;margin-top:14px}.details thead{display:table-header-group}.details th{background:#eee;text-align:left;border-bottom:1px solid #777}.details th,.details td{padding:6px;border-bottom:1px solid #ddd;vertical-align:top}.number{text-align:right;white-space:nowrap}.totals{width:68%;margin:12px 0 0 auto}.totals>div,.transparency>div{display:flex;justify-content:space-between;padding:4px;border-bottom:1px solid #ddd}.totals .grand-total{font-size:12pt;border-top:1px solid #222;border-bottom:3px double #222;margin-top:5px;padding:8px 4px}.transparency>.grand-total{font-size:12pt;font-weight:bold;border-top:2px solid #222;border-bottom:3px double #222;margin-top:10px;padding:8px 4px}.notes,.taxes,.transparency{margin-top:12px}.notes p{margin:4px 0}.required-legend{display:flex;justify-content:center;align-items:center;gap:14px;border:2px solid #222;padding:7px;margin:0 auto 12px;text-align:center;width:100%;font-size:10pt}.required-legend strong{font-size:18pt}.authorization{display:flex;gap:14px;align-items:center;justify-content:space-between;border-top:1px solid #555;padding-top:9px;margin-top:auto}.qr{width:30mm;height:30mm;flex:none}.qr-image{display:block;width:100%;height:100%;image-rendering:pixelated}.footer-copy{text-align:right;font-size:8pt}.footer-copy strong{display:block;font-size:9pt}.payments{margin-top:12px}.payments table,.taxes table{width:100%;border-collapse:collapse}.payments th,.payments td,.taxes th,.taxes td{padding:6px;border-bottom:1px solid #ddd}@media print{body{background:#fff}.page{width:auto;min-height:269mm;margin:0;padding:0;box-shadow:none}tr{break-inside:avoid}.receiver,.references,.totals,.authorization,.transparency{break-inside:avoid}}@media screen and (max-width:700px){.page{width:100%;min-height:100vh;margin:0;padding:18px}.issuer{grid-template-columns:1fr 16mm}.document-meta{grid-column:1/-1;text-align:left}.totals,.transparency{width:100%}.details,.taxes{font-size:8pt}.details th,.details td,.taxes th,.taxes td{padding:4px}.authorization{align-items:flex-end}}";
+    private const string Styles = "@page{size:A4;margin:14mm}*{box-sizing:border-box}body{margin:0;color:#171717;background:#e8e8e8;font:10pt Arial,Helvetica,sans-serif}.page{width:210mm;min-height:297mm;margin:18px auto;padding:14mm;background:#fff;box-shadow:0 1px 8px #999;display:flex;flex-direction:column}.issuer{display:grid;grid-template-columns:1fr 19mm 1fr;gap:8px;align-items:start;border-bottom:1px solid #555;padding:8px 0 12px}.logo{grid-column:1;grid-row:1;justify-self:start;display:block;max-width:42mm;max-height:22mm;object-fit:contain}.issuer-copy h1{font-size:15pt;margin:0 0 4px}.document-code{text-align:center;border:1px solid #333;padding:4px}.document-code strong{display:block;font-size:22pt}.document-code small{display:block;font-size:8pt}.document-meta{text-align:right;font-size:9pt}.document-meta h2{font-size:14pt;margin:0 0 5px}.copy-label{font-weight:bold;letter-spacing:.12em;margin:3px 0;text-align:center}.receiver{padding:12px;background:#f2f2f2;border:1px solid #ddd;border-radius:4px;margin-top:10px;line-height:1.6}.receiver h3,.references h3,.payments h3,.notes h3,.taxes h3,.transparency h3,.export-fields h3{font-size:10pt;margin:0 0 5px}.receiver-columns{display:grid;grid-template-columns:1fr 1fr;gap:4px 18px}.references{margin-top:12px}.details{width:100%;border-collapse:collapse;margin-top:14px}.details thead{display:table-header-group}.details th{background:var(--principal);color:var(--principal-text);text-align:left;border-bottom:1px solid #777}.details th,.details td{padding:6px;border-bottom:1px solid #ddd;vertical-align:top}.details tbody tr{background:#fff}.number{text-align:right;white-space:nowrap}.totals{width:68%;margin:12px 0 0 auto}.totals>div,.transparency>div{display:flex;justify-content:space-between;padding:4px;border-bottom:1px solid #ddd}.totals .grand-total{font-size:12pt;background:var(--principal);color:var(--principal-text);border-radius:4px;margin-top:5px;padding:8px}.transparency>.grand-total{font-size:12pt;font-weight:bold;border-top:2px solid #222;border-bottom:3px double #222;margin-top:10px;padding:8px 4px}.notes,.taxes,.transparency,.export-fields{margin-top:12px}.notes p{margin:4px 0}.required-legend{display:flex;justify-content:center;align-items:center;gap:14px;border:2px solid #222;border-radius:4px;padding:7px;margin:0 auto 12px;text-align:center;width:100%;font-size:10pt}.required-legend strong{font-size:18pt}.authorization{display:flex;gap:14px;align-items:center;justify-content:space-between;border-top:1px solid #555;padding-top:9px;margin-top:auto}.qr{width:30mm;height:30mm;flex:none}.qr-image{display:block;width:100%;height:100%;image-rendering:pixelated}.footer-copy{text-align:right;font-size:8pt}.footer-copy strong{display:block;font-size:9pt}.payments{margin-top:12px}.payments table,.taxes table{width:100%;border-collapse:collapse}.payments th,.taxes th{background:var(--principal);color:var(--principal-text)}.payments th,.payments td,.taxes th,.taxes td{padding:6px;border-bottom:1px solid #ddd}@media print{body{background:#fff}.page{width:auto;min-height:269mm;margin:0;padding:0;box-shadow:none}tr{break-inside:avoid}.receiver,.references,.totals,.authorization,.transparency{break-inside:avoid}}@media screen and (max-width:700px){.page{width:100%;min-height:100vh;margin:0;padding:18px}.issuer{grid-template-columns:1fr 16mm}.document-meta{grid-column:1/-1;text-align:left}.totals,.transparency{width:100%}.details,.taxes{font-size:8pt}.details th,.details td,.taxes th,.taxes td{padding:4px}.receiver-columns{grid-template-columns:1fr}.authorization{align-items:flex-end}}";
+    private const string StyleOverrides = ".copy-label{font-weight:700}.issuer-copy{grid-column:1}.document-code{grid-column:2;grid-row:1}.document-meta{grid-column:3;grid-row:1}.document-code,.totals .grand-total{border-color:var(--principal)}.details th,.payments th,.taxes th{background:var(--principal);color:var(--principal-text)}.footer-copy strong,.authorization>strong{font-weight:700}.export-fields{padding:10px;background:#f7f7f7;border-radius:4px}.export-fields .receiver-columns{font-size:9pt}@media screen and (max-width:700px){.issuer-copy{grid-column:1;grid-row:1}.document-code{grid-column:2;grid-row:1}.document-meta{grid-column:1/-1;grid-row:2}.logo{max-width:30mm}.receiver-columns{grid-template-columns:1fr}}";
 }
