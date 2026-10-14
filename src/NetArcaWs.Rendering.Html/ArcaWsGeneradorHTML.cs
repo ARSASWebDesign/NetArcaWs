@@ -48,9 +48,9 @@ public sealed class ArcaWsGeneradorHTML
         if (!string.IsNullOrWhiteSpace(datos.Receptor.Domicilio)) html.Append("<div><b>Domicilio:</b> ").Append(E(datos.Receptor.Domicilio)).Append("</div>");
         html.Append("</div><div class=\"receiver-right\">");
         if (!string.IsNullOrWhiteSpace(datos.Receptor.CondicionTributaria) || datos.CodigoCondicionIvaReceptor is not null) html.Append("<div><b>").Append(E(DocumentFiscalRules.ReceiverConditionLabel(datos))).Append("</b> ").Append(E(DocumentFiscalRules.ReceiverCondition(datos))).Append("</div>");
-        string? receiverId = !string.IsNullOrWhiteSpace(datos.Receptor.IdentificacionFiscal)
-            ? datos.Receptor.IdentificacionFiscal
-            : datos.Receptor.Identificacion > 0 ? datos.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture) : null;
+        string? receiverId = export is not null
+            ? export.ForeignTaxId ?? ReceiverIdentifier(datos)
+            : ReceiverIdentifier(datos);
         if (receiverId is not null) html.Append("<div><b>").Append(E(ReceiverIdLabel(datos))).Append(":</b> ").Append(E(receiverId)).Append("</div>");
         if (export?.CuitPais is string cuitPais) html.Append("<div><b>CUIT país:</b> ").Append(E(cuitPais)).Append("</div>");
         if (export?.DestinationCountryCode is string destination) html.Append("<div><b>País destino (código):</b> ").Append(E(destination)).Append("</div>");
@@ -203,6 +203,13 @@ public sealed class ArcaWsGeneradorHTML
             _ => "Documento"
         };
     }
+
+    private static string? ReceiverIdentifier(ComprobanteGenerado document) =>
+        !string.IsNullOrWhiteSpace(document.Receptor.IdentificacionFiscal)
+            ? document.Receptor.IdentificacionFiscal
+            : document.Receptor.Identificacion > 0
+                ? document.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture)
+                : null;
 
     private static void AppendDetailTable(StringBuilder html, IReadOnlyList<LineaComprobante> lines, string currency)
     {

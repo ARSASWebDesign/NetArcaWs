@@ -254,6 +254,7 @@ public sealed partial class HtmlRenderingTests
         string receiverSection = WebUtility.HtmlDecode(html[start..(end + "</section>".Length)]);
         Assert.True(receiverSection.Contains("Información complementaria:", StringComparison.Ordinal), receiverSection);
         Assert.DoesNotContain("Condición frente al IVA:", receiverSection);
+        Assert.Contains("<b>ID impositivo extranjero:</b> 12345678901234567890", receiverSection);
     }
 
     [Fact]
