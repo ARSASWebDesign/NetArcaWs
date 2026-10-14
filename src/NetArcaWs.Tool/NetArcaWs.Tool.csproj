@@ -27,5 +27,7 @@
     <None Include="../../LICENSE" Pack="true" PackagePath="/" />
     <None Include="../../COPYING" Pack="true" PackagePath="/" />
     <None Include="../../THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="/" />
+    <None Include="../../docs/license-distribution.md" Pack="true" PackagePath="/docs/license-distribution.md" />
+    <None Include="../../licenses/**/*" Pack="true" PackagePath="/licenses/" />
   </ItemGroup>
 </Project>

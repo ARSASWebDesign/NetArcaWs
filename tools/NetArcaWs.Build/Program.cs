@@ -27,6 +27,15 @@ try
         case ["persistence-migrations", "--check"]:
             PersistenceMigrations.Run(root, check: true);
             break;
+        case ["licenses", "--update"]:
+            LicenseAudit.Run(root, check: false);
+            break;
+        case ["licenses", "--check"]:
+            LicenseAudit.Run(root, check: true);
+            break;
+        case ["licenses", "--check-packages", var packageDirectory]:
+            LicenseAudit.Run(root, check: true, Path.GetFullPath(packageDirectory));
+            break;
         case ["contracts", "--xscgen", var executable]:
             ContractGenerator.Run(root, Path.GetFullPath(executable));
             break;
@@ -46,7 +55,7 @@ try
             await ReleaseAssets.RunAsync(repository, tag, Path.GetFullPath(directory));
             break;
         default:
-            Console.Error.WriteLine("Commands: operations | wiki | persistence-schema [--check] | persistence-migrations [--check] | contracts --xscgen PATH | release-version | release-assets OWNER/REPO TAG DIRECTORY");
+            Console.Error.WriteLine("Commands: operations | wiki | persistence-schema [--check] | persistence-migrations [--check] | licenses --update | licenses --check | licenses --check-packages DIRECTORY | contracts --xscgen PATH | release-version | release-assets OWNER/REPO TAG DIRECTORY");
             return 2;
     }
     return 0;

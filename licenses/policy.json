@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "allowedLicenseIds": [
+    "0BSD", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "BSL-1.0", "CC0-1.0",
+    "ISC", "MIT", "MPL-2.0", "OFL-1.1", "PostgreSQL", "Unicode-3.0", "Unlicense", "Zlib"
+  ],
+  "standardLicenseFallbacks": {
+    "MIT": {
+      "path": "licenses/standards/MIT.txt",
+      "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5",
+      "source": "https://github.com/spdx/license-list-data/blob/main/text/MIT.txt"
+    },
+    "Apache-2.0": {
+      "path": "licenses/standards/Apache-2.0.txt",
+      "sha256": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff",
+      "source": "https://github.com/spdx/license-list-data/blob/main/text/Apache-2.0.txt"
+    },
+    "PostgreSQL": {
+      "path": "licenses/standards/PostgreSQL.txt",
+      "sha256": "d443a7dc550da2be365b4e924bb8779101e1c318d15bb78e5cb6374cadd8b6c0",
+      "source": "https://github.com/spdx/license-list-data/blob/main/text/PostgreSQL.txt"
+    }
+  },
+  "referenceOnlyPackages": [
+    {
+      "id": "Microsoft.Data.SqlClient.SNI.runtime",
+      "version": "6.0.3",
+      "licensePath": "LICENSE.txt",
+      "licenseSha256": "9335e8bad875dd7be4eebd55d2335eb6433d1cea61aadb3817af7807bef8932a",
+      "source": "https://www.nuget.org/packages/Microsoft.Data.SqlClient.SNI.runtime/6.0.3",
+      "reason": "Reviewed optional Windows native runtime terms; reference only, do not embed this package or its native binaries in release artifacts."
+    },
+    {
+      "id": "Microsoft.Identity.Client.NativeInterop",
+      "version": "0.20.6",
+      "licensePath": "LICENSE",
+      "licenseSha256": "0fe665c2ada5962fd01190ab5b2947b9a9d2c625a9f8225577441eb3256e14e3",
+      "source": "https://www.nuget.org/packages/Microsoft.Identity.Client.NativeInterop/0.20.6",
+      "reason": "Reference only: the package license restricts redistribution. Its managed/native binaries must not be present in NetArcaWs release artifacts."
+    }
+  ],
+  "upstreamLegalOverrides": [
+    {
+      "id": "PdfPig",
+      "version": "0.1.16",
+      "license": "Apache-2.0",
+      "path": "licenses/upstream/pdfpig/0.1.16/LICENSE",
+      "sha256": "4c510e162f896ea43b4b1cf1b743641d7c756f1004d0e5eaf0615b28b7ded409",
+      "source": "https://raw.githubusercontent.com/UglyToad/PdfPig/a7bb35662bbbf405efddad50aedc9bcdcf515afc/LICENSE",
+      "copyrightReview": "Reviewed exact upstream tag: no PdfPig core copyright notice is stated; preserve all notices present in the complete Apache license file."
+    },
+    {
+      "id": "ZXing.Net",
+      "version": "0.16.11",
+      "license": "Apache-2.0",
+      "path": "licenses/upstream/zxing.net/0.16.11/COPYING",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "source": "https://raw.githubusercontent.com/micjahn/ZXing.Net/v0.16.11.0/COPYING",
+      "copyrightReview": "Preserve all upstream Source/lib copyright headers in the paired pinned notice evidence."
+    }
+  ],
+  "upstreamEvidence": [
+    {
+      "id": "StbImageSharp",
+      "version": "2.30.16",
+      "license": "Unlicense OR MIT",
+      "path": "licenses/upstream/stbimagesharp/2.30.16/README.md",
+      "sha256": "30e80af5fdd47d67f7187bb8f9dc9c751a78fb6204189a73339dbe1c96799025",
+      "source": "https://raw.githubusercontent.com/StbSharp/StbImageSharp/125af70cb557033f2c46aec8e82eaaf72ac49817/README.md",
+      "copyrightReview": "Reviewed exact upstream repository commit and nuspec: the publisher provides no copyright holder. The README expressly selects Public Domain or MIT; preserve the package authors field as attribution, not as invented copyright."
+    },
+    {
+      "id": "ZXing.Net",
+      "version": "0.16.11",
+      "license": "Apache-2.0",
+      "path": "licenses/upstream/zxing.net/0.16.11/COPYRIGHT-NOTICES.txt",
+      "sha256": "0532e81213711f628cf00affe30b93d0c8d12a24a3e0219fa41a1e41cb7d4500",
+      "source": "https://github.com/micjahn/ZXing.Net/tree/v0.16.11.0/Source/lib",
+      "copyrightReview": "Verbatim unique copyright header lines extracted from the exact upstream Source/lib tree; notices are retained as published."
+    }
+  ]
+}

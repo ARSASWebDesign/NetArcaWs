@@ -171,3 +171,22 @@ NetArcaWs remains LGPL-3.0-or-later. This permits commercial use subject to the
 LGPL obligations; it does not replace third-party licenses or exempt a user from
 their conditions. Review the license of every new dependency and version,
 including development tools, before merging an update.
+
+## Tool and release package materials
+
+The `NetArcaWs.Tool` package redistributes application dependencies. It includes
+the project LGPL texts, this attribution file, and the reviewed per-package
+license/copyright/NOTICE materials recorded in `licenses/dependencies.json`.
+The inventory is generated from versioned NuGet lockfiles and restored package
+metadata; its file hashes make local edits and content drift fail closed. For
+MIT and Apache-2.0 packages whose archive has a NOTICE but omits the standard
+license text, the project includes the pinned SPDX text while preserving the
+package's own copyright metadata and notices.
+
+The reviewed Microsoft.Data.SqlClient.SNI.runtime 6.0.3 license is recorded
+only as a reference hash in `licenses/policy.json`. NetArcaWs release artifacts
+must not contain that package's native SNI binaries. Consumers that separately
+redistribute or deploy those components must review Microsoft's license terms
+and their obligations. Managed networking is intended for testing and
+troubleshooting, not production use. See `docs/license-distribution.md` for the
+scope and limits of the automated audit.
