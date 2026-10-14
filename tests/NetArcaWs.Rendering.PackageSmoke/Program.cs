@@ -3,7 +3,8 @@ using NetArcaWs.Rendering.Html;
 using NetArcaWs.Rendering.Pdf;
 
 var issuer = new DatosEmisor(30123456789, "Emisor de prueba", "Marca de prueba",
-    "Av. Ejemplo 123, Córdoba", "Responsable Inscripto", ingresosBrutos: "30-12345678-9");
+    "Av. Ejemplo 123, Córdoba", "Responsable Inscripto", ingresosBrutos: "30-12345678-9",
+    inicioActividades: new DateOnly(2010, 1, 1));
 var receiver = new DatosReceptor(20304050607, "Receptor de prueba", "San Martín 456, Córdoba",
     "Responsable Inscripto", 80);
 ComprobanteGenerado document = new ReciboX(issuer).GenerarComprobante(new DatosReciboX(
