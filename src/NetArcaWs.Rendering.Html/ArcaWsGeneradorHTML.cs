@@ -26,6 +26,7 @@ public sealed class ArcaWsGeneradorHTML
     {
         DocumentLayout layout = DocumentRenderValidator.Validate(datos, _issuer);
         DocumentFiscalRules.ValidateConditions(datos, layout);
+        ExportDocumentFields? export = ExportDocumentFields.Read(datos.Identidad?.Servicio, datos.SnapshotRequest);
         string qrUrl = layout.IsFiscal ? FiscalQrPayload.Create(datos, _issuer) : string.Empty;
         string qr = layout.IsFiscal ? MakeQr(qrUrl) : string.Empty;
         var html = new StringBuilder(12_000);
@@ -39,10 +40,11 @@ public sealed class ArcaWsGeneradorHTML
         html.Append("<div class=\"document-code\"><strong>").Append(E(layout.Letter)).Append("</strong>");
         if (layout.IsFiscal) html.Append("<small>COD. ").Append(datos.Identidad!.Tipo.ToString("000", CultureInfo.InvariantCulture)).Append("</small>");
         html.Append("</div><div class=\"document-meta\"><h2>").Append(E(layout.Title)).Append("</h2><div>Nº ").Append(E(datos.Identidad is null ? datos.NumeroInterno : $"{datos.Identidad.PuntoVenta:00000}-{datos.Identidad.Numero:00000000}")).Append("</div><div>Fecha: ").Append(datos.Fecha is DateOnly date ? Date(date) : "—").Append("</div>");
+        if (export is null && !string.IsNullOrWhiteSpace(CurrencyDisplay.Label(datos.Moneda)))
+            html.Append("<div><b>Moneda:</b> ").Append(E(CurrencyDisplay.Label(datos.Moneda))).Append("</div>");
         html.Append("</div>");
         AppendIssuerFiscal(html, _issuer);
         html.Append("</header>");
-        ExportDocumentFields? export = ExportDocumentFields.Read(datos.Identidad?.Servicio, datos.SnapshotRequest);
         html.Append("<section class=\"receiver\"><h3>Datos del receptor</h3><div class=\"receiver-columns\"><div class=\"receiver-left\"><div><b>Nombre / razón social:</b> ")
             .Append(E(datos.Receptor.Nombre)).Append("</div>");
         if (!string.IsNullOrWhiteSpace(datos.Receptor.Domicilio)) html.Append("<div><b>Domicilio:</b> ").Append(E(datos.Receptor.Domicilio)).Append("</div>");
@@ -237,8 +239,9 @@ public sealed class ArcaWsGeneradorHTML
     {
         html.Append("<table class=\"details summary\"><thead><tr><th class=\"number\">Cant.</th><th>Descripción</th><th class=\"number\">P.Unit</th><th class=\"number\">Subtotal</th></tr></thead><tbody>");
         foreach ((string Label, decimal? Amount) row in new[] { ("Neto gravado", document.Neto), ("No gravado", document.NoGravado), ("Exento", document.Exento) })
-            if (row.Amount is decimal amount) html.Append("<tr><td class=\"number\">—</td><td>").Append(row.Label).Append("</td><td class=\"number\">—</td><td class=\"number\">").Append(Money(amount, document.Moneda)).Append("</td></tr>");
-        if (document.Neto is null && document.Exento is null && document.NoGravado is null && document.Impuestos.Count == 0)
+            if (row.Amount is decimal amount && amount != 0) html.Append("<tr><td class=\"number\">—</td><td>").Append(row.Label).Append("</td><td class=\"number\">—</td><td class=\"number\">").Append(Money(amount, document.Moneda)).Append("</td></tr>");
+        bool hasSummaryRows = new[] { document.Neto, document.NoGravado, document.Exento }.Any(amount => amount is decimal value && value != 0);
+        if (!hasSummaryRows && document.Impuestos.Count == 0)
             html.Append("<tr><td class=\"number\">—</td><td>Importe total</td><td class=\"number\">—</td><td class=\"number\">").Append(Money(document.Total, document.Moneda)).Append("</td></tr>");
         html.Append("</tbody></table>");
     }

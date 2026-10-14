@@ -30,6 +30,9 @@ public sealed class CompactTotalsTests
 
         Assert.Contains("<th class=\"number\">Cant.</th><th>Descripción</th><th class=\"number\">P.Unit</th><th class=\"number\">Subtotal</th>", html);
         Assert.Contains("Neto gravado", html);
+        Assert.DoesNotContain("No gravado</td>", html);
+        Assert.DoesNotContain("Exento</td>", html);
+        Assert.Contains("<div><b>Moneda:</b> ARS - Peso Argentino</div>", html);
         Assert.DoesNotContain("Item 1", html);
         Assert.DoesNotContain("Cantidad</th>", html);
         Assert.Contains("IVA 21% Contenido", html);
