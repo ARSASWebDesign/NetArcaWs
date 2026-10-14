@@ -89,6 +89,8 @@ La guía [Diario fiscal](https://github.com/ARSASWebDesign/NetArcaWs/wiki/Diario
 
 La rama incorpora `NetArcaWs.Rendering.Html` y `NetArcaWs.Rendering.Pdf` como paquetes opcionales para representar un `ComprobanteGenerado` ya persistido y remitos locales R/X; los renderizadores no emiten ni consultan comprobantes. El receptor se conserva en el snapshot y el consumidor debe guardar también el perfil histórico de emisor, logo y color para reproducir la misma marca. WSFE aporta resumen fiscal sin ítems inventados; los adaptadores de WSFEX y WSMTXCA conservan el detalle disponible. `ColorPrincipal` acepta un único color `#RRGGBB` y usa gris `#333333` por defecto. `VersionRenderizado` identifica el paquete y la revisión de plantilla del renderer; para invalidar caché cuando cambia la marca o su configuración, el consumidor debe incluir además su propia versión o hash de perfil. Los remitos requieren receptor identificado con CUIT; R imprime CAI y datos declarados del talonario sin verificarlos ante ARCA, y X identifica el ámbito interno compartido sin afirmar autorización para transporte externo. La implementación fue probada localmente con muestras sintéticas; esta rama aún no acredita homologación ni disponibilidad pública de estos paquetes.
 
+`DatosReceptor` admite `Telefono` y `Email` opcionales: son datos de presentación aportados por la aplicación, no información devuelta por ARCA, y se muestran cuando están presentes. Las revisiones de plantilla `html-3` y `pdf-3` invalidan las cachés de renderizado sin cambiar la versión del paquete.
+
 ```csharp
 var html = new ArcaWsGeneradorHTML(perfilEmisorPersistido)
     .GenerarHTMLComprobante(comprobantePersistido);

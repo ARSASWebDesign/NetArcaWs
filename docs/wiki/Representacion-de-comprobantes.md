@@ -11,6 +11,11 @@ snapshot. El receptor se toma exclusivamente del snapshot; el emisor no se
 deduce del certificado. Para volver a producir una representación histórica,
 guardá el perfil de emisor y el logo usados junto al comprobante.
 
+`DatosReceptor` admite `Telefono` y `Email` opcionales, aportados por la
+aplicación para presentación y no recibidos de ARCA; HTML y PDF los muestran
+cuando están presentes. Las revisiones de plantilla `html-3` y `pdf-3`
+invalidan las cachés de renderizado sin cambiar la versión del paquete.
+
 Para obtener un snapshot fiscal, la aplicación construye un `ArcaTenantContext`
 autorizado y llama la sobrecarga tipada de `ArcaWsComprobantes` para WSFEv1,
 WSFEXv1 o WSMTXCA. La emisión requiere el `SafeInvoiceService` configurado y

@@ -323,6 +323,9 @@ y WSMTXCA representan los ítems disponibles en sus snapshots. Cada adaptador
 limita los tipos de comprobante que valida. WSFECred, CAEA, lotes durables y el
 PDF de WSCPE quedan fuera de esta fachada.
 
+`DatosReceptor` también conserva teléfono y email opcionales aportados por la
+aplicación para la representación.
+
 Los extras admiten un único `ColorPrincipal` opcional en formato `#RRGGBB` y
 usan gris `#333333` por defecto. También exponen `VersionRenderizado`, que
 combina la versión real del paquete con una revisión independiente de HTML o
