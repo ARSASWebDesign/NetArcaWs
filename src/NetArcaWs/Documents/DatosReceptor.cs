@@ -1,7 +1,7 @@
 namespace NetArcaWs.Documents;
 
 public sealed record DatosReceptor(long Identificacion, string Nombre, string? Domicilio, string? CondicionTributaria,
-    int? CodigoTipoDocumento = null, string? IdentificacionFiscal = null)
+    int? CodigoTipoDocumento = null, string? IdentificacionFiscal = null, string? Telefono = null, string? Email = null)
 {
     public override string ToString() => nameof(DatosReceptor);
 }
