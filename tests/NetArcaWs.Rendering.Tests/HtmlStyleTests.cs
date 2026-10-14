@@ -63,6 +63,66 @@ public sealed partial class HtmlRenderingTests
         Assert.DoesNotContain("badge", html, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Fiscal_invoice_uses_principal_header_and_two_real_receiver_columns()
+    {
+        string html = new ArcaWsGeneradorHTML(HtmlRenderingTests.Issuer(), "#123456")
+            .GenerarHTMLComprobante(HtmlRenderingTests.Fiscal());
+        Assert.Contains(".issuer{", html);
+        Assert.Contains("background:var(--principal);color:var(--principal-text)", html);
+        Assert.Contains(".issuer{", html);
+        Assert.Contains("<div class=\"issuer-brand\">", html);
+        Assert.Contains("<div class=\"document-code\"><strong>A</strong>", html);
+        Assert.Contains("<div class=\"issuer-fiscal\"><div>CUIT:", html);
+        Assert.Contains("<div class=\"receiver-columns\"><div class=\"receiver-left\">", html);
+        Assert.Contains("<div class=\"receiver-right\">", html);
+        int headerStart = html.IndexOf("<header class=\"issuer\">", StringComparison.Ordinal);
+        int headerEnd = html.IndexOf("</header>", headerStart, StringComparison.Ordinal);
+        Assert.DoesNotContain("CAE:", html[headerStart..headerEnd]);
+        Assert.Contains("CAE: 12345678901234", html[html.IndexOf("<footer", headerEnd, StringComparison.Ordinal)..]);
+    }
+
+    [Fact]
+    public void Receipt_x_uses_the_same_header_and_receiver_structure()
+    {
+        string html = new ArcaWsGeneradorHTML(HtmlRenderingTests.Issuer())
+            .GenerarHTMLComprobante(HtmlRenderingTests.Receipt());
+        Assert.Contains("<header class=\"issuer\">", html);
+        Assert.Contains("background:var(--principal);color:var(--principal-text)", html);
+        Assert.Contains("<div class=\"document-code\"><strong>X</strong>", html);
+        Assert.Contains("<div class=\"receiver-columns\"><div class=\"receiver-left\">", html);
+        Assert.Contains("<div class=\"receiver-right\">", html);
+    }
+
+    [Theory]
+    [InlineData("A", 1)]
+    [InlineData("B", 6)]
+    [InlineData("C", 11)]
+    [InlineData("E", 19)]
+    public void Fiscal_letters_share_the_same_header_and_receiver_grid(string letter, int type)
+    {
+        ComprobanteGenerado document = letter == "E"
+            ? HtmlRenderingTests.ContractFiscal("wsfex", query: false)
+            : HtmlRenderingTests.Fiscal(tipo: type);
+        string html = new ArcaWsGeneradorHTML(HtmlRenderingTests.Issuer())
+            .GenerarHTMLComprobante(document);
+        Assert.Contains($"<div class=\"document-code\"><strong>{letter}</strong>", html);
+        Assert.Contains("<div class=\"issuer-brand\">", html);
+        Assert.Contains("<div class=\"issuer-fiscal\">", html);
+        Assert.Contains("<div class=\"receiver-columns\"><div class=\"receiver-left\">", html);
+        Assert.Contains("<div class=\"receiver-right\">", html);
+    }
+
+    [Fact]
+    public void Consumer_final_total_uses_the_principal_block_while_detail_rows_stay_white()
+    {
+        string html = new ArcaWsGeneradorHTML(HtmlRenderingTests.Issuer(), "#123456")
+            .GenerarHTMLComprobante(HtmlRenderingTests.Fiscal(tipo: 6, condition: 5, conditionText: "Consumidor final"));
+        Assert.Contains(".transparency>.grand-total{font-size:12pt;font-weight:700;background:var(--principal);color:var(--principal-text)", html);
+        Assert.Contains(".transparency>div{display:flex;justify-content:space-between;padding:4px;border-bottom:1px solid #ddd}", html);
+        Assert.Contains("background:#fff", html);
+    }
+
     [Theory]
     [InlineData(ClaseRemito.R)]
     [InlineData(ClaseRemito.X)]
@@ -96,6 +156,8 @@ public sealed partial class HtmlRenderingTests
         Assert.DoesNotContain("CAE", html);
         Assert.DoesNotContain("<img class=\"qr-image\"", html);
         Assert.DoesNotContain("<div class=\"grand-total\"", html);
+        Assert.Contains("<div class=\"receiver-columns\"><div class=\"receiver-left\">", html);
+        Assert.Contains("<div class=\"receiver-right\">", html);
     }
 
     [Fact]
