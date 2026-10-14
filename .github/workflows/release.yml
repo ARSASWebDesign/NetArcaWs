@@ -165,11 +165,16 @@ jobs:
           for index in "${!actual[@]}"; do test "${actual[$index]}" = "${expected_sorted[$index]}"; done
           test "$(cat BUILD_COMMIT)" = "$BUILD_COMMIT"
           test "$(unzip -z SOURCE.zip | tail -n 1)" = "$BUILD_COMMIT"
-          unzip -Z1 SOURCE.zip > source-entries.txt
-          test -s source-entries.txt
-          test -z "$(LC_ALL=C sort source-entries.txt | uniq -d)"
-          awk '{ name=$0; sub(/\/$/, "", name); if (name == "" || name ~ /^\// || name ~ /\\/ || name ~ /^[A-Za-z]:/) exit 1; count=split(name, parts, "/"); for (i=1;i<=count;i++) if (parts[i] == "" || parts[i] == "." || parts[i] == ".." || index(parts[i], ":")) exit 1 }' source-entries.txt
-          inventory_count="$(grep -Fxc 'licenses/dependencies.json' source-entries.txt)"
+          source_entries="$(mktemp)"
+          trap 'rm -f "$source_entries"' EXIT
+          unzip -Z1 SOURCE.zip > "$source_entries"
+          test -s "$source_entries"
+          test -z "$(awk '{ name=$0; sub(/\/$/, "", name); print name }' "$source_entries" | LC_ALL=C sort | uniq -d)"
+          entry_count="$(wc -l < "$source_entries")"
+          mode_count="$(zipinfo -l SOURCE.zip | awk 'substr($0, 1, 1) ~ /^[bcdlps-]$/ { type=substr($0, 1, 1); if (type != "-" && type != "d") invalid=1; count++ } END { if (invalid) exit 1; print count+0 }')"
+          test "$entry_count" -eq "$mode_count"
+          awk '{ name=$0; sub(/\/$/, "", name); if (name == "" || name ~ /^\// || name ~ /\\/ || name ~ /^[A-Za-z]:/) exit 1; count=split(name, parts, "/"); for (i=1;i<=count;i++) if (parts[i] == "" || parts[i] == "." || parts[i] == ".." || index(parts[i], ":")) exit 1 }' "$source_entries"
+          inventory_count="$(grep -Fxc 'licenses/dependencies.json' "$source_entries")"
           test "$inventory_count" -eq 1
           inventory_hash="$(unzip -p SOURCE.zip licenses/dependencies.json | sha256sum | cut -d ' ' -f 1)"
           source_hash="$(sha256sum SOURCE.zip | cut -d ' ' -f 1)"

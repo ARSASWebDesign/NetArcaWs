@@ -31,6 +31,9 @@ public sealed class ReleaseLicenseWorkflowTests
         publish.IndexOf("Verify build artifacts", StringComparison.Ordinal)
             .Should().BeLessThan(publish.IndexOf("NuGet trusted publishing login", StringComparison.Ordinal));
         publish.Should().Contain("unzip -z SOURCE.zip").And.Contain("gh release upload");
+        publish.Should().Contain("zipinfo -l SOURCE.zip")
+            .And.Contain("type != \"-\" && type != \"d\"")
+            .And.Contain("sub(/\\/$/, \"\", name); print name");
         publish.Should().Contain("Do not replace published artifacts");
     }
 
