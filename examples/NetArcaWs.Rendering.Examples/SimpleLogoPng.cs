@@ -5,32 +5,36 @@ namespace NetArcaWs.Rendering.Examples;
 
 internal static class SimpleLogoPng
 {
-    private const int Size = 240;
+    private const int DefaultSize = 240;
     private static readonly string[] Logo = [
         "#....", "#....", "#....", "#....", "#....", "#....", "#####",
         ".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###.",
         ".###.", "#...#", "#....", "#.###", "#...#", "#...#", ".###.",
         ".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."];
 
-    public static byte[] Create()
+    public static byte[] Create(int width = DefaultSize, int height = DefaultSize)
     {
-        byte[] pixels = new byte[Size * Size * 3];
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+        byte[] pixels = new byte[checked(width * height * 3)];
         Array.Fill(pixels, (byte)255);
-        const int scale = 8, gap = 8, glyphWidth = 5, glyphHeight = 7;
-        int width = glyphWidth * scale * 4 + gap * 3;
-        int height = glyphHeight * scale;
-        int left = (Size - width) / 2, top = (Size - height) / 2;
+        const int gap = 8, glyphWidth = 5, glyphHeight = 7;
+        int scaleX = width == DefaultSize && height == DefaultSize ? 8 : Math.Max(1, (int)((width * .86 - gap * 3) / (glyphWidth * 4)));
+        int scaleY = width == DefaultSize && height == DefaultSize ? 8 : Math.Max(1, (int)(height * .64 / glyphHeight));
+        int wordWidth = glyphWidth * scaleX * 4 + gap * 3;
+        int wordHeight = glyphHeight * scaleY;
+        int left = (width - wordWidth) / 2, top = (height - wordHeight) / 2;
         for (int letter = 0; letter < 4; letter++)
         for (int row = 0; row < glyphHeight; row++)
         for (int col = 0; col < glyphWidth; col++)
         {
             if (Logo[letter * 7 + row][col] != '#') continue;
-            for (int y = 0; y < scale; y++)
-            for (int x = 0; x < scale; x++)
+            for (int y = 0; y < scaleY; y++)
+            for (int x = 0; x < scaleX; x++)
             {
-                int px = left + letter * (glyphWidth * scale + gap) + col * scale + x;
-                int py = top + row * scale + y;
-                int offset = (py * Size + px) * 3;
+                int px = left + letter * (glyphWidth * scaleX + gap) + col * scaleX + x;
+                int py = top + row * scaleY + y;
+                int offset = (py * width + px) * 3;
                 pixels[offset] = pixels[offset + 1] = pixels[offset + 2] = 0;
             }
         }
@@ -38,16 +42,16 @@ internal static class SimpleLogoPng
         using var output = new MemoryStream();
         output.Write([137, 80, 78, 71, 13, 10, 26, 10]);
         Span<byte> ihdr = stackalloc byte[13];
-        BinaryPrimitives.WriteInt32BigEndian(ihdr, Size);
-        BinaryPrimitives.WriteInt32BigEndian(ihdr[4..], Size);
+        BinaryPrimitives.WriteInt32BigEndian(ihdr, width);
+        BinaryPrimitives.WriteInt32BigEndian(ihdr[4..], height);
         ihdr[8] = 8;
         ihdr[9] = 2;
         WriteChunk(output, "IHDR", ihdr);
         using var raw = new MemoryStream();
-        for (int y = 0; y < Size; y++)
+        for (int y = 0; y < height; y++)
         {
             raw.WriteByte(0);
-            raw.Write(pixels, y * Size * 3, Size * 3);
+            raw.Write(pixels, y * width * 3, width * 3);
         }
         using var compressed = new MemoryStream();
         using (var zlib = new ZLibStream(compressed, CompressionLevel.Optimal, leaveOpen: true))

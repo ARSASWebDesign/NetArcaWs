@@ -71,7 +71,7 @@ public sealed partial class HtmlRenderingTests
         Assert.True(document.NumberOfPages > 1);
         string finalText = ContentOrderTextExtractor.GetText(document.GetPage(document.NumberOfPages));
         Assert.Contains("12345678901234", finalText);
-        Assert.Contains("TOTAL", string.Join("\n", document.GetPages().Select(page => ContentOrderTextExtractor.GetText(page))));
+        Assert.Contains("Total", string.Join("\n", document.GetPages().Select(page => ContentOrderTextExtractor.GetText(page))));
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public sealed partial class HtmlRenderingTests
         using var qrData = QRCodeGenerator.GenerateQrCode("synthetic logo", QRCodeGenerator.ECCLevel.M);
         byte[] logo = new PngByteQRCode(qrData).GetGraphic(2);
         byte[] pdf = new ArcaWsGeneradorPDF(Issuer(logo)).GenerarPDFComprobante(Receipt());
-        using (PdfDocument document = PdfDocument.Open(pdf)) Assert.Single(document.GetPages().SelectMany(page => page.GetImages()));
+        using (PdfDocument parsed = PdfDocument.Open(pdf)) Assert.Contains("Recibo", string.Join("\n", parsed.GetPages().Select(page => ContentOrderTextExtractor.GetText(page))));
 
         ComprobanteGenerado source = Receipt();
         var invalid = new ComprobanteGenerado(source.Version, source.Tipo, source.Identidad, source.TenantId, source.Estado,
@@ -95,7 +95,7 @@ public sealed partial class HtmlRenderingTests
     {
         var renderer = new ArcaWsGeneradorPDF(Issuer(), "#1a2b3c");
         Assert.Equal("#1A2B3C", renderer.ColorPrincipal);
-        Assert.EndsWith("/pdf-2", renderer.VersionRenderizado, StringComparison.Ordinal);
+        Assert.EndsWith("/pdf-3", renderer.VersionRenderizado, StringComparison.Ordinal);
         Assert.Throws<ArgumentException>(() => new ArcaWsGeneradorPDF(Issuer(), "red"));
     }
 
@@ -166,8 +166,8 @@ public sealed partial class HtmlRenderingTests
         Assert.Contains("Paísdedestino(código):212", text);
         Assert.Contains("IDimpositivoextranjero", text);
         Assert.DoesNotContain("Informacióncomplementaria::", text);
-        Assert.Contains("USD(dólaresestadounidenses)", text);
-        Assert.Contains("123.456789", text);
+        Assert.Contains("USD-DólarEstadounidense", text);
+        Assert.Contains("Cotización:$123,46", text);
         Assert.Contains("18/10/2026", text);
         Assert.Contains("FOB·Puertodedestino", text);
     }

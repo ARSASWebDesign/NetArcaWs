@@ -26,7 +26,7 @@ internal static class FiscalAssociatedDocuments
         return references.Select(reference =>
         {
             DocumentLayout layout = DocumentLayout.For(document.Identidad.Servicio, reference.Type);
-            return $"{layout.Title} {layout.Letter} {reference.Point:00000}-{reference.Number:00000000}";
+            return $"{layout.Title} {reference.Point:00000}-{reference.Number:00000000}";
         }).ToArray();
     }
 

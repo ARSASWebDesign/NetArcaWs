@@ -75,7 +75,7 @@ public sealed partial class HtmlRenderingTests
             Assert.Contains("Factura A", html);
             Assert.Contains("Monotributista", html);
             Assert.Contains("27.618", html);
-            Assert.Contains("121,00 ARS", html);
+            Assert.Contains("$121,00", html);
             Assert.Contains("https://www.arca.gob.ar/fe/qr/", html);
             string payload = ExtractQrPayload(html);
             using JsonDocument json = JsonDocument.Parse(Convert.FromBase64String(payload));
@@ -113,13 +113,13 @@ public sealed partial class HtmlRenderingTests
     {
         ComprobanteGenerado document = Fiscal(tipo: 6, condition: 5, conditionText: "Consumidor final", legends: []);
         string html = new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(document);
-        int sectionStart = html.IndexOf("<section class=\"transparency\">", StringComparison.Ordinal);
+        int sectionStart = html.IndexOf("<section class=\"totals transparency\">", StringComparison.Ordinal);
         int totalStart = html.IndexOf("<div class=\"grand-total\">", sectionStart, StringComparison.Ordinal);
         int sectionEnd = html.IndexOf("</section>", sectionStart, StringComparison.Ordinal);
         Assert.True(sectionStart >= 0 && totalStart > sectionStart && sectionEnd > totalStart,
             "The total must stay inside the consumer-transparency section.");
-        Assert.Contains(".transparency>.grand-total", html);
-        Assert.Contains("121,00 ARS", html[totalStart..sectionEnd]);
+        Assert.Contains(".totals .grand-total", html);
+        Assert.Contains("$121,00", html[totalStart..sectionEnd]);
     }
 
     [Fact]
@@ -153,9 +153,9 @@ public sealed partial class HtmlRenderingTests
         string consumidorFinal = new ArcaWsGeneradorHTML(Issuer()).GenerarHTMLComprobante(
             Fiscal(tipo: 6, condition: 5, conditionText: "Consumidor final", legends: []));
         Assert.Contains("A CONSUMIDOR FINAL", consumidorFinal);
-        Assert.Contains("Régimen de Transparencia Fiscal al Consumidor (Ley 27.743)", consumidorFinal);
+        Assert.Contains("Régimen de Transparencia Fiscal al Consumidor (Ley 27.743)", WebUtility.HtmlDecode(consumidorFinal));
         Assert.Contains("Otros impuestos nacionales indirectos", consumidorFinal);
-        Assert.Contains("0,00 ARS", consumidorFinal);
+        Assert.Contains("$0,00", consumidorFinal);
     }
 
     [Fact]

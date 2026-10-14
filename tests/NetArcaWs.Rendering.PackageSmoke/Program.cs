@@ -15,8 +15,8 @@ ComprobanteGenerado document = new ReciboX(issuer).GenerarComprobante(new DatosR
 var htmlRenderer = new ArcaWsGeneradorHTML(issuer, "#1A4E72");
 var pdfRenderer = new ArcaWsGeneradorPDF(issuer, "#1A4E72");
 if (htmlRenderer.ColorPrincipal != "#1A4E72" || pdfRenderer.ColorPrincipal != "#1A4E72" ||
-    !htmlRenderer.VersionRenderizado.Contains("/html-2", StringComparison.Ordinal) ||
-    !pdfRenderer.VersionRenderizado.Contains("/pdf-2", StringComparison.Ordinal))
+    !htmlRenderer.VersionRenderizado.Contains("/html-3", StringComparison.Ordinal) ||
+    !pdfRenderer.VersionRenderizado.Contains("/pdf-3", StringComparison.Ordinal))
     throw new InvalidOperationException("The installed renderer packages did not expose their color and render-version configuration.");
 
 string html = htmlRenderer.GenerarHTMLComprobante(document);

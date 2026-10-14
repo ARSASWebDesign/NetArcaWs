@@ -23,9 +23,10 @@ public static class SampleGallery
 
     public static IReadOnlyList<SampleCase> CreateCases()
     {
-        DatosReceptor ri = new(20304050607, "Distribuidora Horizonte SA", "San Martín 456, Córdoba", "Responsable Inscripto", 80);
+        DatosReceptor ri = new(20304050607, "Distribuidora Horizonte SA", "San Martín 456, Córdoba", "Responsable Inscripto", 80,
+            Telefono: "+54 351 555-0100", Email: "cliente@example.test");
         DatosReceptor mono = new(27234567891, "Taller del Centro", "Belgrano 222, Córdoba", "Monotributista", 80);
-        DatosReceptor final = new(0, "Consumidor Final", null, null, 99);
+        DatosReceptor final = new(0, "Consumidor Final", null, null, 99, Telefono: "+54 11 5555-0100", Email: "consumidor@example.test");
         DatosReceptor foreign = new(55000002126, "Norte Trading LLC", "21 Market St, Miami, FL", "Cliente del exterior", 80, "9876543210123");
         return [
             new("wsfe-a-ri-logo", "WSFE / Factura A", "Factura A a responsable inscripto con IVA discriminado", Wsfe(1, 1, ri, 123, 100m, 21m, "Venta de mercadería"), BrandedIssuer),
@@ -37,6 +38,8 @@ public static class SampleGallery
             new("wsfex-e-exportacion", "WSFEX / Exportación E", "Exportación E con campos fiscales y comerciales diferenciados", Wsfex(foreign, 129), BrandedIssuer),
             new("wsmtxca-a", "WSMTXCA / Factura A", "Factura A de factura con detalle e IVA", Wsmtxca(1, 1, ri, 130, 100m, 21m), BrandedIssuer),
             new("wsmtxca-b", "WSMTXCA / Factura B", "Factura B de consumidor final con IVA transparente", Wsmtxca(6, 5, final, 131, 100m, 21m), BrandedIssuer),
+            new("wsmtxca-a-multialicuota", "WSMTXCA / Factura A", "Factura A con dos ítems y alícuotas de 21 % y 10,5 %", WsmtxcaMultipleRates(1, 1, ri, 137), BrandedIssuer),
+            new("wsmtxca-b-multialicuota", "WSMTXCA / Factura B", "Factura B con tres ítems y alícuotas de 21 % y 10,5 %", WsmtxcaMultipleRates(6, 5, final, 138, includeThirdItem: true), BrandedIssuer),
             new("x-recibo-total", "Recibo X", "Recibo X con pago total e imputación", Receipt("X-0001", 121m, [new("Factura A 00004-00000122", 121m, "ARS")]), LegalIssuer),
             new("x-recibo-parcial", "Recibo X", "Recibo X con pago parcial e imputación", Receipt("X-0002", 50m, [new("Factura A 00004-00000122", 50m, "ARS")]), LegalIssuer),
             new("wsmtxca-a-multipagina", "WSMTXCA / Multipágina", "Factura A con detalle y leyendas extensas para revisar paginación", Multipage(ri, 132), BrandedIssuer),
@@ -110,7 +113,23 @@ public static class SampleGallery
         html.Append("<section class=\"group\"><h2>Variante de color</h2><p>Único ejemplo con color principal personalizado; las demás muestras usan escala de grises.</p><article class=\"card\"><h3>Azul #1A4E72</h3><p>Exportación E con perfil de marca La Tienda.</p><iframe class=\"preview\" loading=\"lazy\" title=\"Exportación E azul\" src=\"").Append(accentId).Append("/comprobante.html\"></iframe><p><a href=\"").Append(accentId).Append("/comprobante.html\">Ver HTML</a> · <a href=\"").Append(accentId).Append("/comprobante.pdf\">Abrir PDF</a></p></article></section>");
         html.Append("</body></html>");
         File.WriteAllText(Path.Combine(run, "index.html"), html.ToString(), new UTF8Encoding(false));
-        ExampleDocumentStore.WriteRunManifest(run, created, cases.Append(export with { Id = accentId }).ToArray());
+        SampleCase logoSample = cases.Single(sample => sample.Id == "wsfe-a-ri-logo");
+        DatosEmisor wideIssuer = new(logoSample.Issuer.Identificacion, logoSample.Issuer.RazonSocial, logoSample.Issuer.NombreFantasia,
+            logoSample.Issuer.Domicilio, logoSample.Issuer.CondicionTributaria, SimpleLogoPng.Create(720, 240),
+            logoSample.Issuer.IngresosBrutos, logoSample.Issuer.InicioActividades);
+        string wideId = "wsfe-a-ri-logo-apaisado";
+        string wideDir = Path.Combine(run, wideId);
+        Directory.CreateDirectory(wideDir);
+        ExampleDocumentStore.Save(Path.Combine(wideDir, "persistence.sqlite"), logoSample.Document!, wideIssuer);
+        ExampleDocumentStore.StoredSample wideStored = ExampleDocumentStore.LoadSample(Path.Combine(wideDir, "persistence.sqlite"));
+        File.WriteAllText(Path.Combine(wideDir, "document.json"), wideStored.DocumentJson, new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(wideDir, "issuer.json"), JsonSerializer.Serialize(wideStored.Issuer, JsonOptions));
+        File.WriteAllText(Path.Combine(wideDir, "comprobante.html"), AddSyntheticNotice(new ArcaWsGeneradorHTML(wideStored.Issuer).GenerarHTMLComprobante(wideStored.Document!)), new UTF8Encoding(false));
+        File.WriteAllBytes(Path.Combine(wideDir, "comprobante.pdf"), AddSyntheticNotice(new ArcaWsGeneradorPDF(wideStored.Issuer).GenerarPDFComprobante(wideStored.Document!)));
+        html.Insert(html.ToString().IndexOf("</body>", StringComparison.Ordinal), $"<section class=\"group\"><h2>Logo apaisado</h2><article class=\"card\"><h3>Logo de proporción 3:1</h3><iframe class=\"preview\" loading=\"lazy\" title=\"Logo apaisado\" src=\"{wideId}/comprobante.html\"></iframe><p><a href=\"{wideId}/comprobante.pdf\">Abrir PDF</a></p></article></section>");
+        File.WriteAllText(Path.Combine(run, "index.html"), html.ToString(), new UTF8Encoding(false));
+        ExampleDocumentStore.WriteRunManifest(run, created, cases.Append(export with { Id = accentId })
+            .Append(logoSample with { Id = wideId, Issuer = wideIssuer }).ToArray());
         return run;
     }
 
@@ -213,7 +232,7 @@ public static class SampleGallery
             [("Juego de herramientas de mantenimiento", net, vat)];
         foreach (var line in items)
             request.ArrayItems.Add(new ItemType { Descripcion = line.Description, Codigo = "HERR-01", Cantidad = 1m,
-            PrecioUnitario = line.Net, CodigoCondicionIva = 1,
+            PrecioUnitario = cond == 5 ? line.Net + line.Vat : line.Net, CodigoCondicionIva = 1,
                 ImporteIva = line.Vat, ImporteItem = line.Net + line.Vat, CodigoUnidadMedida = 7 });
         if (vat > 0) request.ArraySubtotalesIva.Add(new SubtotalIvaType { Codigo = 5, Importe = vat });
         var response = new AutorizarComprobanteResponseType { Resultado = ResultadoSimpleType.A, ComprobanteResponse = new() {
@@ -222,9 +241,41 @@ public static class SampleGallery
             FechaVencimientoCae = ExpiryDate.ToDateTime(TimeOnly.MinValue) } };
         return new(1, TipoComprobanteGenerado.Fiscal, new("wsmtxca", "Homologacion", IssuerId, 4, type, number), "muestra-sintetica",
             "Authorized", receiver, "ARS", total, items.Select(line => new LineaComprobante(line.Description, line.Net + line.Vat,
-                "ARS", "HERR-01", 1m, 7, line.Net)).ToArray(),
+                "ARS", "HERR-01", 1m, 7, cond == 5 ? line.Net + line.Vat : line.Net)).ToArray(),
             vat == 0 ? [] : [new("IVA 21%", vat, "ARS", "5", null, 21m, Tipo: TipoImpuestoComprobante.Iva)], legends ?? [],
             Serialize(request), 1, new(Cae, ExpiryDate, [], [], "A", "E"), fecha: IssueDate, cotizacion: 1m, neto: net,
+            exento: 0, noGravado: 0, iva: vat, snapshotResponse: Serialize(response), snapshotResponseVersion: 1,
+            condicionIvaReceptor: receiver.CondicionTributaria, codigoCondicionIvaReceptor: cond);
+    }
+
+    private static ComprobanteGenerado WsmtxcaMultipleRates(short type, short cond, DatosReceptor receiver, long number, bool includeThirdItem = false)
+    {
+        var items = new List<(string Description, decimal Net, decimal Vat, decimal Rate, short Code)>
+        {
+            (Description: "Producto gravado al 21 %", Net: 100m, Vat: 21m, Rate: 21m, Code: (short)5),
+            (Description: "Producto gravado al 10,5 %", Net: 200m, Vat: 21m, Rate: 10.5m, Code: (short)4)
+        };
+        if (includeThirdItem) items.Add(("Segundo producto gravado al 21 %", 50m, 10.5m, 21m, 5));
+        decimal net = items.Sum(item => item.Net), vat = items.Sum(item => item.Vat), total = net + vat;
+        var request = new ComprobanteType { CodigoTipoComprobante = type, NumeroPuntoVenta = 4, NumeroComprobante = number,
+            FechaEmision = IssueDate.ToDateTime(TimeOnly.MinValue), ImporteSubtotal = net, ImporteTotal = total, CodigoMoneda = "ARS", CotizacionMoneda = 1,
+            CodigoTipoDocumento = checked((short)(receiver.CodigoTipoDocumento ?? 99)), NumeroDocumento = receiver.Identificacion, CondicionIvaReceptor = cond,
+            ImporteGravado = net, ImporteExento = 0, ImporteNoGravado = 0 };
+        foreach (var item in items)
+            request.ArrayItems.Add(new ItemType { Descripcion = item.Description, Codigo = "MUESTRA", Cantidad = 1m,
+                PrecioUnitario = cond == 5 ? item.Net + item.Vat : item.Net, CodigoCondicionIva = item.Code, ImporteIva = item.Vat, ImporteItem = item.Net + item.Vat, CodigoUnidadMedida = 7 });
+        foreach (var rate in items.GroupBy(item => item.Code))
+            request.ArraySubtotalesIva.Add(new SubtotalIvaType { Codigo = rate.Key, Importe = rate.Sum(item => item.Vat) });
+        var response = new AutorizarComprobanteResponseType { Resultado = ResultadoSimpleType.A, ComprobanteResponse = new() {
+            Cuit = IssuerId, CodigoTipoComprobante = type, NumeroPuntoVenta = 4, NumeroComprobante = number,
+            FechaEmision = IssueDate.ToDateTime(TimeOnly.MinValue), Cae = long.Parse(Cae, CultureInfo.InvariantCulture),
+            FechaVencimientoCae = ExpiryDate.ToDateTime(TimeOnly.MinValue) } };
+        return new(1, TipoComprobanteGenerado.Fiscal, new("wsmtxca", "Homologacion", IssuerId, 4, type, number), "muestra-sintetica",
+            "Authorized", receiver, "ARS", total, items.Select(item => new LineaComprobante(item.Description, item.Net + item.Vat,
+            "ARS", "MUESTRA", 1m, 7, cond == 5 ? item.Net + item.Vat : item.Net)).ToArray(),
+            items.GroupBy(item => item.Code).Select(group => new ImpuestoComprobante($"IVA {group.First().Rate}%", group.Sum(item => item.Vat),
+                "ARS", group.Key.ToString(CultureInfo.InvariantCulture), null, group.First().Rate, Tipo: TipoImpuestoComprobante.Iva)).ToArray(),
+            [], Serialize(request), 1, new(Cae, ExpiryDate, [], [], "A", "E"), fecha: IssueDate, cotizacion: 1m, neto: net,
             exento: 0, noGravado: 0, iva: vat, snapshotResponse: Serialize(response), snapshotResponseVersion: 1,
             condicionIvaReceptor: receiver.CondicionTributaria, codigoCondicionIvaReceptor: cond);
     }

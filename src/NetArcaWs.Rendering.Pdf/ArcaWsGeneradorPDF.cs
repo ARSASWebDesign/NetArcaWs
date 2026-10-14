@@ -28,7 +28,7 @@ public sealed class ArcaWsGeneradorPDF
     }
 
     public string ColorPrincipal => _style.ColorPrincipal;
-    public string VersionRenderizado => RenderingStyle.RendererVersion(typeof(ArcaWsGeneradorPDF).Assembly, "pdf-2");
+    public string VersionRenderizado => RenderingStyle.RendererVersion(typeof(ArcaWsGeneradorPDF).Assembly, "pdf-3");
 
     public byte[] GenerarPDFComprobante(ComprobanteGenerado datos)
     {
@@ -40,7 +40,7 @@ public sealed class ArcaWsGeneradorPDF
 
         ExportDocumentFields? export = ExportDocumentFields.Read(datos.Identidad?.Servicio, datos.SnapshotRequest);
         var document = new Document();
-        document.Info.Title = $"{layout.Title} {layout.Letter}";
+        document.Info.Title = layout.Title;
         Style normal = document.Styles["Normal"]!;
         normal.Font.Name = EmbeddedFontResolver.Family;
         normal.Font.Size = 9;
@@ -57,7 +57,7 @@ public sealed class ArcaWsGeneradorPDF
         section.PageSetup.BottomMargin = Unit.FromMillimeter(layout.IsFiscal ? 50 : 15);
         section.PageSetup.LeftMargin = Unit.FromCentimeter(1.4);
         section.PageSetup.RightMargin = Unit.FromCentimeter(1.4);
-        AddRunningHeader(section, $"{layout.Title} {layout.Letter} · Nº {DocumentNumber(datos)}");
+        AddRunningHeader(section, $"{layout.Title} · Nº {DocumentNumber(datos)}");
         if (layout.IsFiscal) AddCopyLabel(section, "ORIGINAL");
         if (layout.RequiredLegend is not null)
         {
@@ -97,7 +97,6 @@ public sealed class ArcaWsGeneradorPDF
         }
         else
         {
-            AddFiscalSummary(section, datos);
             AddFiscalTotals(section, datos);
             IReadOnlyList<string> legends = DocumentFiscalRules.DocumentLegends(datos);
             if (legends.Count != 0)
@@ -133,7 +132,7 @@ public sealed class ArcaWsGeneradorPDF
         using var output = new MemoryStream();
         renderer.PdfDocument!.Save(output, closeStream: false);
         byte[] result = output.ToArray();
-        return OverlayImages(result, _issuer.LogoPng, qrUrl, layout.RequiredLegend is null ? 23 : 33);
+        return OverlayImages(result, null, qrUrl, 0);
     }
 
     public byte[] GenerarPDFComprobante(RemitoGenerado remito)
@@ -178,7 +177,7 @@ public sealed class ArcaWsGeneradorPDF
         reception.Format.LeftIndent = Unit.FromCentimeter(9);
         reception.Format.Font.Size = 8;
         AddPageNumber(section, false);
-        return OverlayImages(Render(document), _issuer.LogoPng, null, 36);
+        return OverlayImages(Render(document), null, null, 0);
     }
 
     private Document CreateDocument()
@@ -277,6 +276,8 @@ public sealed class ArcaWsGeneradorPDF
         body.Shading.Color = Colors.White;
         AddLine(body.Cells[0], "Nombre / razón social", data.Receptor.Nombre);
         if (!string.IsNullOrWhiteSpace(data.Receptor.Domicilio)) AddLine(body.Cells[0], "Domicilio", data.Receptor.Domicilio);
+        if (!string.IsNullOrWhiteSpace(data.Receptor.Telefono)) AddLine(body.Cells[0], "Teléfono", data.Receptor.Telefono);
+        if (!string.IsNullOrWhiteSpace(data.Receptor.Email)) AddLine(body.Cells[0], "Email", data.Receptor.Email);
         string condition = DocumentFiscalRules.ReceiverCondition(data);
         if (!string.IsNullOrWhiteSpace(condition)) AddLine(body.Cells[1], DocumentFiscalRules.ReceiverConditionLabel(data).TrimEnd(':', ' '), condition);
         string? id = export?.ForeignTaxId ?? data.Receptor.IdentificacionFiscal;
@@ -290,19 +291,25 @@ public sealed class ArcaWsGeneradorPDF
     private void AddSupplementalFields(Section section, ComprobanteGenerado data, ExportDocumentFields? export)
     {
         if (export is null) return;
-        var rows = new List<string[]>();
-        rows.Add(["Moneda", CurrencyDisplay.Label(export.CurrencyCode)]);
-        if (export.ExchangeRate is string rate) rows.Add(["Cotización", $"{rate} ARS por {CurrencyDisplay.Code(export.CurrencyCode)}"]);
-        if (export.PaymentMethod is { Length: > 0 } payment) rows.Add(["Forma de pago", payment]);
-        if (FormatSnapshotDate(export.PaymentDate) is string date) rows.Add(["Fecha de pago", date]);
-        if (export.Incoterms is { Length: > 0 } incoterm) rows.Add(["Incoterms", string.IsNullOrWhiteSpace(export.IncotermsDescription) ? incoterm : $"{incoterm} · {export.IncotermsDescription}"]);
-        if (export.ExportCondition is { Length: > 0 } condition) rows.Add(["Tipo de exportación", condition]);
-        if (export.CommercialObservations is { Length: > 0 } commercial) rows.Add(["Observaciones comerciales", commercial]);
-        if (export.Observations is { Length: > 0 } observations) rows.Add(["Observaciones", observations]);
-        if (rows.Count == 0) return;
-        section.AddParagraph("Datos de exportación", "Heading2");
-        AddSimpleTable(section, ["Campo", "Detalle"], rows);
+        var left = new List<(string Label, string Value)> { ("Moneda", CurrencyDisplay.Label(export.CurrencyCode)) };
+        var right = new List<(string Label, string Value)>();
+        if (export.ExchangeRate is string rate) left.Add(("Cotización", ExportExchangeRate(rate)));
+        if (export.ExportCondition is { Length: > 0 } condition) left.Add(("Tipo de exportación", condition));
+        if (export.PaymentMethod is { Length: > 0 } payment) left.Add(("Forma de pago", payment));
+        if (FormatSnapshotDate(export.PaymentDate) is string date) right.Add(("Fecha de pago", date));
+        if (export.Incoterms is { Length: > 0 } incoterm) right.Add(("Incoterms", string.IsNullOrWhiteSpace(export.IncotermsDescription) ? incoterm : $"{incoterm} · {export.IncotermsDescription}"));
+        var table = section.AddTable();
+        table.Borders.Width = 0;
+        table.AddColumn(Unit.FromCentimeter(9.1)); table.AddColumn(Unit.FromCentimeter(9.1));
+        Row row = table.AddRow(); row.Shading.Color = Colors.White;
+        foreach ((string label, string value) in left) AddLine(row.Cells[0], label, value);
+        foreach ((string label, string value) in right) AddLine(row.Cells[1], label, value);
+        if (export.CommercialObservations is { Length: > 0 } commercial) AddLine(section, "Observaciones comerciales", commercial);
+        if (export.Observations is { Length: > 0 } observations) AddLine(section, "Observaciones", observations);
     }
+
+    private static string ExportExchangeRate(string rate) => decimal.TryParse(rate, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal value)
+        ? "$" + value.ToString("N2", CultureInfo.GetCultureInfo("es-AR")) : rate;
 
     private void AddRemitoHeader(Section section, RemitoGenerado remito)
     {
@@ -313,25 +320,7 @@ public sealed class ArcaWsGeneradorPDF
         row.Cells[0].Format.Font.Color = ParseColor(_style.TextOnPrincipal);
         row.Cells[1].Format.Font.Color = ParseColor(_style.ColorPrincipal);
         row.Cells[2].Format.Font.Color = ParseColor(_style.TextOnPrincipal);
-        double brandIndent = _issuer.LogoPng is { Length: > 0 } ? 37 : 0;
-        Paragraph legalName = row.Cells[0].AddParagraph(_issuer.RazonSocial);
-        legalName.Format.Font.Bold = true;
-        legalName.Format.Font.Size = 13;
-        legalName.Format.LeftIndent = Unit.FromMillimeter(brandIndent);
-        if (!string.IsNullOrWhiteSpace(_issuer.NombreFantasia))
-        {
-            Paragraph tradeName = row.Cells[0].AddParagraph(_issuer.NombreFantasia);
-            tradeName.Format.Font.Bold = true;
-            tradeName.Format.Font.Size = 11;
-            tradeName.Format.LeftIndent = Unit.FromMillimeter(brandIndent);
-        }
-        if (!string.IsNullOrWhiteSpace(_issuer.Domicilio))
-        {
-            Paragraph address = row.Cells[0].AddParagraph(_issuer.Domicilio);
-            address.Format.Font.Bold = false;
-            address.Format.Font.Size = 9;
-            address.Format.LeftIndent = Unit.FromMillimeter(brandIndent);
-        }
+        AddBrandContent(row.Cells[0]);
         Paragraph letter = row.Cells[1].AddParagraph(remito.Clase.ToString()); letter.Format.Font.Bold = true; letter.Format.Font.Size = 24; letter.Format.Alignment = ParagraphAlignment.Center;
         if (remito.Clase == ClaseRemito.R) { Paragraph code = row.Cells[1].AddParagraph("COD. 091"); code.Format.Font.Size = 7; code.Format.Alignment = ParagraphAlignment.Center; }
         Paragraph meta = row.Cells[2].AddParagraph($"Remito {remito.Clase}"); meta.Format.Font.Bold = true; meta.Format.Font.Size = 14; meta.Format.Alignment = ParagraphAlignment.Right;
@@ -359,6 +348,8 @@ public sealed class ArcaWsGeneradorPDF
         AddLine(body.Cells[0], "CUIT", remito.Receptor.Identificacion.ToString(CultureInfo.InvariantCulture));
         AddLine(body.Cells[0], "Domicilio", remito.Receptor.Domicilio ?? "");
         AddLine(body.Cells[0], "Condición tributaria", remito.Receptor.CondicionTributaria ?? "");
+        if (!string.IsNullOrWhiteSpace(remito.Receptor.Telefono)) AddLine(body.Cells[0], "Teléfono", remito.Receptor.Telefono);
+        if (!string.IsNullOrWhiteSpace(remito.Receptor.Email)) AddLine(body.Cells[0], "Email", remito.Receptor.Email);
         AddLine(body.Cells[1], "Destino", remito.Destino);
         if (remito.Transportista is { } carrier)
         {
@@ -427,25 +418,7 @@ public sealed class ArcaWsGeneradorPDF
         row.Cells[0].Format.Font.Color = ParseColor(_style.TextOnPrincipal);
         row.Cells[1].Format.Font.Color = ParseColor(_style.ColorPrincipal);
         row.Cells[2].Format.Font.Color = ParseColor(_style.TextOnPrincipal);
-        double brandIndent = _issuer.LogoPng is { Length: > 0 } ? 37 : 0;
-        Paragraph legalName = row.Cells[0].AddParagraph(_issuer.RazonSocial);
-        legalName.Format.Font.Bold = true;
-        legalName.Format.Font.Size = 13;
-        legalName.Format.LeftIndent = Unit.FromMillimeter(brandIndent);
-        if (!string.IsNullOrWhiteSpace(_issuer.NombreFantasia))
-        {
-            Paragraph tradeName = row.Cells[0].AddParagraph(_issuer.NombreFantasia);
-            tradeName.Format.Font.Bold = true;
-            tradeName.Format.Font.Size = 11;
-            tradeName.Format.LeftIndent = Unit.FromMillimeter(brandIndent);
-        }
-        if (!string.IsNullOrWhiteSpace(_issuer.Domicilio))
-        {
-            Paragraph address = row.Cells[0].AddParagraph(_issuer.Domicilio);
-            address.Format.Font.Bold = false;
-            address.Format.Font.Size = 9;
-            address.Format.LeftIndent = Unit.FromMillimeter(brandIndent);
-        }
+        AddBrandContent(row.Cells[0]);
         Paragraph code = row.Cells[1].AddParagraph(layout.Letter);
         code.Format.Font.Bold = true;
             code.Format.Font.Size = 24;
@@ -480,69 +453,143 @@ public sealed class ArcaWsGeneradorPDF
         section.AddParagraph();
     }
 
+    private void AddBrandContent(Cell cell)
+    {
+        if (_issuer.LogoPng is { Length: > 0 } logo)
+        {
+            ImageResult dimensions = ImageResult.FromMemory(logo, ColorComponents.RedGreenBlueAlpha);
+            double aspect = (double)dimensions.Width / dimensions.Height;
+            var paragraph = cell.AddParagraph();
+            paragraph.Format.SpaceAfter = Unit.FromPoint(3);
+            MigraDoc.DocumentObjectModel.Shapes.Image image = paragraph.AddImage("base64:" + Convert.ToBase64String(logo));
+            image.LockAspectRatio = true;
+            if (aspect <= 74d / 22d) image.Height = Unit.FromMillimeter(22);
+            else image.Width = Unit.FromMillimeter(74);
+        }
+        Paragraph legalName = cell.AddParagraph(_issuer.RazonSocial);
+        legalName.Format.Font.Bold = true;
+        legalName.Format.Font.Size = 13;
+        if (!string.IsNullOrWhiteSpace(_issuer.NombreFantasia))
+        {
+            Paragraph tradeName = cell.AddParagraph(_issuer.NombreFantasia);
+            tradeName.Format.Font.Bold = true;
+            tradeName.Format.Font.Size = 11;
+        }
+        if (!string.IsNullOrWhiteSpace(_issuer.Domicilio))
+        {
+            Paragraph address = cell.AddParagraph(_issuer.Domicilio);
+            address.Format.Font.Bold = false;
+            address.Format.Font.Size = 9;
+        }
+    }
+
     private void AddDetailTable(Section section, ComprobanteGenerado data)
     {
         var table = section.AddTable();
         table.Borders.Color = Colors.LightGray;
         table.Borders.Width = Unit.FromPoint(0.35);
-        table.AddColumn(Unit.FromCentimeter(8.3)); table.AddColumn(Unit.FromCentimeter(2.1));
+        table.AddColumn(Unit.FromCentimeter(2.1)); table.AddColumn(Unit.FromCentimeter(8.3));
         table.AddColumn(Unit.FromCentimeter(4.0)); table.AddColumn(Unit.FromCentimeter(3.8));
-        Row header = table.AddRow(); StyleHeader(header, ["Descripción", "Cantidad", $"Precio unitario ({CurrencyDisplay.Code(data.Moneda)})", $"Importe ({CurrencyDisplay.Code(data.Moneda)})"]);
+        Row header = table.AddRow(); StyleHeader(header, ["Cant.", "Descripción", "P.Unit", "Subtotal"]);
         foreach (LineaComprobante line in data.Detalles)
         {
             Row row = table.AddRow();
             row.Shading.Color = Colors.White;
-            row.Cells[0].AddParagraph(line.DescripcionPresentacion ?? line.Descripcion);
-            row.Cells[1].AddParagraph(line.Cantidad is decimal qty ? Number(qty) : "—");
-            row.Cells[2].AddParagraph(line.PrecioUnitario is decimal price ? $"{Number(price)} {CurrencyDisplay.Code(data.Moneda)}" : "—");
+            row.Cells[0].AddParagraph(line.Cantidad is decimal qty ? Number(qty) : "—");
+            row.Cells[1].AddParagraph(line.DescripcionPresentacion ?? line.Descripcion);
+            row.Cells[2].AddParagraph(line.PrecioUnitario is decimal price ? Money(price, data.Moneda) : "—");
             row.Cells[3].AddParagraph(Money(line.Importe, data.Moneda));
-            row.Cells[1].Format.Alignment = row.Cells[2].Format.Alignment = row.Cells[3].Format.Alignment = ParagraphAlignment.Right;
+            row.Cells[0].Format.Alignment = row.Cells[2].Format.Alignment = row.Cells[3].Format.Alignment = ParagraphAlignment.Right;
         }
     }
 
     private void AddFiscalSummary(Section section, ComprobanteGenerado data)
     {
-        if (data.Impuestos.Count == 0) return;
-        section.AddParagraph("Impuestos y alícuotas", "Heading2");
-        AddSimpleTable(section, ["Impuesto", "Base imponible", "Alícuota / clasificación", "Importe"], data.Impuestos.Select(t => new[]
-        {
-            t.Tipo == TipoImpuestoComprobante.Iva ? "IVA" : t.Nombre,
-            t.BaseImponible is decimal basis ? Money(basis, t.Moneda) : "—",
-            t.Tipo == TipoImpuestoComprobante.Iva ? (t.Alicuota is decimal rate ? $"{FullDecimal(rate)}%" : DocumentLayout.IvaRate(t.Codigo) ?? throw new NotSupportedException($"Código IVA no soportado: {t.Codigo}")) : t.Clasificacion ?? "Clasificación no informada",
-            Money(t.Importe, t.Moneda)
-        }));
+        _ = section;
+        _ = data;
     }
 
     private void AddSummaryRows(Section section, ComprobanteGenerado data)
     {
-        section.AddParagraph("Resumen", "Heading2");
         var rows = new List<string[]>();
         foreach ((string label, decimal? value) in new[] { ("Neto gravado", data.Neto), ("No gravado", data.NoGravado), ("Exento", data.Exento) })
-            if (value is decimal amount && amount != 0) rows.Add([label, Money(amount, data.Moneda)]);
-        if (rows.Count == 0 && data.Impuestos.Count == 0) rows.Add(["Importe total", Money(data.Total, data.Moneda)]);
-        if (rows.Count != 0) AddSimpleTable(section, ["Concepto", "Importe"], rows);
+            if (value is decimal amount && amount != 0) rows.Add(["—", label, "—", Money(amount, data.Moneda)]);
+        if (rows.Count == 0 && data.Impuestos.Count == 0) rows.Add(["—", "Importe total", "—", Money(data.Total, data.Moneda)]);
+        if (rows.Count != 0)
+        {
+            var table = section.AddTable();
+            table.Borders.Color = Colors.LightGray; table.Borders.Width = Unit.FromPoint(.3);
+            table.AddColumn(Unit.FromCentimeter(2.1)); table.AddColumn(Unit.FromCentimeter(8.3));
+            table.AddColumn(Unit.FromCentimeter(4.0)); table.AddColumn(Unit.FromCentimeter(3.8));
+            Row header = table.AddRow(); StyleHeader(header, ["Cant.", "Descripción", "P.Unit", "Subtotal"]);
+            foreach (string[] values in rows)
+            {
+                Row row = table.AddRow(); row.Shading.Color = Colors.White;
+                for (int index = 0; index < values.Length; index++) row.Cells[index].AddParagraph(values[index]);
+                row.Cells[0].Format.Alignment = row.Cells[2].Format.Alignment = row.Cells[3].Format.Alignment = ParagraphAlignment.Right;
+            }
+        }
     }
 
     private void AddFiscalTotals(Section section, ComprobanteGenerado data)
     {
-        section.AddParagraph(data.CodigoCondicionIvaReceptor == 5 ? DocumentFiscalRules.ConsumerTransparencyTitle : "Totales", "Heading2");
-        var rows = new List<string[]>();
-        decimal nationalIndirect = data.Impuestos.Where(tax => tax.Tipo == TipoImpuestoComprobante.OtroTributo && tax.Clasificacion == "NacionalIndirecto").Sum(tax => tax.Importe);
-        if (data.CodigoCondicionIvaReceptor == 5)
+        bool consumer = data.CodigoCondicionIvaReceptor == 5;
+        var table = section.AddTable(); table.Borders.Color = Colors.LightGray; table.Borders.Width = Unit.FromPoint(.3);
+        table.AddColumn(Unit.FromCentimeter(7.4)); table.AddColumn(Unit.FromCentimeter(3.8));
+        table.Rows.LeftIndent = Unit.FromCentimeter(7.0);
+        Row total = table.AddRow(); total.Shading.Color = ParseColor(_style.ColorPrincipal);
+        foreach (Cell? cell in total.Cells) if (cell is not null) cell.Format.Font.Color = ParseColor(_style.TextOnPrincipal);
+        Paragraph totalLabel = total.Cells[0].AddParagraph("Total"); totalLabel.Format.Font.Bold = true; totalLabel.Format.Font.Color = ParseColor(_style.TextOnPrincipal);
+        Paragraph totalAmount = total.Cells[1].AddParagraph(Money(data.Total, data.Moneda)); totalAmount.Format.Font.Bold = true; totalAmount.Format.Font.Color = ParseColor(_style.TextOnPrincipal);
+        total.Cells[1].Format.Alignment = ParagraphAlignment.Right;
+        bool hasVat = false;
+        foreach (ImpuestoComprobante tax in data.Impuestos)
         {
-            if (data.Iva is not decimal consumerIva) throw new InvalidOperationException("Falta el importe de IVA contenido requerido para transparencia al consumidor.");
-            rows.Add([DocumentFiscalRules.ConsumerIvaLabel, Money(consumerIva, data.Moneda)]);
-            rows.Add([DocumentFiscalRules.ConsumerOtherTaxesLabel, Money(nationalIndirect, data.Moneda)]);
+            string? rate = tax.Alicuota is decimal explicitRate
+                ? $"{FullDecimal(explicitRate)}%"
+                : tax.Tipo == TipoImpuestoComprobante.Iva ? DocumentLayout.IvaRate(tax.Codigo) : null;
+            if (tax.Tipo == TipoImpuestoComprobante.Iva && rate is null)
+                throw new NotSupportedException($"No hay una alícuota oficial disponible para el código IVA {tax.Codigo ?? "(vacío)"}.");
+            string label = tax.Tipo == TipoImpuestoComprobante.Iva
+                ? $"IVA {rate}{(consumer ? " Contenido" : "")}"
+                : $"{tax.Nombre}{(rate is null ? "" : $" {rate}")}{(tax.Clasificacion is null ? "" : $" — {TaxClassification(tax.Clasificacion)}")}";
+            if (tax.Tipo == TipoImpuestoComprobante.Iva) hasVat = true;
+            AddCompactTaxRow(table, label, tax.BaseImponible, tax.Importe, tax.Moneda);
         }
-        else
+        if (!hasVat && data.Iva is decimal aggregateVat)
+            AddCompactTaxRow(table, consumer ? DocumentFiscalRules.ConsumerIvaLabel : "IVA", null, aggregateVat, data.Moneda);
+        bool hasNationalIndirect = data.Impuestos.Any(tax => tax.Tipo == TipoImpuestoComprobante.OtroTributo && tax.Clasificacion == "NacionalIndirecto");
+        if (consumer && !hasNationalIndirect)
+            AddCompactTaxRow(table, DocumentFiscalRules.ConsumerOtherTaxesLabel, null, 0m, data.Moneda);
+        if (consumer)
         {
-            rows.Add([DocumentFiscalRules.NetTotalLabel, Money(data.Neto ?? data.Total, data.Moneda)]);
-            if (data.Iva is decimal iva) rows.Add([DocumentFiscalRules.IvaTotalLabel, Money(iva, data.Moneda)]);
-            if (nationalIndirect != 0) rows.Add(["Otros impuestos nacionales indirectos", Money(nationalIndirect, data.Moneda)]);
+            Paragraph legend = section.AddParagraph(DocumentFiscalRules.ConsumerTransparencyTitle);
+            legend.Format.Alignment = ParagraphAlignment.Right;
+            legend.Format.Font.Size = 8;
         }
-        AddSimpleTable(section, ["Concepto", "Importe"], rows);
-        AddTotalTable(section, "TOTAL", data.Total, data.Moneda);
     }
+
+    private static void AddCompactTaxRow(Table table, string label, decimal? basis, decimal amount, string currency)
+    {
+        Row row = table.AddRow(); row.Shading.Color = Colors.White;
+        Paragraph name = row.Cells[0].AddParagraph(label);
+        if (basis is decimal baseAmount)
+        {
+            Paragraph baseText = row.Cells[0].AddParagraph($"({Money(baseAmount, currency)})");
+            baseText.Format.Font.Size = 7;
+            baseText.Format.Font.Color = Colors.Gray;
+        }
+        row.Cells[1].AddParagraph(Money(amount, currency));
+        row.Cells[1].Format.Alignment = ParagraphAlignment.Right;
+    }
+
+    private static string TaxClassification(string value) => value switch
+    {
+        "NacionalIndirecto" => "impuesto nacional indirecto",
+        "NoNacionalIndirecto" => "impuesto no nacional indirecto",
+        "NoIndirecto" => "no indirecto",
+        _ => value
+    };
 
     private void AddTotalTable(Section section, string label, decimal amount, string currency)
     {
@@ -667,7 +714,8 @@ public sealed class ArcaWsGeneradorPDF
     private static string Date(DateOnly date) => date.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
     private static string Number(decimal value) => value.ToString("N2", CultureInfo.GetCultureInfo("es-AR"));
     private static string FullDecimal(decimal value) => value.ToString("#,##0.########################", CultureInfo.GetCultureInfo("es-AR"));
-    private static string Money(decimal value, string currency) => $"{Number(value)} {CurrencyDisplay.Code(currency)}";
+    private static string Money(decimal value, string currency) => CurrencyDisplay.Code(currency) == "ARS"
+        ? $"${Number(value)}" : $"{Number(value)} {CurrencyDisplay.Code(currency)}";
     private static string CurrencyName(string code) => CurrencyDisplay.Name(code);
     private static bool IsPesoCurrency(string code) => CurrencyDisplay.IsPeso(code);
     private static string DocumentNumber(ComprobanteGenerado data) => data.Identidad is null ? data.NumeroInterno ?? string.Empty : $"{data.Identidad.PuntoVenta:00000}-{data.Identidad.Numero:00000000}";
@@ -675,7 +723,7 @@ public sealed class ArcaWsGeneradorPDF
     private void ValidatePrintableText(ComprobanteGenerado document)
     {
         var values = new List<string?> { _issuer.RazonSocial, _issuer.NombreFantasia, _issuer.Domicilio, _issuer.CondicionTributaria,
-            _issuer.IngresosBrutos, document.Receptor.Nombre, document.Receptor.Domicilio, document.Receptor.CondicionTributaria,
+            _issuer.IngresosBrutos, document.Receptor.Nombre, document.Receptor.Domicilio, document.Receptor.Telefono, document.Receptor.Email, document.Receptor.CondicionTributaria,
             document.Receptor.IdentificacionFiscal, document.NumeroInterno };
         values.AddRange(document.Detalles.SelectMany(line => new[] { line.Descripcion, line.DescripcionPresentacion, line.Codigo }));
         values.AddRange(document.Impuestos.Select(tax => tax.Nombre));

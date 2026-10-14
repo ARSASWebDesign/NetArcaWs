@@ -16,7 +16,7 @@ public sealed partial class HtmlRenderingTests
     {
         var renderer = new ArcaWsGeneradorHTML(HtmlRenderingTests.Issuer(), input);
         Assert.Equal(expected, renderer.ColorPrincipal);
-        Assert.Contains("/html-2", renderer.VersionRenderizado);
+        Assert.Contains("/html-3", renderer.VersionRenderizado);
     }
 
     [Fact]
@@ -29,8 +29,8 @@ public sealed partial class HtmlRenderingTests
         assembly.SetCustomAttribute(attribute);
         Type style = typeof(ArcaWsGeneradorHTML).Assembly.GetType("NetArcaWs.Rendering.Shared.RenderingStyle", throwOnError: true)!;
         MethodInfo method = style.GetMethod("RendererVersion", BindingFlags.Static | BindingFlags.NonPublic)!;
-        string version = (string)method.Invoke(null, [assembly, "html-2"])!;
-        Assert.Equal("0.6.0-rc.1/html-2", version);
+        string version = (string)method.Invoke(null, [assembly, "html-3"])!;
+        Assert.Equal("0.6.0-rc.1/html-3", version);
     }
 
     [Theory]
@@ -118,8 +118,8 @@ public sealed partial class HtmlRenderingTests
     {
         string html = new ArcaWsGeneradorHTML(HtmlRenderingTests.Issuer(), "#123456")
             .GenerarHTMLComprobante(HtmlRenderingTests.Fiscal(tipo: 6, condition: 5, conditionText: "Consumidor final"));
-        Assert.Contains(".transparency>.grand-total{font-size:12pt;font-weight:700;background:var(--principal);color:var(--principal-text)", html);
-        Assert.Contains(".transparency>div{display:flex;justify-content:space-between;padding:4px;border-bottom:1px solid #ddd}", html);
+        Assert.Contains(".totals .grand-total{font-size:12pt;font-weight:700;background:var(--principal);color:var(--principal-text)", html);
+        Assert.Contains(".totals>div{display:flex;justify-content:space-between;padding:4px;border-bottom:1px solid #ddd}", html);
         Assert.Contains("background:#fff", html);
     }
 
@@ -186,8 +186,8 @@ public sealed partial class HtmlRenderingTests
             noGravado: invoice.NoGravado, iva: invoice.Iva, snapshotResponse: invoice.SnapshotResponse,
             snapshotResponseVersion: invoice.SnapshotResponseVersion);
         string html = new ArcaWsGeneradorHTML(HtmlRenderingTests.Issuer()).GenerarHTMLComprobante(changed);
-        Assert.Contains("USD (d&#243;lares estadounidenses)", html);
-        Assert.Contains("123.456789", html);
+        Assert.Contains("USD - D&#243;lar Estadounidense", html);
+        Assert.Contains("Cotización:</b> $123,46", html);
         Assert.Contains("ID impositivo extranjero", html);
         Assert.Contains("Puerto &lt;destino&gt;", html);
         Assert.Contains("Carga &amp; embalaje", html);

@@ -22,17 +22,17 @@ internal sealed record DocumentLayout(string Letter, string Title, string CodeLa
     {
         if (service.Equals("wsfe", StringComparison.OrdinalIgnoreCase))
         {
-            if (type is 1 or 2 or 3) return new("A", type == 1 ? "Factura" : type == 2 ? "Nota de débito" : "Nota de crédito", "", "CAE", null, true);
-            if (type is 6 or 7 or 8) return new("B", type == 6 ? "Factura" : type == 7 ? "Nota de débito" : "Nota de crédito", "", "CAE", null, true);
-            if (type is 11 or 12 or 13) return new("C", type == 11 ? "Factura" : type == 12 ? "Nota de débito" : "Nota de crédito", "", "CAE", null, true);
+            if (type is 1 or 2 or 3) return new("A", type == 1 ? "Factura A" : type == 2 ? "Nota de débito A" : "Nota de crédito A", "", "CAE", null, true);
+            if (type is 6 or 7 or 8) return new("B", type == 6 ? "Factura B" : type == 7 ? "Nota de débito B" : "Nota de crédito B", "", "CAE", null, true);
+            if (type is 11 or 12 or 13) return new("C", type == 11 ? "Factura C" : type == 12 ? "Nota de débito C" : "Nota de crédito C", "", "CAE", null, true);
         }
         else if (service.Equals("wsmtxca", StringComparison.OrdinalIgnoreCase))
         {
-            if (type is 1 or 2 or 3) return new("A", type == 1 ? "Factura" : type == 2 ? "Nota de débito" : "Nota de crédito", "", "CAE", null, true);
-            if (type is 6 or 7 or 8) return new("B", type == 6 ? "Factura" : type == 7 ? "Nota de débito" : "Nota de crédito", "", "CAE", null, true);
+            if (type is 1 or 2 or 3) return new("A", type == 1 ? "Factura A" : type == 2 ? "Nota de débito A" : "Nota de crédito A", "", "CAE", null, true);
+            if (type is 6 or 7 or 8) return new("B", type == 6 ? "Factura B" : type == 7 ? "Nota de débito B" : "Nota de crédito B", "", "CAE", null, true);
         }
         else if (service.Equals("wsfex", StringComparison.OrdinalIgnoreCase) && type is 19 or 20 or 21)
-            return new("E", type == 19 ? "Factura de exportación" : type == 20 ? "Nota de débito de exportación" : "Nota de crédito de exportación", "", "CAE", null, true);
+            return new("E", type == 19 ? "Factura E" : type == 20 ? "Nota de débito E" : "Nota de crédito E", "", "CAE", null, true);
         throw new NotSupportedException($"No se admite la combinación de servicio {service} y tipo {type} para renderizar.");
     }
 
