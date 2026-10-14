@@ -88,6 +88,8 @@ public static class LicenseAudit
         var records = new List<PackageRecord>(locked.Count);
         foreach (LockedPackage package in locked.Values)
         {
+            if (package.Id.Equals("Microsoft.Identity.Client.NativeInterop", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Microsoft.Identity.Client.NativeInterop is blocked from the dependency graph because its license terms prohibit redistribution; replace or obtain an explicit redistribution grant before adding it.");
             string packageFile = Path.Combine(cache, package.Id.ToLowerInvariant(), package.Version.ToLowerInvariant(), $"{package.Id.ToLowerInvariant()}.{package.Version.ToLowerInvariant()}.nupkg");
             if (!File.Exists(packageFile)) throw new InvalidOperationException($"Cached NuGet package is missing: {package.Id} {package.Version}.");
             byte[] archiveBytes = File.ReadAllBytes(packageFile);
@@ -246,9 +248,11 @@ public static class LicenseAudit
         {
             using var archive = ZipFile.OpenRead(file);
             string[] names = archive.Entries.Select(entry => entry.FullName).ToArray();
-            if (names.Any(name => name.Contains("Microsoft.Data.SqlClient.SNI", StringComparison.OrdinalIgnoreCase) || name.EndsWith("SNI.dll", StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidOperationException($"SNI native/runtime binaries are forbidden in release packages: {Path.GetFileName(file)}.");
+            ValidateArchivePaths(names, Path.GetFileName(file));
             var packageBinaries = archive.Entries.Where(entry => IsPackageBinaryPath(entry.FullName)).ToArray();
+            string? restrictedName = packageBinaries.Select(entry => Path.GetFileName(entry.FullName)).FirstOrDefault(IsRestrictedBinaryName);
+            if (restrictedName is not null)
+                throw new InvalidOperationException($"Restricted runtime binaries are forbidden in release packages: {Path.GetFileName(file)} ({restrictedName}).");
             string[] restricted = packageBinaries.Where(entry => forbiddenAssets.Any(asset =>
                 Path.GetFileName(asset.PackagePath).Equals(Path.GetFileName(entry.FullName), StringComparison.OrdinalIgnoreCase)))
                 .Select(entry => entry.FullName).ToArray();
@@ -275,14 +279,16 @@ public static class LicenseAudit
             {
                 ZipArchiveEntry ofl = archive.Entries.SingleOrDefault(entry => entry.FullName.Equals("licenses/NotoSans-OFL.txt", StringComparison.OrdinalIgnoreCase))
                     ?? throw new InvalidOperationException("PDF package is missing the Noto Sans OFL license text.");
-                using Stream stream = ofl.Open(); using var oflText = new MemoryStream(); stream.CopyTo(oflText);
-                if (!Encoding.UTF8.GetString(oflText.ToArray()).Contains("SIL OPEN FONT LICENSE", StringComparison.Ordinal))
-                    throw new InvalidOperationException("PDF package Noto Sans OFL license text is invalid.");
                 string sourceOfl = Path.Combine(root, "src", "NetArcaWs.Rendering.Pdf", "Resources", "OFL.txt");
                 if (!File.Exists(sourceOfl) || !HashEntry(ofl).Equals(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(sourceOfl))).ToLowerInvariant(), StringComparison.Ordinal))
                     throw new InvalidOperationException("PDF package Noto Sans OFL file differs from repository source.");
+                using Stream stream = ofl.Open(); using var oflText = new MemoryStream(); stream.CopyTo(oflText);
+                if (!Encoding.UTF8.GetString(oflText.ToArray()).Contains("SIL OPEN FONT LICENSE", StringComparison.Ordinal))
+                    throw new InvalidOperationException("PDF package Noto Sans OFL license text is invalid.");
             }
             if (!Path.GetFileName(file).StartsWith("NetArcaWs.Tool.", StringComparison.Ordinal)) continue;
+            if (packageBinaries.Any(entry => !entry.FullName.StartsWith("tools/", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException($"Release package contains binaries outside its installed Tool payload: {Path.GetFileName(file)}.");
             foreach (string required in new[] { InventoryPath, "licenses/policy.json" })
             {
                 ZipArchiveEntry entry = archive.Entries.SingleOrDefault(candidate => candidate.FullName.Equals(required, StringComparison.OrdinalIgnoreCase))
@@ -294,22 +300,13 @@ public static class LicenseAudit
             }
             if (!names.Any(name => name.StartsWith(MaterialsRoot + "/", StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Tool package is missing dependency legal materials.");
-            string[] binaries = names.Where(name => name.StartsWith("tools/", StringComparison.OrdinalIgnoreCase)
-                && (name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".so", StringComparison.OrdinalIgnoreCase)
-                    || name.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))).ToArray();
+            string[] binaries = packageBinaries.Where(entry => entry.FullName.StartsWith("tools/", StringComparison.OrdinalIgnoreCase))
+                .Select(entry => entry.FullName).ToArray();
             if (binaries.Length == 0 || !binaries.Any(name => name.Contains("NetArcaWs.Tool", StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Tool package has no recognizable managed application binary.");
-            AssetManifest[] knownBinaries = inventory.Packages.SelectMany(package => package.Assets).ToArray();
-            foreach (string binary in binaries)
-            {
-                string name = Path.GetFileName(binary);
-                if (name.Equals("NetArcaWs.Tool.dll", StringComparison.OrdinalIgnoreCase) || name.Equals("NetArcaWs.dll", StringComparison.OrdinalIgnoreCase)) continue;
-                ZipArchiveEntry entry = archive.GetEntry(binary)!;
-                string hash = HashEntry(entry);
-                if (!knownBinaries.Any(asset => Path.GetFileName(asset.PackagePath).Equals(name, StringComparison.OrdinalIgnoreCase)
-                                                && asset.Sha256.Equals(hash, StringComparison.Ordinal)))
-                    throw new InvalidOperationException($"Tool binary has no matching locked NuGet package asset: {binary}.");
-            }
+            if (binaries.Distinct(StringComparer.OrdinalIgnoreCase).Count() != binaries.Length)
+                throw new InvalidOperationException("Tool package contains duplicate binary paths.");
+            VerifyToolBinaryOrigins(archive, inventory, names);
             foreach (PackageManifest package in inventory.Packages)
             foreach (MaterialManifest material in package.LegalFiles)
             {
@@ -322,6 +319,91 @@ public static class LicenseAudit
             }
         }
     }
+
+    private static void VerifyToolBinaryOrigins(ZipArchive archive, Inventory inventory, string[] names)
+    {
+        ZipArchiveEntry depsEntry = archive.Entries.SingleOrDefault(entry => entry.FullName.Equals("tools/net10.0/any/NetArcaWs.Tool.deps.json", StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException("Tool package is missing its .deps.json dependency origin manifest.");
+        using Stream stream = depsEntry.Open();
+        using JsonDocument deps = JsonDocument.Parse(stream);
+        JsonElement targets = deps.RootElement.GetProperty("targets");
+        JsonElement libraries = deps.RootElement.GetProperty("libraries");
+        var origins = new Dictionary<string, List<AssetManifest>>(StringComparer.OrdinalIgnoreCase);
+        var inventoryByIdVersion = inventory.Packages.ToDictionary(package => package.Id + "/" + package.Version, StringComparer.OrdinalIgnoreCase);
+        foreach (JsonProperty target in targets.EnumerateObject())
+        foreach (JsonProperty library in target.Value.EnumerateObject())
+        {
+            string[] identity = library.Name.Split('/', 2);
+            if (identity.Length != 2 || !libraries.TryGetProperty(library.Name, out JsonElement libraryMetadata)
+                || !libraryMetadata.TryGetProperty("type", out JsonElement type) || type.GetString() != "package") continue;
+            if (!inventoryByIdVersion.ContainsKey(library.Name))
+                throw new InvalidOperationException($"Tool deps.json package is absent from the locked license inventory: {library.Name}.");
+            AddTargetAssets(library, "runtime", assetType: null, identity, origins);
+            AddTargetAssets(library, "runtimeTargets", assetType: "runtime", identity, origins);
+            AddTargetAssets(library, "runtimeTargets", assetType: "native", identity, origins);
+        }
+
+        string[] toolBinaries = names.Where(IsPackageBinaryPath).Where(path => path.StartsWith("tools/", StringComparison.OrdinalIgnoreCase)).ToArray();
+        foreach (string binary in toolBinaries)
+        {
+            string name = Path.GetFileName(binary);
+            if (name.Equals("NetArcaWs.Tool.dll", StringComparison.OrdinalIgnoreCase) || name.Equals("NetArcaWs.dll", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!binary.Equals("tools/net10.0/any/" + name, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Project binary is at an unexpected Tool package path: {binary}.");
+                continue;
+            }
+            if (!origins.TryGetValue(binary, out List<AssetManifest>? candidates))
+                throw new InvalidOperationException($"Tool binary is not declared by a locked package in deps.json: {binary}.");
+            string binaryHash = HashEntry(archive.GetEntry(binary)!);
+            AssetManifest[] matching = candidates.Where(candidate => candidate.Sha256.Equals(binaryHash, StringComparison.Ordinal)).ToArray();
+            if (matching.Length != 1)
+                throw new InvalidOperationException($"Tool binary does not have one exact locked package/version/asset origin: {binary}.");
+        }
+
+        void AddTargetAssets(JsonProperty library, string groupName, string? assetType, string[] identity, Dictionary<string, List<AssetManifest>> expectedPaths)
+        {
+            if (!library.Value.TryGetProperty(groupName, out JsonElement group)) return;
+            foreach (JsonProperty asset in group.EnumerateObject())
+            {
+                if (assetType is not null && (!asset.Value.TryGetProperty("assetType", out JsonElement kind) || kind.GetString() != assetType)) continue;
+                string originalPath = asset.Name.Replace('\\', '/');
+                if (!IsPackageBinaryPath(originalPath)) continue;
+                string packageIdentity = identity[0] + "/" + identity[1];
+                if (!inventoryByIdVersion.TryGetValue(packageIdentity, out PackageManifest? manifest))
+                    throw new InvalidOperationException($"Tool deps.json package is absent from the locked package inventory: {packageIdentity}.");
+                AssetManifest[] packageAssets = manifest.Assets.Where(candidate => candidate.PackagePath.Equals(originalPath, StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (packageAssets.Length != 1)
+                    throw new InvalidOperationException($"Tool deps.json asset is absent from the locked package inventory: {packageIdentity} ({originalPath}).");
+                string destination = originalPath.StartsWith("runtimes/", StringComparison.OrdinalIgnoreCase)
+                    ? "tools/net10.0/any/" + originalPath
+                    : "tools/net10.0/any/" + Path.GetFileName(originalPath);
+                if (!expectedPaths.TryGetValue(destination, out List<AssetManifest>? candidates)) expectedPaths[destination] = candidates = [];
+                candidates.Add(packageAssets[0]);
+            }
+        }
+    }
+
+    private static void ValidateArchivePaths(IEnumerable<string> paths, string packageName)
+    {
+        foreach (string path in paths)
+        {
+            string normalized = path.Replace('\\', '/');
+            if (Path.IsPathRooted(normalized) || normalized.Split('/').Any(part => part is ".." or "." or ""))
+                throw new InvalidOperationException($"Release package contains an unsafe archive path: {packageName} ({path}).");
+        }
+    }
+
+    private static bool IsRestrictedBinaryName(string name) =>
+        name.Contains("Microsoft.Data.SqlClient.SNI", StringComparison.OrdinalIgnoreCase)
+        || name.EndsWith("SNI.dll", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("Microsoft.Identity.Client.NativeInterop.dll", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("msalruntime_x86.dll", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("msalruntime.dll", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("msalruntime_arm64.dll", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("libmsalruntime.so", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("msalruntime_arm64.dylib", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("msalruntime.dylib", StringComparison.OrdinalIgnoreCase);
 
     private static byte[] ReadEntry(ZipArchive archive, string name)
     {
@@ -342,11 +424,11 @@ public static class LicenseAudit
         && !text.Contains("<year>", StringComparison.OrdinalIgnoreCase);
     private static bool IsPackageBinaryAsset(ZipArchiveEntry entry) =>
         (entry.FullName.StartsWith("lib/", StringComparison.OrdinalIgnoreCase) || entry.FullName.StartsWith("runtimes/", StringComparison.OrdinalIgnoreCase))
-        && (entry.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) || entry.FullName.EndsWith(".so", StringComparison.OrdinalIgnoreCase)
-            || entry.FullName.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase) || entry.FullName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+        && IsPackageBinaryPath(entry.FullName);
     private static bool IsPackageBinaryPath(string path) => path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
         || path.EndsWith(".so", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase)
-        || path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+        || path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".a", StringComparison.OrdinalIgnoreCase)
+        || path.EndsWith(".lib", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".wasm", StringComparison.OrdinalIgnoreCase);
     private static string HashEntry(ZipArchiveEntry entry)
     {
         using Stream stream = entry.Open();

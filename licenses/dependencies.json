@@ -6595,6 +6595,30 @@
         {
           "PackageId": "SQLitePCLRaw.lib.e_sqlite3",
           "PackageVersion": "2.1.13",
+          "PackagePath": "runtimes/browser-wasm/nativeassets/net6.0/e_sqlite3.a",
+          "Sha256": "3c84cc373b8df5bc6065d2fc995e75ad1eb240905f5237fc078ec2ba54fec15c"
+        },
+        {
+          "PackageId": "SQLitePCLRaw.lib.e_sqlite3",
+          "PackageVersion": "2.1.13",
+          "PackagePath": "runtimes/browser-wasm/nativeassets/net7.0/e_sqlite3.a",
+          "Sha256": "b149d4ee5758ea81dda2edff6c84981d227794933c8c000a58818d92c9998c7e"
+        },
+        {
+          "PackageId": "SQLitePCLRaw.lib.e_sqlite3",
+          "PackageVersion": "2.1.13",
+          "PackagePath": "runtimes/browser-wasm/nativeassets/net8.0/e_sqlite3.a",
+          "Sha256": "528790d8ebb1fde0e43383beb015e8084dbcd0d963e09e1b690244205f52dadf"
+        },
+        {
+          "PackageId": "SQLitePCLRaw.lib.e_sqlite3",
+          "PackageVersion": "2.1.13",
+          "PackagePath": "runtimes/browser-wasm/nativeassets/net9.0/e_sqlite3.a",
+          "Sha256": "c64ae8d44dc3e1aa03aca4e79ccc501cbc3a3c490e8e2ea9e369367f68cf0f21"
+        },
+        {
+          "PackageId": "SQLitePCLRaw.lib.e_sqlite3",
+          "PackageVersion": "2.1.13",
           "PackagePath": "runtimes/linux-arm/native/libe_sqlite3.so",
           "Sha256": "43556c2f5075857bf57be1136d556733bdc27195884fbdde127cd976d1c25ad5"
         },

@@ -2,3 +2,4 @@
 docs/reference/**/*.wsdl -text -whitespace
 docs/reference/persistence/**/*.sql text eol=lf
 docs/reference/persistence-migrations/**/*.sql text eol=lf
+licenses/** -text -whitespace

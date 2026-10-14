@@ -79,6 +79,18 @@ public sealed class LicenseAuditTests
     }
 
     [Fact]
+    public void Update_rejects_NativeInterop_even_when_it_is_not_a_reference_only_inventory_entry()
+    {
+        using var workspace = new BuildTestWorkspace();
+        AddPackage(workspace, "Microsoft.Identity.Client.NativeInterop", "0.20.6", "MIT", "Example copyright", "MIT License\nCopyright 2026 Example");
+        workspace.Write("src/Example/packages.lock.json", Lock("Microsoft.Identity.Client.NativeInterop", "0.20.6", Hash(workspace, "Microsoft.Identity.Client.NativeInterop", "0.20.6")));
+
+        Action update = () => LicenseAudit.Run(workspace.Root, check: false);
+
+        update.Should().Throw<InvalidOperationException>().WithMessage("*NativeInterop*blocked*");
+    }
+
+    [Fact]
     public void Update_rejects_a_modified_version_pinned_upstream_license_override()
     {
         using var workspace = new BuildTestWorkspace();
@@ -158,7 +170,232 @@ public sealed class LicenseAuditTests
         }
         Action check = () => LicenseAudit.Run(workspace.Root, check: true, directory);
 
-        check.Should().Throw<InvalidOperationException>().WithMessage("*SNI*forbidden*");
+        check.Should().Throw<InvalidOperationException>().WithMessage("*restricted runtime binaries*SNI*");
+    }
+
+    [Fact]
+    public void CheckPackages_accepts_13_packages_with_deps_bound_binary_origins_and_exact_legal_materials()
+    {
+        using var workspace = new BuildTestWorkspace();
+        string directory = CreateReleaseFixture(workspace);
+
+        Action check = () => LicenseAudit.Run(workspace.Root, check: true, directory);
+
+        check.Should().NotThrow();
+    }
+
+    [Theory]
+    [InlineData("tools/net10.0/any/lib/Untracked.dll")]
+    [InlineData("tools/net10.0/any/runtimes/linux-x64/native/Untracked.dll")]
+    public void CheckPackages_rejects_an_unlisted_binary_anywhere_in_the_Tool_payload(string path)
+    {
+        using var workspace = new BuildTestWorkspace();
+        string directory = CreateReleaseFixture(workspace, extraToolBinary: path);
+
+        Action check = () => LicenseAudit.Run(workspace.Root, check: true, directory);
+
+        check.Should().Throw<InvalidOperationException>().WithMessage("*deps.json*");
+    }
+
+    [Theory]
+    [InlineData("lib/Untracked.dll")]
+    [InlineData("runtimes/linux-x64/native/Untracked.dll")]
+    public void CheckPackages_rejects_binaries_outside_the_Tool_payload(string path)
+    {
+        using var workspace = new BuildTestWorkspace();
+        string directory = CreateReleaseFixture(workspace, extraToolBinary: path);
+
+        Action check = () => LicenseAudit.Run(workspace.Root, check: true, directory);
+
+        check.Should().Throw<InvalidOperationException>().WithMessage("*outside its installed Tool payload*");
+    }
+
+    [Fact]
+    public void CheckPackages_rejects_a_known_asset_with_modified_content()
+    {
+        using var workspace = new BuildTestWorkspace();
+        string directory = CreateReleaseFixture(workspace, dependencyBinaryContent: "tampered bytes");
+
+        Action check = () => LicenseAudit.Run(workspace.Root, check: true, directory);
+
+        check.Should().Throw<InvalidOperationException>().WithMessage("*exact locked package/version/asset origin*");
+    }
+
+    [Fact]
+    public void CheckPackages_rejects_a_wrong_deps_identity_or_version()
+    {
+        using var workspace = new BuildTestWorkspace();
+        string directory = CreateReleaseFixture(workspace, depsIdentity: "Example.Dependency/9.9.9");
+
+        Action check = () => LicenseAudit.Run(workspace.Root, check: true, directory);
+
+        check.Should().Throw<InvalidOperationException>().WithMessage("*deps.json package is absent*");
+    }
+
+    [Fact]
+    public void CheckPackages_rejects_a_deps_asset_path_that_does_not_exist_in_the_locked_package()
+    {
+        using var workspace = new BuildTestWorkspace();
+        string directory = CreateReleaseFixture(workspace, depsAssetPath: "lib/net10.0/Other.dll");
+
+        Action check = () => LicenseAudit.Run(workspace.Root, check: true, directory);
+
+        check.Should().Throw<InvalidOperationException>().WithMessage("*deps.json asset is absent*");
+    }
+
+    [Fact]
+    public void CheckPackages_rejects_unsafe_zip_paths()
+    {
+        using var workspace = new BuildTestWorkspace();
+        string directory = CreateReleaseFixture(workspace, extraToolBinary: "tools/net10.0/any/../escape.dll");
+
+        Action check = () => LicenseAudit.Run(workspace.Root, check: true, directory);
+
+        check.Should().Throw<InvalidOperationException>().WithMessage("*unsafe archive path*");
+    }
+
+    [Theory]
+    [InlineData("Microsoft.Identity.Client.NativeInterop.dll")]
+    [InlineData("msalruntime_x86.dll")]
+    [InlineData("msalruntime.dll")]
+    [InlineData("msalruntime_arm64.dll")]
+    [InlineData("libmsalruntime.so")]
+    [InlineData("msalruntime_arm64.dylib")]
+    [InlineData("msalruntime.dylib")]
+    public void CheckPackages_rejects_NativeInterop_binaries_even_when_absent_from_inventory(string binaryName)
+    {
+        using var workspace = new BuildTestWorkspace();
+        string directory = CreateReleaseFixture(workspace, extraToolBinary: "tools/net10.0/any/runtimes/linux-x64/native/" + binaryName);
+
+        Action check = () => LicenseAudit.Run(workspace.Root, check: true, directory);
+
+        check.Should().Throw<InvalidOperationException>().WithMessage("*restricted runtime binaries*");
+    }
+
+    [Fact]
+    public void CheckPackages_rejects_missing_or_modified_PDF_OFL_material()
+    {
+        using var missingWorkspace = new BuildTestWorkspace();
+        string missingDirectory = CreateReleaseFixture(missingWorkspace, omitPdfOfl: true);
+        Action missing = () => LicenseAudit.Run(missingWorkspace.Root, check: true, missingDirectory);
+        missing.Should().Throw<InvalidOperationException>().WithMessage("*missing the Noto Sans OFL*");
+
+        using var modifiedWorkspace = new BuildTestWorkspace();
+        string modifiedDirectory = CreateReleaseFixture(modifiedWorkspace, pdfOflOverride: "tampered font terms");
+        Action modified = () => LicenseAudit.Run(modifiedWorkspace.Root, check: true, modifiedDirectory);
+        modified.Should().Throw<InvalidOperationException>().WithMessage("*OFL file differs from repository*");
+    }
+
+    [Fact]
+    public void CheckPackages_rejects_project_license_and_bundled_third_party_material_tampering()
+    {
+        using var projectLicenseWorkspace = new BuildTestWorkspace();
+        string projectLicenseDirectory = CreateReleaseFixture(projectLicenseWorkspace, tamperProjectLicense: true);
+        Action projectLicense = () => LicenseAudit.Run(projectLicenseWorkspace.Root, check: true, projectLicenseDirectory);
+        projectLicense.Should().Throw<InvalidOperationException>().WithMessage("*differs from the repository*");
+
+        using var thirdPartyWorkspace = new BuildTestWorkspace();
+        string thirdPartyDirectory = CreateReleaseFixture(thirdPartyWorkspace, tamperToolDependencyMaterial: true);
+        Action thirdParty = () => LicenseAudit.Run(thirdPartyWorkspace.Root, check: true, thirdPartyDirectory);
+        thirdParty.Should().Throw<InvalidOperationException>().WithMessage("*modified third-party material*");
+    }
+
+    private static string CreateReleaseFixture(BuildTestWorkspace workspace, string? extraToolBinary = null,
+        string? dependencyBinaryContent = null, string depsIdentity = "Example.Dependency/1.2.3", bool omitPdfOfl = false,
+        string? pdfOflOverride = null, bool tamperProjectLicense = false, bool tamperToolDependencyMaterial = false,
+        string depsAssetPath = "lib/net10.0/Example.Dependency.dll")
+    {
+        const string dependencyBytes = "locked dependency bytes";
+        AddPackage(workspace, "Example.Dependency", "1.2.3", "MIT", "Example copyright", "MIT License\nCopyright 2026 Example",
+            "lib/net10.0/Example.Dependency.dll", dependencyBytes,
+            "runtimes/browser-wasm/nativeassets/net9.0/example.a", "static bytes");
+        workspace.Write("src/Example/packages.lock.json", Lock("Example.Dependency", "1.2.3", Hash(workspace, "Example.Dependency", "1.2.3")));
+        LicenseAudit.Run(workspace.Root, check: false);
+
+        string repository = FindRepositoryRoot();
+        byte[] projectLicense = File.ReadAllBytes(Path.Combine(repository, "LICENSE"));
+        byte[] projectCopying = File.ReadAllBytes(Path.Combine(repository, "COPYING"));
+        byte[] projectNotices = File.ReadAllBytes(Path.Combine(repository, "THIRD-PARTY-NOTICES.md"));
+        WriteBytes(workspace, "LICENSE", tamperProjectLicense ? Encoding.UTF8.GetBytes("GNU GENERAL PUBLIC LICENSE\nLesser altered") : projectLicense);
+        WriteBytes(workspace, "COPYING", projectCopying);
+        WriteBytes(workspace, "THIRD-PARTY-NOTICES.md", projectNotices);
+        string oflPath = "src/NetArcaWs.Rendering.Pdf/Resources/OFL.txt";
+        byte[] ofl = File.ReadAllBytes(Path.Combine(repository, oflPath));
+        WriteBytes(workspace, oflPath, ofl);
+        byte[] packagedOfl = pdfOflOverride is null ? ofl : Encoding.UTF8.GetBytes(pdfOflOverride);
+
+        foreach (string project in ReleaseVersion.PackageProjects)
+            workspace.Write($"src/{project}/{project}.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><Version>1.2.3</Version></PropertyGroup></Project>");
+        string directory = Path.Combine(workspace.Root, "release-packages");
+        Directory.CreateDirectory(directory);
+        Inventory inventory = System.Text.Json.JsonSerializer.Deserialize<Inventory>(workspace.Read("licenses/dependencies.json"),
+            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        string firstMaterialPath = inventory.Packages.SelectMany(package => package.LegalFiles)
+            .Single(material => material.Path.EndsWith("THIRD-PARTY-NOTICES.TXT", StringComparison.OrdinalIgnoreCase)).Path;
+        foreach (string project in ReleaseVersion.PackageProjects)
+        {
+            using var archive = ZipFile.Open(Path.Combine(directory, project + ".1.2.3.nupkg"), ZipArchiveMode.Create);
+            AddEntryBytes(archive, "LICENSE", projectLicense);
+            AddEntryBytes(archive, "COPYING", projectCopying);
+            AddEntryBytes(archive, "THIRD-PARTY-NOTICES.md", projectNotices);
+            if (project == "NetArcaWs.Rendering.Pdf" && !omitPdfOfl) AddEntryBytes(archive, "licenses/NotoSans-OFL.txt", packagedOfl);
+            if (project != "NetArcaWs.Tool") continue;
+            AddEntry(archive, "licenses/dependencies.json", workspace.Read("licenses/dependencies.json"));
+            AddEntry(archive, "licenses/policy.json", workspace.Read("licenses/policy.json"));
+            foreach (PackageManifest package in inventory.Packages)
+            foreach (MaterialManifest material in package.LegalFiles)
+            {
+                byte[] contents = File.ReadAllBytes(Path.Combine(workspace.Root, material.Path));
+                if (tamperToolDependencyMaterial && material.Path == firstMaterialPath) contents = Encoding.UTF8.GetBytes("modified legal text");
+                AddEntryBytes(archive, material.Path, contents);
+            }
+            AddEntry(archive, "tools/net10.0/any/NetArcaWs.Tool.deps.json", DepsJson(depsIdentity, depsAssetPath));
+            AddEntry(archive, "tools/net10.0/any/NetArcaWs.Tool.dll", "tool binary");
+            AddEntry(archive, "tools/net10.0/any/NetArcaWs.dll", "project binary");
+            AddEntry(archive, "tools/net10.0/any/Example.Dependency.dll", dependencyBinaryContent ?? dependencyBytes);
+            AddEntry(archive, "tools/net10.0/any/runtimes/browser-wasm/nativeassets/net9.0/example.a", "static bytes");
+            if (extraToolBinary is not null) AddEntry(archive, extraToolBinary, "untracked asset");
+        }
+        return directory;
+    }
+
+    private static string DepsJson(string packageIdentity, string assetPath) => System.Text.Json.JsonSerializer.Serialize(new
+    {
+        targets = new Dictionary<string, object>
+        {
+            [".NETCoreApp,Version=v10.0"] = new Dictionary<string, object>
+            {
+                [packageIdentity] = new
+                {
+                    runtime = new Dictionary<string, object> { [assetPath] = new { } },
+                    runtimeTargets = new Dictionary<string, object>
+                    {
+                        ["runtimes/browser-wasm/nativeassets/net9.0/example.a"] = new { rid = "browser-wasm", assetType = "native" }
+                    }
+                }
+            }
+        },
+        libraries = new Dictionary<string, object> { [packageIdentity] = new { type = "package" } }
+    });
+
+    private static string FindRepositoryRoot()
+    {
+        for (DirectoryInfo? directory = new(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+            if (File.Exists(Path.Combine(directory.FullName, "NetArcaWs.slnx"))) return directory.FullName;
+        throw new DirectoryNotFoundException("Could not locate the NetArcaWs repository root for exact legal-text fixtures.");
+    }
+
+    private static void AddEntryBytes(ZipArchive archive, string path, byte[] contents)
+    {
+        using var stream = archive.CreateEntry(path).Open();
+        stream.Write(contents);
+    }
+
+    private static void WriteBytes(BuildTestWorkspace workspace, string relativePath, byte[] contents)
+    {
+        string path = Path.Combine(workspace.Root, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, contents);
     }
 
     private static string Lock(string id, string version, string hash) =>
@@ -186,7 +423,8 @@ public sealed class LicenseAuditTests
         stream.Write(Encoding.UTF8.GetBytes(contents));
     }
 
-    private static void AddPackage(BuildTestWorkspace workspace, string id, string version, string license, string copyright, string text)
+    private static void AddPackage(BuildTestWorkspace workspace, string id, string version, string license, string copyright, string text,
+        string? binaryPath = null, string? binaryContent = null, string? binaryPath2 = null, string? binaryContent2 = null)
     {
         workspace.Write("licenses/policy.json", "{\"schemaVersion\":1,\"allowedLicenseIds\":[\"MIT\"],\"standardLicenseFallbacks\":{},\"referenceOnlyPackages\":[]}");
         string package = Path.Combine(workspace.Root, ".nuget", "packages", id.ToLowerInvariant(), version, $"{id.ToLowerInvariant()}.{version}.nupkg");
@@ -195,6 +433,8 @@ public sealed class LicenseAuditTests
         Write(archive, $"{id}.nuspec", $"<package><metadata><id>{id}</id><version>{version}</version><license type=\"expression\">{license}</license><copyright>{copyright}</copyright></metadata></package>");
         Write(archive, "license.txt", text);
         Write(archive, "THIRD-PARTY-NOTICES.TXT", "Copyright Example Notice.\n");
+        if (binaryPath is not null) Write(archive, binaryPath, binaryContent ?? "package binary");
+        if (binaryPath2 is not null) Write(archive, binaryPath2, binaryContent2 ?? "package binary");
         archive.Dispose();
         byte[] rawHash = SHA512.HashData(File.ReadAllBytes(package));
         File.WriteAllText(package + ".sha512", Convert.ToBase64String(rawHash));
@@ -213,4 +453,8 @@ public sealed class LicenseAuditTests
         string path = Path.Combine(workspace.Root, ".nuget", "packages", id.ToLowerInvariant(), version, $"{id.ToLowerInvariant()}.{version}.nupkg");
         return Convert.ToBase64String(SHA512.HashData(File.ReadAllBytes(path)));
     }
+
+    private sealed record Inventory(PackageManifest[] Packages);
+    private sealed record PackageManifest(MaterialManifest[] LegalFiles);
+    private sealed record MaterialManifest(string Path, string Sha256);
 }
