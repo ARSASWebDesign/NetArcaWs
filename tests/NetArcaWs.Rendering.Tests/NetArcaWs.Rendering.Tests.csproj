@@ -5,13 +5,13 @@
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
-    <PackageReference Include="xunit.v3" Version="4.0.1" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="xunit.v3" Version="4.0.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1" />
     <PackageReference Include="AwesomeAssertions" Version="9.6.0" PrivateAssets="all" />
     <PackageReference Include="ZXing.Net" Version="0.16.11" />
-    <PackageReference Include="PdfPig" Version="0.1.13" />
-    <PackageReference Include="StbImageSharp" Version="2.30.15" />
+    <PackageReference Include="PdfPig" Version="0.1.16" />
+    <PackageReference Include="StbImageSharp" Version="2.30.16" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/NetArcaWs/NetArcaWs.csproj" />
