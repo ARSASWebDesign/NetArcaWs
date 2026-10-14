@@ -268,7 +268,9 @@ public sealed class ArcaWsGeneradorPDF
         var table = section.AddTable();
         table.Borders.Color = Colors.LightGray; table.Borders.Width = Unit.FromPoint(.3);
         table.AddColumn(Unit.FromCentimeter(9.1)); table.AddColumn(Unit.FromCentimeter(9.1));
-        Row header = table.AddRow(); header.Shading.Color = Colors.Gainsboro;
+        Row header = table.AddRow(); header.Shading.Color = ParseColor(_style.ColorPrincipal);
+        header.Cells[0].Format.Font.Color = ParseColor(_style.TextOnPrincipal);
+        header.Cells[1].Format.Font.Color = ParseColor(_style.TextOnPrincipal);
         header.Cells[0].AddParagraph("Datos del receptor").Format.Font.Bold = true;
         header.Cells[1].AddParagraph("Condición tributaria").Format.Font.Bold = true;
         Row body = table.AddRow();
@@ -333,7 +335,9 @@ public sealed class ArcaWsGeneradorPDF
     {
         var table = section.AddTable(); table.Borders.Color = Colors.LightGray; table.Borders.Width = Unit.FromPoint(.3);
         table.AddColumn(Unit.FromCentimeter(9.1)); table.AddColumn(Unit.FromCentimeter(9.1));
-        Row heading = table.AddRow(); heading.Shading.Color = Colors.Gainsboro;
+        Row heading = table.AddRow(); heading.Shading.Color = ParseColor(_style.ColorPrincipal);
+        heading.Cells[0].Format.Font.Color = ParseColor(_style.TextOnPrincipal);
+        heading.Cells[1].Format.Font.Color = ParseColor(_style.TextOnPrincipal);
         heading.Cells[0].AddParagraph("Datos del receptor").Format.Font.Bold = true;
         heading.Cells[1].AddParagraph("Traslado").Format.Font.Bold = true;
         Row body = table.AddRow(); body.Shading.Color = Colors.White;
