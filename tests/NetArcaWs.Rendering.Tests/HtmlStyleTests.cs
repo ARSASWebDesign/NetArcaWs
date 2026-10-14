@@ -141,6 +141,11 @@ public sealed partial class HtmlRenderingTests
             ambitoInterno: isR ? null : "Parque industrial local");
         RemitoGenerado generated = new Remito(emisor).GenerarComprobante(details);
         string html = new ArcaWsGeneradorHTML(emisor).GenerarHTMLComprobante(generated);
+        int topLegend = html.IndexOf("DOCUMENTO NO VALIDO COMO FACTURA", StringComparison.Ordinal);
+        int header = html.IndexOf("<header class=\"issuer\">", StringComparison.Ordinal);
+        int footer = html.IndexOf("<footer class=\"authorization\">", StringComparison.Ordinal);
+        Assert.True(topLegend >= 0 && topLegend < header);
+        Assert.True(html.IndexOf("DOCUMENTO NO VALIDO COMO FACTURA", footer, StringComparison.Ordinal) >= footer);
         string? previewPath = Environment.GetEnvironmentVariable($"NETARCAWS_RENDER_REMITO_{clase}_PATH");
         if (!string.IsNullOrWhiteSpace(previewPath))
         {

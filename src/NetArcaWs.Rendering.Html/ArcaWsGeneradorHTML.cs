@@ -111,7 +111,8 @@ public sealed class ArcaWsGeneradorHTML
         var html = new StringBuilder(8_000);
         html.Append("<!doctype html><html lang=\"es-AR\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Remito ")
             .Append(remito.Clase).Append("</title><style>:root{").Append(_style.CssVariables).Append('}').Append(Styles).Append("</style></head><body><main class=\"page\">");
-        html.Append("<div class=\"copy-label\">").Append(remito.EsOriginal ? "ORIGINAL" : "DUPLICADO").Append("</div><header class=\"issuer\">");
+        html.Append("<div class=\"copy-label\">").Append(remito.EsOriginal ? "ORIGINAL" : "DUPLICADO").Append("</div><div class=\"required-legend remito-legend\"><strong>")
+            .Append(E(remito.Leyenda)).Append("</strong></div><header class=\"issuer\">");
         AppendIssuerBrand(html, _issuer);
         html.Append("<div class=\"document-code\"><strong>").Append(remito.Clase).Append("</strong>");
         if (remito.CodigoTipoComprobante is int code) html.Append("<small>COD. ").Append(code.ToString("000", CultureInfo.InvariantCulture)).Append("</small>");
