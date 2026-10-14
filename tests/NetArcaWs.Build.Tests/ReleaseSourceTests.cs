@@ -16,6 +16,7 @@ public sealed class ReleaseSourceTests
         repository.Write("LICENSE", "LGPL source\n");
         repository.Write("licenses/dependencies.json", "{\"schemaVersion\":1}\n");
         repository.Write("tools/NetArcaWs.Build/Program.cs", "tracked build input\n");
+        repository.Write("docs/wiki-export/Decisión-1.md", "accented filename\n");
         string commit = repository.Commit();
         string artifacts = Path.Combine(repository.Root, "artifacts");
         Directory.CreateDirectory(artifacts);
@@ -138,8 +139,8 @@ public sealed class ReleaseSourceTests
             return Git("rev-parse", "HEAD");
         }
 
-        internal string[] CommittedFiles(string commit) => Git("ls-tree", "--full-tree", "-r", "--name-only", commit)
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        internal string[] CommittedFiles(string commit) => Git("ls-tree", "--full-tree", "-r", "-z", "--name-only", commit)
+            .Split('\0', StringSplitOptions.RemoveEmptyEntries);
 
         private string Git(params string[] arguments)
         {

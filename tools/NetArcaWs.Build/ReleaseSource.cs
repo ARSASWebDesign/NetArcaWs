@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace NetArcaWs.Build;
@@ -45,12 +46,19 @@ public static class ReleaseSource
         Directory.CreateDirectory(output);
         string sourcePath = Path.Combine(output, SourceArchiveName);
         string evidencePath = Path.Combine(output, LicenseEvidenceName);
-        string[] treeEntries = Git(root, "ls-tree", "--full-tree", "-r", "-z", "--format=%(objectmode) %(path)", expectedCommit)
+        string[] treeEntries = Git(root, "ls-tree", "--full-tree", "-r", "-z", expectedCommit)
             .Split('\0', StringSplitOptions.RemoveEmptyEntries);
-        if (treeEntries.Any(entry => !entry.StartsWith("100644 ", StringComparison.Ordinal)
-            && !entry.StartsWith("100755 ", StringComparison.Ordinal)))
-            throw new InvalidOperationException("Committed source tree contains a gitlink, symlink or unsupported file mode.");
-        string[] expectedFiles = treeEntries.Select(entry => entry[(entry.IndexOf(' ') + 1)..]).ToArray();
+        var parsedEntries = treeEntries.Select(entry =>
+        {
+            int separator = entry.IndexOf('\t');
+            if (separator < 0) throw new InvalidOperationException("Committed source tree contains a malformed Git tree entry.");
+            string[] metadata = entry[..separator].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (metadata.Length != 3 || metadata[1] != "blob"
+                || (metadata[0] != "100644" && metadata[0] != "100755"))
+                throw new InvalidOperationException("Committed source tree contains a gitlink, symlink or unsupported file mode.");
+            return entry[(separator + 1)..];
+        }).ToArray();
+        string[] expectedFiles = parsedEntries;
         if (expectedFiles.Length == 0 || expectedFiles.Any(path => !IsSafeArchivePath(path))
             || expectedFiles.Distinct(StringComparer.Ordinal).Count() != expectedFiles.Length)
             throw new InvalidOperationException("Committed source tree contains an unsafe or duplicate archive path.");
@@ -161,6 +169,7 @@ public static class ReleaseSource
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            StandardOutputEncoding = new UTF8Encoding(false, true),
             UseShellExecute = false
         };
         foreach (string argument in arguments) start.ArgumentList.Add(argument);
