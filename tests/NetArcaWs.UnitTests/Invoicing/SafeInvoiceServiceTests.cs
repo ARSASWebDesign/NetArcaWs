@@ -466,6 +466,157 @@ public sealed class SafeInvoiceServiceTests
     }
 
     [Theory]
+    [InlineData("ObsComerciales", null, "")]
+    [InlineData("ObsComerciales", "", null)]
+    [InlineData("Obs", null, "")]
+    [InlineData("Obs", "", null)]
+    [InlineData("Incoterms", null, "")]
+    [InlineData("Incoterms", "", null)]
+    public async Task ResumeAsync_treats_only_absent_and_empty_wsfex_optional_fields_as_equivalent(
+        string field, string? requestValue, string? responseValue)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        ClsFexRequest original = FexRequest(45219);
+        original.TipoExpo = 2;
+        SetFexOptionalField(original, field, requestValue);
+        var transport = new RecordingSoapTransport(call =>
+        {
+            if (call.ResponseType == typeof(FexAuthorizeResponse)) return new FexAuthorizeResponse();
+            FexGetCmpResponse2 response = FexQueryResponse(original, alterItem: false);
+            SetFexOptionalField(response.FexGetCmpResult!.FexResultGet!, field, responseValue);
+            return response;
+        });
+        var service = CreateService(database, transport, new RecordingArcaTicketProvider(TicketTestData.Create()));
+        ArcaTenantContext tenant = CreateTenant();
+
+        InvoiceOperation first = await service.AuthorizeWsfexAsync(tenant, "fex-empty-optional-" + field, original, cancellationToken);
+        InvoiceOperation reconciled = await service.ResumeAsync(tenant, "fex-empty-optional-" + field, cancellationToken);
+
+        first.State.Should().Be(InvoiceState.Unknown);
+        reconciled.State.Should().Be(InvoiceState.Authorized);
+        reconciled.Submission.Payload.Should().Be(first.Submission.Payload);
+        reconciled.Submission.Identity.Should().Be(first.Submission.Identity);
+        transport.CallCount.Should().Be(2);
+        transport.Calls.Select(call => call.Action).Should().ContainSingle(action => action.EndsWith("/FEXAuthorize", StringComparison.Ordinal));
+        transport.Calls.Select(call => call.Action).Should().ContainSingle(action => action.EndsWith("/FEXGetCMP", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("ObsComerciales", "local", "remoto")]
+    [InlineData("ObsComerciales", null, " ")]
+    [InlineData("Obs", "local", "remoto")]
+    [InlineData("Obs", null, " ")]
+    [InlineData("Incoterms", "FOB", "CIF")]
+    [InlineData("Incoterms", null, " ")]
+    public async Task ResumeAsync_keeps_nonempty_and_whitespace_wsfex_optional_values_strict(
+        string field, string? requestValue, string? responseValue)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        ClsFexRequest original = FexRequest(45219);
+        original.TipoExpo = 2;
+        SetFexOptionalField(original, field, requestValue);
+        var transport = new RecordingSoapTransport(call =>
+        {
+            if (call.ResponseType == typeof(FexAuthorizeResponse)) return new FexAuthorizeResponse();
+            FexGetCmpResponse2 response = FexQueryResponse(original, alterItem: false);
+            SetFexOptionalField(response.FexGetCmpResult!.FexResultGet!, field, responseValue);
+            return response;
+        });
+        var service = CreateService(database, transport, new RecordingArcaTicketProvider(TicketTestData.Create()));
+        ArcaTenantContext tenant = CreateTenant();
+
+        InvoiceOperation first = await service.AuthorizeWsfexAsync(tenant, "fex-strict-optional-" + field, original, cancellationToken);
+        InvoiceOperation reconciled = await service.ResumeAsync(tenant, "fex-strict-optional-" + field, cancellationToken);
+
+        first.State.Should().Be(InvoiceState.Unknown);
+        reconciled.State.Should().Be(InvoiceState.Conflict);
+        reconciled.Submission.Payload.Should().Be(first.Submission.Payload);
+        transport.CallCount.Should().Be(2);
+        transport.Calls.Select(call => call.Action).Should().ContainSingle(action => action.EndsWith("/FEXAuthorize", StringComparison.Ordinal));
+        transport.Calls.Select(call => call.Action).Should().ContainSingle(action => action.EndsWith("/FEXGetCMP", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("IncotermsDs")]
+    [InlineData("Quantity")]
+    [InlineData("UnitPrice")]
+    [InlineData("ItemTotal")]
+    [InlineData("InvoiceTotal")]
+    [InlineData("ExchangeRate")]
+    [InlineData("Association")]
+    public async Task ResumeAsync_keeps_incoterms_description_and_other_fiscal_fields_strict(string field)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        ClsFexRequest original = FexRequest(45219);
+        original.TipoExpo = 2;
+        original.Incoterms = "FOB";
+        original.ImpTotal = 20;
+        original.CmpsAsoc.Add(new CmpAsoc { CbteTipo = 19, CbtePuntoVta = 2, CbteNro = 11, CbteCuit = 20123456789 });
+        var transport = new RecordingSoapTransport(call =>
+        {
+            if (call.ResponseType == typeof(FexAuthorizeResponse)) return new FexAuthorizeResponse();
+            FexGetCmpResponse2 response = FexQueryResponse(original, alterItem: false);
+            ClsFexGetCmpr remote = response.FexGetCmpResult!.FexResultGet!;
+            switch (field)
+            {
+                case "IncotermsDs": remote.IncotermsDs = "0"; break;
+                case "Quantity": remote.Items[0].ProQty += 1; break;
+                case "UnitPrice": remote.Items[0].ProPrecioUni += 1; break;
+                case "ItemTotal": remote.Items[0].ProTotalItem += 1; break;
+                case "InvoiceTotal": remote.ImpTotal += 1; break;
+                case "ExchangeRate": remote.MonedaCtz += 1; break;
+                case "Association": remote.CmpsAsoc[0].CbteNro += 1; break;
+                default: throw new ArgumentOutOfRangeException(nameof(field), field, "Unknown WSFEX fiscal field.");
+            }
+            return response;
+        });
+        var service = CreateService(database, transport, new RecordingArcaTicketProvider(TicketTestData.Create()));
+        ArcaTenantContext tenant = CreateTenant();
+
+        string idempotencyKey = "fex-strict-fiscal-projection-" + field;
+        InvoiceOperation first = await service.AuthorizeWsfexAsync(tenant, idempotencyKey, original, cancellationToken);
+        string frozenPayload = first.Submission.Payload;
+        InvoiceOperation reconciled = await service.ResumeAsync(tenant, idempotencyKey, cancellationToken);
+
+        first.State.Should().Be(InvoiceState.Unknown);
+        reconciled.State.Should().Be(InvoiceState.Conflict);
+        reconciled.Submission.Payload.Should().Be(frozenPayload);
+        reconciled.Submission.Identity.Should().Be(first.Submission.Identity);
+        transport.CallCount.Should().Be(2);
+        transport.Calls.Select(call => call.Action).Should().ContainSingle(action => action.EndsWith("/FEXAuthorize", StringComparison.Ordinal));
+        transport.Calls.Select(call => call.Action).Should().ContainSingle(action => action.EndsWith("/FEXGetCMP", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("error-1020-empty", InvoiceState.Unknown)]
+    [InlineData("empty-without-error", InvoiceState.Unknown)]
+    [InlineData("partial-identity", InvoiceState.Unknown)]
+    [InlineData("complete-mismatch-with-error-1020", InvoiceState.Conflict)]
+    public async Task ResumeAsync_keeps_inconclusive_wsfex_query_results_unknown(string responseKind, InvoiceState expected)
+    {
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using var database = new TemporaryDatabase();
+        ClsFexRequest original = FexRequest(45219);
+        var transport = new RecordingSoapTransport(call => call.ResponseType == typeof(FexAuthorizeResponse)
+            ? new FexAuthorizeResponse()
+            : FexQueryResponse(original, responseKind));
+        var service = CreateService(database, transport, new RecordingArcaTicketProvider(TicketTestData.Create()));
+        ArcaTenantContext tenant = CreateTenant();
+
+        InvoiceOperation first = await service.AuthorizeWsfexAsync(tenant, "fex-inconclusive-" + responseKind, original, cancellationToken);
+        InvoiceOperation reconciled = await service.ResumeAsync(tenant, "fex-inconclusive-" + responseKind, cancellationToken);
+
+        first.State.Should().Be(InvoiceState.Unknown);
+        reconciled.State.Should().Be(expected);
+        reconciled.AuthorizationCode.Should().BeNull();
+        transport.CallCount.Should().Be(2);
+        transport.Calls.Last().Action.Should().EndWith("/FEXGetCMP");
+    }
+
+    [Theory]
     [InlineData(false, InvoiceState.Authorized)]
     [InlineData(true, InvoiceState.Conflict)]
     public async Task ResumeAsync_reconciles_wsmtxca_by_comparing_the_immutable_comprobante(bool alterFiscalField, InvoiceState expected)
@@ -705,6 +856,14 @@ public sealed class SafeInvoiceServiceTests
     {
         var remote = new ClsFexGetCmpr();
         CopyMatchingScalarProperties(original, remote);
+        foreach (CmpAsoc association in original.CmpsAsoc)
+            remote.CmpsAsoc.Add(new CmpAsoc
+            {
+                CbteTipo = association.CbteTipo,
+                CbtePuntoVta = association.CbtePuntoVta,
+                CbteNro = association.CbteNro,
+                CbteCuit = association.CbteCuit
+            });
         foreach (Item item in original.Items)
             remote.Items.Add(new Item
             {
@@ -725,6 +884,50 @@ public sealed class SafeInvoiceServiceTests
         {
             FexGetCmpResult = new FexGetCmpResponse { FexResultGet = remote }
         };
+    }
+
+    private static void SetFexOptionalField(ClsFexRequest request, string field, string? value)
+    {
+        switch (field)
+        {
+            case "ObsComerciales": request.ObsComerciales = value!; break;
+            case "Obs": request.Obs = value!; break;
+            case "Incoterms": request.Incoterms = value!; break;
+            default: throw new ArgumentOutOfRangeException(nameof(field), field, "Unknown optional WSFEX field.");
+        }
+    }
+
+    private static void SetFexOptionalField(ClsFexGetCmpr response, string field, string? value)
+    {
+        switch (field)
+        {
+            case "ObsComerciales": response.ObsComerciales = value!; break;
+            case "Obs": response.Obs = value!; break;
+            case "Incoterms": response.Incoterms = value!; break;
+            default: throw new ArgumentOutOfRangeException(nameof(field), field, "Unknown optional WSFEX field.");
+        }
+    }
+
+    private static FexGetCmpResponse2 FexQueryResponse(ClsFexRequest original, string responseKind)
+    {
+        if (responseKind is "error-1020-empty" or "empty-without-error")
+        {
+            return new FexGetCmpResponse2
+            {
+                FexGetCmpResult = new FexGetCmpResponse
+                {
+                    FexResultGet = new ClsFexGetCmpr(),
+                    FexErr = responseKind == "error-1020-empty" ? new ClsFexErr { ErrCode = 1020 } : null
+                }
+            };
+        }
+
+        FexGetCmpResponse2 complete = FexQueryResponse(original, alterItem: responseKind == "complete-mismatch-with-error-1020");
+        ClsFexGetCmpr result = complete.FexGetCmpResult!.FexResultGet!;
+        if (responseKind == "partial-identity") result.CbteNro = 0;
+        if (responseKind == "complete-mismatch-with-error-1020")
+            complete.FexGetCmpResult.FexErr = new ClsFexErr { ErrCode = 1020 };
+        return complete;
     }
 
     private static ConsultarComprobanteResponseType MtxQueryResponse(ComprobanteType original, bool alterFiscalField)

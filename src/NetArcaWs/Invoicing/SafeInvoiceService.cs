@@ -217,6 +217,8 @@ public sealed class SafeInvoiceService(InvoiceCoordinator coordinator, IWsfev1Se
                     var remote = response.FexGetCmpResult?.FexResultGet;
                     var xml = Serialize(response);
                     if (remote is null) return new InvoiceDecision(InvoiceState.Unknown, ResponseXml: xml);
+                    if (remote.Id <= 0 || remote.CbteTipo <= 0 || remote.PuntoVta <= 0 || remote.CbteNro <= 0)
+                        return new InvoiceDecision(InvoiceState.Unknown, ResponseXml: xml);
                     if (!Equal(original, Project<ClsFexRequest>(remote))) return new InvoiceDecision(InvoiceState.Conflict, ResponseXml: xml);
                     return remote.Resultado == "A" ? Decision("A", remote.Cae, xml) : new InvoiceDecision(InvoiceState.Unknown, ResponseXml: xml);
                 }
